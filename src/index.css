@@ -1,3 +1,68 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --bg: #F5F2EE;
+  --surface: #fff;
+  --s2: #F0EDE8;
+  --border: #E0D9D0;
+  --b2: #D2C8BB;
+  --text: #1A1714;
+  --t2: #6B6158;
+  --t3: #9E9087;
+  --accent: #173731;
+  --a2: #1F4E44;
+  --gold: #D2AB76;
+  --green: #1A7A4A;
+  --gbg: #E8F5EE;
+  --amber: #B86B0F;
+  --abg: #FEF3E2;
+  --red: #C0392B;
+  --rbg: #FDECEA;
+  --blue: #1E5FA0;
+  --bbg: #E8F1FB;
+  --purple: #7B3FC4;
+  --pbg: #F0E8FC;
+  --teal: #0E7490;
+  --tbg: #E0F2F7;
+  --lemlist: #FF6B35;
+  --lbg: #FFF0EA;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg);
+}
+
+/* Component classes from mockup */
+.tag { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 6px; font-size: 11.5px; font-weight: 500; }
+.tg { background: var(--gbg); color: var(--green); }
+.ta { background: var(--abg); color: var(--amber); }
+.tb { background: var(--bbg); color: var(--blue); }
+.tp { background: var(--pbg); color: var(--purple); }
+.tt { background: var(--tbg); color: var(--teal); }
+.tx { background: var(--s2); color: var(--t2); border: 1px solid var(--border); }
+.sc { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; }
+.sh { background: var(--gbg); color: var(--green); }
+.sm2 { background: var(--abg); color: var(--amber); }
+.sl { background: var(--s2); color: var(--t3); }
+
+/* Topbar search focus */
+.srch:focus-within { border-color: var(--accent); background: #fff; box-shadow: 0 0 0 3px rgba(23,55,49,0.07); }
+
+/* Notification */
+.notif.show { opacity: 1; transform: translateY(0); }
+
+/* font-family for logo */
+.logo-word { font-family: 'DM Serif Display', serif; }
+.tbar-ttl { font-family: 'DM Serif Display', serif; }

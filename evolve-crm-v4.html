@@ -1,0 +1,981 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Evolve CRM</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#F5F2EE;--surface:#fff;--s2:#F0EDE8;--border:#E0D9D0;--b2:#D2C8BB;
+  --text:#1A1714;--t2:#6B6158;--t3:#9E9087;
+  --accent:#173731;--a2:#1F4E44;--gold:#D2AB76;
+  --green:#1A7A4A;--gbg:#E8F5EE;--amber:#B86B0F;--abg:#FEF3E2;
+  --red:#C0392B;--rbg:#FDECEA;--blue:#1E5FA0;--bbg:#E8F1FB;
+  --purple:#7B3FC4;--pbg:#F0E8FC;--teal:#0E7490;--tbg:#E0F2F7;
+  --lemlist:#FF6B35;--lbg:#FFF0EA;
+}
+html,body{height:100%;font-family:'DM Sans',sans-serif;font-size:14px;color:var(--text);background:var(--bg)}
+body{display:flex;height:100vh;overflow:hidden}
+
+/* SIDEBAR */
+#sidebar{width:220px;flex-shrink:0;background:var(--accent);display:flex;flex-direction:column;height:100vh;overflow-y:auto;overflow-x:hidden}
+.logo{padding:22px 20px 18px;border-bottom:1px solid rgba(255,255,255,0.1)}
+.logo-word{font-family:'DM Serif Display',serif;font-size:20px;color:#fff}
+.logo-sub{font-size:10.5px;color:rgba(255,255,255,0.4);margin-top:2px;letter-spacing:0.08em;text-transform:uppercase}
+.nav-sec{padding:14px 12px 6px}
+.nav-lbl{font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:rgba(255,255,255,0.35);padding:0 8px;margin-bottom:6px}
+.nitem{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;cursor:pointer;color:rgba(255,255,255,0.6);font-size:13.5px;transition:all 0.13s;margin-bottom:2px;user-select:none}
+.nitem:hover{background:rgba(255,255,255,0.08);color:#fff}
+.nitem.active{background:rgba(255,255,255,0.15);color:#fff;font-weight:500}
+.nico{font-size:14px;width:18px;text-align:center;flex-shrink:0}
+.sbot{margin-top:auto;padding:12px;border-top:1px solid rgba(255,255,255,0.1)}
+.uchip{display:flex;align-items:center;gap:10px;padding:8px 10px}
+.uav{width:30px;height:30px;border-radius:50%;background:var(--gold);color:var(--accent);font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+
+/* CONTENT */
+#content{flex:1;display:flex;flex-direction:column;min-width:0;height:100vh;overflow:hidden}
+#topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 22px;height:54px;display:flex;align-items:center;gap:14px;flex-shrink:0}
+#tbar-ttl{font-family:'DM Serif Display',serif;font-size:18px}
+.srch{display:flex;align-items:center;gap:7px;background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:6px 11px;width:250px;transition:all 0.2s}
+.srch:focus-within{border-color:var(--accent);background:#fff;box-shadow:0 0 0 3px rgba(23,55,49,0.07)}
+.srch input{border:none;background:transparent;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--text);outline:none;width:100%}
+.srch input::placeholder{color:var(--t3)}
+.tbar-r{margin-left:auto;display:flex;align-items:center;gap:9px}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;border:none;transition:all 0.13s}
+.bp{background:var(--accent);color:#fff}.bp:hover{background:var(--a2)}
+.bo{background:transparent;color:var(--t2);border:1px solid var(--b2)}.bo:hover{background:var(--s2);color:var(--text)}
+.bsm{padding:5px 11px;font-size:12px}
+.lem-btn{background:var(--lbg);color:var(--lemlist);border:1px solid #FFD5C0}
+
+/* PAGES */
+#wrap{flex:1;overflow:hidden;position:relative}
+.page{display:none;height:100%;overflow-y:auto;padding:22px}
+.page.active{display:block}
+#pg-pipeline{display:none;height:100%;flex-direction:column;overflow:hidden}
+#pg-pipeline.active{display:flex}
+#pg-chat{display:none;height:100%;flex-direction:column;overflow:hidden}
+#pg-chat.active{display:flex}
+
+/* COMPONENTS */
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin-bottom:20px}
+.scard{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:15px 17px}
+.slbl{font-size:11.5px;color:var(--t3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:5px}
+.sval{font-size:26px;font-weight:600;line-height:1}
+.ssub{font-size:12px;color:var(--t3);margin-top:4px}
+.tw{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:20px}
+.thd{padding:12px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.ttl{font-weight:600;font-size:14px}
+.bdg{background:var(--s2);color:var(--t2);font-size:12px;padding:2px 8px;border-radius:20px;font-weight:500}
+table{width:100%;border-collapse:collapse}
+thead th{text-align:left;font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.07em;color:var(--t3);padding:9px 18px;background:var(--s2);border-bottom:1px solid var(--border)}
+tbody tr{border-bottom:1px solid var(--border);transition:background 0.1s}
+tbody tr:last-child{border-bottom:none}
+tbody tr:hover{background:#F8F5F1}
+td{padding:11px 18px;vertical-align:middle;font-size:13.5px}
+.pc{display:flex;align-items:center;gap:10px}
+.av{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0}
+.avg{background:#D4EDE1;color:#1A7A4A}.avb{background:#D3E4F8;color:#1E5FA0}
+.ava{background:#FDEBC8;color:#B86B0F}.avp{background:#EAD8FA;color:#7B3FC4}
+.avr{background:#FADBD8;color:#C0392B}.avt{background:#CCEEF5;color:#0E7490}
+.pn{font-weight:500;font-size:13.5px}.ps{font-size:12px;color:var(--t3);margin-top:1px}
+.tag{display:inline-flex;align-items:center;padding:3px 8px;border-radius:6px;font-size:11.5px;font-weight:500}
+.tg{background:var(--gbg);color:var(--green)}.ta{background:var(--abg);color:var(--amber)}
+.tr2{background:var(--rbg);color:var(--red)}.tb{background:var(--bbg);color:var(--blue)}
+.tp{background:var(--pbg);color:var(--purple)}.tt{background:var(--tbg);color:var(--teal)}
+.tx{background:var(--s2);color:var(--t2);border:1px solid var(--border)}
+.tlem{background:var(--lbg);color:var(--lemlist);border:1px solid #FFD5C0}
+.sc{display:inline-flex;align-items:center;justify-content:center;width:38px;height:24px;border-radius:6px;font-size:12px;font-weight:600;font-family:'JetBrains Mono',monospace}
+.sh{background:var(--gbg);color:var(--green)}.sm2{background:var(--abg);color:var(--amber)}.sl{background:var(--s2);color:var(--t3)}
+
+/* CLICKABLE DROPDOWN TAG — stade & maturité inline */
+.tag-btn{cursor:pointer;position:relative;border:1px solid transparent;transition:all 0.13s}
+.tag-btn:hover{opacity:0.8;border-color:currentColor}
+.ddrop{position:absolute;top:110%;left:0;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.12);z-index:100;min-width:170px;padding:4px;display:none}
+.ddrop.open{display:block}
+.ddi{padding:7px 10px;border-radius:5px;font-size:13px;cursor:pointer;color:var(--text);display:flex;align-items:center;gap:8px}
+.ddi:hover{background:var(--s2)}
+.ddi.active-ddi{font-weight:600}
+
+/* KANBAN */
+.pipbar{padding:15px 20px 0;display:flex;align-items:center;gap:12px;flex-shrink:0}
+.kb{display:flex;gap:12px;padding:14px 20px 20px;overflow-x:auto;flex:1;align-items:flex-start}
+.kb::-webkit-scrollbar{height:6px}
+.kb::-webkit-scrollbar-thumb{background:var(--b2);border-radius:3px}
+.kcol{width:215px;flex-shrink:0;display:flex;flex-direction:column;gap:7px}
+.kch{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border-radius:8px;font-size:12px;font-weight:600}
+.kc{background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:11px 13px;cursor:pointer;transition:all 0.13s}
+.kc:hover{box-shadow:0 2px 10px rgba(0,0,0,0.08);transform:translateY(-1px)}
+.kcn{font-weight:500;font-size:13px}.kcc{font-size:11.5px;color:var(--t3);margin-top:2px}
+.kcf{display:flex;align-items:center;justify-content:space-between;margin-top:9px}
+.kcd{font-size:11px;color:var(--t3)}
+.kbtn{font-size:11px;padding:3px 8px;border-radius:5px;background:var(--s2);color:var(--accent);border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:500}
+.kbtn:hover{background:var(--border)}
+
+/* ANALYTICS */
+.ag{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
+.ag3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:20px}
+.ac{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px}
+.act{font-size:13px;font-weight:600;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between}
+.act-sub{font-size:11px;color:var(--t3);font-weight:400}
+.br{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+.bl{font-size:12px;color:var(--t2);width:130px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt{flex:1;height:8px;background:var(--s2);border-radius:4px;overflow:hidden}
+.bf{height:100%;border-radius:4px}
+.bv{font-size:12px;color:var(--t3);width:22px;text-align:right;font-family:'JetBrains Mono',monospace;flex-shrink:0}
+.fr{display:flex;align-items:center;gap:10px;margin-bottom:5px}
+.fl{font-size:12px;color:var(--t2);width:125px;flex-shrink:0}
+.fb{height:26px;border-radius:5px;display:flex;align-items:center;padding:0 10px;font-size:12px;font-weight:500;color:#fff;min-width:38px}
+.fls{font-size:11px;color:var(--red);width:32px;text-align:right;font-family:'JetBrains Mono',monospace;flex-shrink:0}
+.pbtns{display:flex;gap:5px}
+.pb{padding:5px 11px;border-radius:6px;font-size:12px;font-weight:500;border:1px solid var(--b2);background:var(--surface);cursor:pointer;color:var(--t2);transition:all 0.12s}
+.pb.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+/* mini KPI cards analytics */
+.kpi-mini{background:var(--s2);border-radius:8px;padding:11px 14px;margin-bottom:8px}
+.kpi-mini-lbl{font-size:11px;color:var(--t3);margin-bottom:3px}
+.kpi-mini-val{font-size:18px;font-weight:600}
+
+/* IMPORT */
+.itabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:20px}
+.itab{padding:10px 17px;font-size:13px;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;color:var(--t3);transition:all 0.13s}
+.itab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.dz{border:2px dashed var(--b2);border-radius:12px;padding:36px;text-align:center;cursor:pointer;transition:all 0.2s;margin-bottom:16px}
+.dz:hover{border-color:var(--accent);background:rgba(23,55,49,0.03)}
+.mt{width:100%;border-collapse:collapse}
+.mt th{text-align:left;padding:9px 14px;background:var(--s2);font-size:11.5px;text-transform:uppercase;letter-spacing:0.05em;color:var(--t3);border-bottom:1px solid var(--border)}
+.mt td{padding:9px 14px;border-bottom:1px solid var(--border);font-size:13px}
+.mt select{font-family:'DM Sans',sans-serif;font-size:13px;padding:4px 7px;border:1px solid var(--b2);border-radius:6px;color:var(--text);background:var(--surface);outline:none}
+code{font-family:'JetBrains Mono',monospace;font-size:11.5px;background:var(--s2);padding:2px 6px;border-radius:4px}
+.pp{background:var(--rbg);color:var(--red);padding:3px 8px;border-radius:6px;font-size:11.5px;font-weight:500}
+.pm{background:var(--abg);color:var(--amber);padding:3px 8px;border-radius:6px;font-size:11.5px;font-weight:500}
+.pl{background:var(--s2);color:var(--t2);padding:3px 8px;border-radius:6px;font-size:11.5px;font-weight:500}
+
+/* CHAT */
+.cms{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:13px}
+.cm{display:flex;gap:10px;max-width:80%;align-items:flex-start}
+.cm.u{flex-direction:row-reverse;align-self:flex-end}
+.mav{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0}
+.mav.ai{background:var(--accent);color:var(--gold)}.mav.u{background:var(--gold);color:var(--accent)}
+.mb{padding:11px 14px;border-radius:12px;font-size:13.5px;line-height:1.55}
+.cm.ai .mb{background:var(--surface);border:1px solid var(--border);border-radius:4px 12px 12px 12px}
+.cm.u .mb{background:var(--accent);color:#fff;border-radius:12px 4px 12px 12px}
+.cbar{padding:13px 20px;border-top:1px solid var(--border);background:var(--surface);display:flex;gap:9px;align-items:flex-end;flex-shrink:0}
+.cin{flex:1;border:1px solid var(--b2);border-radius:10px;padding:9px 13px;font-family:'DM Sans',sans-serif;font-size:13.5px;color:var(--text);resize:none;outline:none;background:var(--bg);max-height:110px;transition:border-color 0.2s}
+.cin:focus{border-color:var(--accent)}
+.csend{width:38px;height:38px;border-radius:8px;background:var(--accent);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff;font-size:17px;transition:background 0.13s;flex-shrink:0}
+.csend:hover{background:var(--a2)}
+
+/* MODAL */
+.ov{position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:200;display:none;align-items:flex-start;justify-content:flex-end}
+.ov.open{display:flex}
+.modal{background:var(--surface);width:540px;height:100vh;overflow-y:auto;box-shadow:-20px 0 60px rgba(0,0,0,0.15);display:flex;flex-direction:column}
+.mhd{padding:18px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--surface);z-index:1;flex-shrink:0}
+.mttl{font-size:16px;font-weight:600}
+.mx{font-size:18px;cursor:pointer;color:var(--t3);background:none;border:none;line-height:1}
+.mbd{padding:20px 22px;flex:1}
+.mstl{font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:var(--t3);margin-bottom:10px;font-weight:500;margin-top:20px}
+.mstl:first-child{margin-top:0}
+.dr{display:flex;align-items:flex-start;gap:10px;margin-bottom:8px;font-size:13.5px}
+.dk{color:var(--t3);width:120px;flex-shrink:0;padding-top:1px}
+
+/* Activity items */
+.ai2{display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px}
+.ai2:last-child{border-bottom:none}
+.ad{color:var(--t3);font-size:11.5px;width:78px;flex-shrink:0;margin-top:1px;line-height:1.4}
+.at{font-weight:500;margin-bottom:2px;display:flex;align-items:center;gap:6px}
+.an{color:var(--t2);font-size:12.5px;line-height:1.45}
+.act-ico{font-size:13px}
+.ai2.lem-ev{background:var(--lbg);margin:2px -4px;padding:10px 4px;border-radius:6px;border:none}
+.ai2.stg-ev{background:#EDF4FF;margin:2px -4px;padding:10px 4px;border-radius:6px;border:none}
+.ai2.mat-ev{background:#F5F0FA;margin:2px -4px;padding:10px 4px;border-radius:6px;border:none}
+
+/* Quick action buttons */
+.ab{width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--b2);background:var(--s2);font-family:'DM Sans',sans-serif;font-size:13px;color:var(--text);cursor:pointer;text-align:left;margin-bottom:7px;display:flex;align-items:center;gap:8px;transition:all 0.13s}
+.ab:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+/* Note / event editor */
+.note-box{width:100%;padding:9px 11px;border:1px solid var(--b2);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--text);resize:none;outline:none;background:var(--bg);line-height:1.5;transition:border-color 0.2s}
+.note-box:focus{border-color:var(--accent);background:#fff}
+.inlin-lbl{font-size:12px;color:var(--t3);display:block;margin-bottom:5px}
+.inlin-input{width:100%;padding:8px 10px;border:1px solid var(--b2);border-radius:7px;font-family:'DM Sans',sans-serif;font-size:13px;outline:none;background:var(--surface);transition:border-color 0.2s}
+.inlin-input:focus{border-color:var(--accent)}
+.inlin-sel{width:100%;padding:8px 10px;border:1px solid var(--b2);border-radius:7px;font-family:'DM Sans',sans-serif;font-size:13px;outline:none;background:var(--surface);cursor:pointer}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+
+/* Filters */
+.frow{display:flex;gap:7px;margin-left:auto}
+.fsel{font-family:'DM Sans',sans-serif;font-size:12px;padding:5px 8px;border:1px solid var(--b2);border-radius:6px;color:var(--text);background:var(--surface);outline:none;cursor:pointer}
+
+/* Notif */
+.notif{position:fixed;bottom:20px;right:20px;background:var(--accent);color:#fff;padding:11px 17px;border-radius:10px;font-size:13.5px;box-shadow:0 8px 24px rgba(0,0,0,0.2);z-index:400;opacity:0;transform:translateY(8px);transition:all 0.28s;pointer-events:none;max-width:340px}
+.notif.show{opacity:1;transform:translateY(0)}
+
+/* Section divider */
+.sdiv{height:1px;background:var(--border);margin:16px 0}
+
+/* Close dropdown on outside click */
+.rel{position:relative;display:inline-block}
+</style>
+</head>
+<body>
+
+<nav id="sidebar">
+  <div class="logo">
+    <div class="logo-word">Evolve</div>
+    <div class="logo-sub">CRM Recrutement</div>
+  </div>
+  <div class="nav-sec">
+    <div class="nav-lbl">Vues</div>
+    <div class="nitem active" data-p="dashboard"><span class="nico">⌂</span>Tableau de bord</div>
+    <div class="nitem" data-p="pipeline"><span class="nico">◫</span>Pipeline</div>
+    <div class="nitem" data-p="profiles"><span class="nico">◎</span>Tous les profils</div>
+    <div class="nitem" data-p="analytics"><span class="nico">↗</span>Analytics</div>
+  </div>
+  <div class="nav-sec">
+    <div class="nav-lbl">Outils</div>
+    <div class="nitem" data-p="import"><span class="nico">⇪</span>Import &amp; Scoring</div>
+    <div class="nitem" data-p="chat"><span class="nico">✦</span>Chat IA</div>
+  </div>
+  <div class="sbot">
+    <div class="uchip">
+      <div class="uav">B</div>
+      <div><div style="font-size:13px;color:rgba(255,255,255,0.8)">Baptiste</div><div style="font-size:11px;color:rgba(255,255,255,0.4)">Responsable réseau</div></div>
+    </div>
+  </div>
+</nav>
+
+<div id="content">
+  <div id="topbar">
+    <div id="tbar-ttl">Tableau de bord</div>
+    <div class="srch"><span style="color:var(--t3);font-size:14px">⌕</span>
+      <input type="text" placeholder="Rechercher un profil…" oninput="gsrch(this.value)">
+    </div>
+    <div class="tbar-r">
+      <button class="btn bo" onclick="openNew()">+ Profil</button>
+      <button class="btn bp" onclick="go('import')">⇪ Importer CSV</button>
+    </div>
+  </div>
+
+  <div id="wrap">
+
+    <!-- DASHBOARD -->
+    <div class="page active" id="pg-dashboard">
+      <div style="font-family:'DM Serif Display',serif;font-size:22px;margin-bottom:4px">Bonjour Baptiste 👋</div>
+      <div style="font-size:13px;color:var(--t3);margin-bottom:20px">Pipeline au 13 mars 2026</div>
+      <div class="stats-row">
+        <div class="scard"><div class="slbl">Contactés (mars)</div><div class="sval">34</div><div class="ssub">+12 vs février</div></div>
+        <div class="scard"><div class="slbl">En pipeline actif</div><div class="sval">18</div><div class="ssub">Tous stades</div></div>
+        <div class="scard"><div class="slbl">Recrutés 2026</div><div class="sval">3</div><div class="ssub" style="color:var(--green)">↑ +1 ce mois</div></div>
+        <div class="scard"><div class="slbl">Taux conversion</div><div class="sval">8,8%</div><div class="ssub">R0 → Recruté</div></div>
+      </div>
+      <div class="tw">
+        <div class="thd"><div class="ttl">Activité récente</div><span class="bdg" id="d-cnt">7 actions</span>
+          <button class="btn bo bsm" style="margin-left:auto" onclick="go('profiles')">Voir tous →</button>
+        </div>
+        <table><thead><tr><th>Profil</th><th>Dernière action</th><th>Source</th><th>Score</th><th>Stade</th><th>Intégration prév.</th></tr></thead>
+        <tbody id="dash-rows"></tbody></table>
+      </div>
+      <!-- Intégrations prévues -->
+      <div class="tw" style="margin-bottom:0">
+        <div class="thd"><div class="ttl">Intégrations prévues</div><span class="bdg">2 profils</span></div>
+        <table><thead><tr><th>Profil</th><th>Stade actuel</th><th>Date d'intégration</th><th>Ville</th></tr></thead>
+        <tbody id="integ-rows"></tbody></table>
+      </div>
+    </div>
+
+    <!-- PIPELINE -->
+    <div id="pg-pipeline">
+      <div class="pipbar">
+        <div style="font-weight:600;font-size:14px">Pipeline recrutement — vue Kanban</div>
+        <span class="bdg">18 profils actifs</span>
+        <button class="btn bp bsm" style="margin-left:auto" onclick="openNew()">+ Nouveau profil</button>
+      </div>
+      <div class="kb" id="kboard"></div>
+    </div>
+
+    <!-- PROFILS -->
+    <div class="page" id="pg-profiles">
+      <div class="tw">
+        <div class="thd">
+          <div class="ttl">Tous les profils</div><span class="bdg" id="pcnt">22 profils</span>
+          <div class="frow">
+            <select class="fsel" id="fsrc" onchange="filterP()"><option value="">Toutes sources</option><option>Chasse LinkedIn</option><option>Chasse Mail</option><option>Recommandation</option><option>Inbound</option></select>
+            <select class="fsel" id="fstg" onchange="filterP()"><option value="">Tous stades</option><option>R0</option><option>R1</option><option>Point d'étape</option><option>R2 Amaury</option><option>Démission</option><option>Point juridique</option><option>Recruté</option></select>
+          </div>
+        </div>
+        <table><thead><tr><th>Profil</th><th>Ville</th><th>Source</th><th>Score</th><th>Maturité</th><th>Stade</th><th>Intégration prév.</th><th>Contact</th></tr></thead>
+        <tbody id="ptable"></tbody></table>
+      </div>
+    </div>
+
+    <!-- ANALYTICS -->
+    <div class="page" id="pg-analytics">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px">
+        <div><div style="font-family:'DM Serif Display',serif;font-size:22px">Analytics</div><div style="font-size:13px;color:var(--t3)">Performance recrutement Evolve</div></div>
+        <div class="pbtns">
+          <button class="pb" onclick="setPer(this,'Jan')">Jan</button>
+          <button class="pb" onclick="setPer(this,'Fév')">Fév</button>
+          <button class="pb active" onclick="setPer(this,'Mars')">Mars</button>
+          <button class="pb" onclick="setPer(this,'2026')">2026</button>
+        </div>
+      </div>
+      <!-- KPI row 1 -->
+      <div class="stats-row" style="grid-template-columns:repeat(5,1fr)">
+        <div class="scard"><div class="slbl">Contactés</div><div class="sval" id="a-c">34</div><div class="ssub">Mars 2026</div></div>
+        <div class="scard"><div class="slbl">Taux réponse</div><div class="sval" id="a-rep">41%</div><div class="ssub">LinkedIn + Mail</div></div>
+        <div class="scard"><div class="slbl">R0 → R1</div><div class="sval" id="a-r01">53%</div><div class="ssub">Taux passage</div></div>
+        <div class="scard"><div class="slbl">Délai moy. R0→R1</div><div class="sval" id="a-del">9j</div><div class="ssub">Temps de chauffe</div></div>
+        <div class="scard"><div class="slbl">Recrutés</div><div class="sval" id="a-rec">3</div><div class="ssub" style="color:var(--green)">Délai moy. 8 sem.</div></div>
+      </div>
+      <div class="ag">
+        <div class="ac"><div class="act">Sources d'acquisition <span class="act-sub">profils entrés</span></div><div id="sc1"></div></div>
+        <div class="ac"><div class="act">Taux de conversion par source <span class="act-sub">% R0→R1</span></div><div id="sc3"></div></div>
+      </div>
+      <div class="ag">
+        <div class="ac"><div class="act">Contacts par canal <span class="act-sub">volume</span></div><div id="sc2"></div></div>
+        <div class="ac">
+          <div class="act">Délai moyen par stade <span class="act-sub">jours</span></div>
+          <div id="delay-chart"></div>
+        </div>
+      </div>
+      <div class="ac" style="margin-bottom:20px">
+        <div class="act">Entonnoir pipeline — pertes par étape <span class="act-sub">R0 = 100%</span></div>
+        <div id="fun"></div>
+      </div>
+      <div class="ag3">
+        <div class="ac">
+          <div class="act">Profils par zone Evolve</div>
+          <div id="zone-chart"></div>
+        </div>
+        <div class="ac">
+          <div class="act">Séquences Lemlist actives</div>
+          <div id="lem-chart"></div>
+        </div>
+        <div class="ac">
+          <div class="act">Intégrations à venir</div>
+          <div id="integ-chart"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- IMPORT -->
+    <div class="page" id="pg-import">
+      <div style="font-family:'DM Serif Display',serif;font-size:22px;margin-bottom:4px">Import &amp; Scoring</div>
+      <div style="font-size:13px;color:var(--t3);margin-bottom:20px">CSV Sales Navigator ou PDF LinkedIn — mappe les colonnes, lance le scoring IA</div>
+      <div class="itabs">
+        <div class="itab active" onclick="iTab(this,'iu')">① Source</div>
+        <div class="itab" onclick="iTab(this,'im')">② Mapping / Extraction</div>
+        <div class="itab" onclick="iTab(this,'is')">③ Résultats scoring</div>
+      </div>
+
+      <div id="iu">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px">
+          <!-- CSV -->
+          <div>
+            <div style="font-weight:600;font-size:13.5px;margin-bottom:8px">📄 Import CSV Sales Navigator</div>
+            <div class="dz" onclick="doUp('csv')">
+              <div style="font-size:30px;margin-bottom:8px">⇪</div>
+              <div style="font-size:14px;font-weight:600;margin-bottom:4px">Glisser-déposer un .csv</div>
+              <div style="font-size:12px;color:var(--t3)">Export Sales Navigator ou Waalaxy</div>
+            </div>
+            <div style="background:var(--s2);border-radius:8px;padding:11px 14px;font-size:12px;color:var(--t3)">
+              Colonnes attendues : <code>firstName</code> · <code>lastName</code> · <code>title</code> · <code>companyName</code> · <code>durationInRole</code> · <code>location</code>
+            </div>
+          </div>
+          <!-- PDF -->
+          <div>
+            <div style="font-weight:600;font-size:13.5px;margin-bottom:8px">📑 Import PDF LinkedIn</div>
+            <div class="dz" style="border-color:#AEC8F0;background:#F5F9FF" onclick="doUp('pdf')">
+              <div style="font-size:30px;margin-bottom:8px">📑</div>
+              <div style="font-size:14px;font-weight:600;margin-bottom:4px">Glisser-déposer un .pdf</div>
+              <div style="font-size:12px;color:var(--t3)">Profil LinkedIn exporté en PDF</div>
+            </div>
+            <div style="background:#EEF4FD;border-radius:8px;padding:11px 14px;font-size:12px;color:#4A6FA0">
+              L'IA extrait automatiquement : nom, employeur actuel, poste, ancienneté, ville, LinkedIn URL — puis score le profil.
+            </div>
+          </div>
+        </div>
+        <!-- Lemlist integration banner -->
+        <div style="background:var(--lbg);border:1px solid #FFD5C0;border-radius:10px;padding:14px 18px;display:flex;align-items:center;gap:14px">
+          <span style="font-size:22px">🔗</span>
+          <div>
+            <div style="font-weight:600;font-size:13.5px;color:var(--lemlist)">Intégration Lemlist détectée</div>
+            <div style="font-size:12px;color:var(--t2);margin-top:2px">Les profils poussés dans une séquence Lemlist apparaîtront automatiquement dans leur historique d'activité. Webhook configuré sur l'endpoint <code>/api/lemlist-events</code>.</div>
+          </div>
+          <span style="margin-left:auto;font-size:11px;background:#FF6B35;color:#fff;padding:3px 9px;border-radius:20px;font-weight:500;flex-shrink:0">Connecté</span>
+        </div>
+      </div>
+
+      <div id="im" style="display:none">
+        <div id="im-csv">
+          <div style="font-weight:600;font-size:13.5px;margin-bottom:12px">Mapping colonnes CSV <span style="font-weight:400;color:var(--t3);font-size:12px">— 24 profils détectés</span></div>
+          <div class="tw" style="margin-bottom:14px">
+            <table class="mt"><thead><tr><th>Colonne CSV</th><th>→ Champ CRM</th><th>Aperçu</th></tr></thead>
+            <tbody>
+              <tr><td><code>firstName</code></td><td><select><option>Prénom</option></select></td><td style="color:var(--t3);font-size:12px">Thomas, Marine…</td></tr>
+              <tr><td><code>lastName</code></td><td><select><option>Nom</option></select></td><td style="color:var(--t3);font-size:12px">Dupont, Laurent…</td></tr>
+              <tr><td><code>title</code></td><td><select><option>Intitulé de poste</option></select></td><td style="color:var(--t3);font-size:12px">CGP, Conseiller…</td></tr>
+              <tr><td><code>companyName</code></td><td><select><option>Employeur</option></select></td><td style="color:var(--t3);font-size:12px">Crédit Agricole…</td></tr>
+              <tr><td><code>durationInRole</code></td><td><select><option>Ancienneté poste</option></select></td><td style="color:var(--t3);font-size:12px">3 years 2 months…</td></tr>
+              <tr><td><code>location</code></td><td><select><option>Localisation</option></select></td><td style="color:var(--t3);font-size:12px">Toulouse, Lyon…</td></tr>
+              <tr><td><code>linkedInProfileUrl</code></td><td><select><option>URL LinkedIn</option></select></td><td style="color:var(--t3);font-size:12px">linkedin.com/in/…</td></tr>
+            </tbody></table>
+          </div>
+        </div>
+        <div id="im-pdf" style="display:none">
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:14px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+              <span style="font-size:22px">📑</span>
+              <div><div style="font-weight:600">thomas_dupont_linkedin.pdf</div><div style="font-size:12px;color:var(--t3)">Extraction IA en cours…</div></div>
+              <span style="margin-left:auto;background:var(--gbg);color:var(--green);padding:3px 10px;border-radius:20px;font-size:12px;font-weight:500">✓ Extrait</span>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div style="background:var(--s2);border-radius:7px;padding:10px 12px"><div style="font-size:11px;color:var(--t3);margin-bottom:2px">Nom détecté</div><div style="font-size:13px;font-weight:500">Thomas Dupont</div></div>
+              <div style="background:var(--s2);border-radius:7px;padding:10px 12px"><div style="font-size:11px;color:var(--t3);margin-bottom:2px">Employeur actuel</div><div style="font-size:13px;font-weight:500">Crédit Agricole</div></div>
+              <div style="background:var(--s2);border-radius:7px;padding:10px 12px"><div style="font-size:11px;color:var(--t3);margin-bottom:2px">Poste</div><div style="font-size:13px;font-weight:500">CGP</div></div>
+              <div style="background:var(--s2);border-radius:7px;padding:10px 12px"><div style="font-size:11px;color:var(--t3);margin-bottom:2px">Ancienneté</div><div style="font-size:13px;font-weight:500">5 ans 2 mois</div></div>
+              <div style="background:var(--s2);border-radius:7px;padding:10px 12px"><div style="font-size:11px;color:var(--t3);margin-bottom:2px">Ville</div><div style="font-size:13px;font-weight:500">Toulouse</div></div>
+              <div style="background:var(--s2);border-radius:7px;padding:10px 12px"><div style="font-size:11px;color:var(--t3);margin-bottom:2px">Score IA calculé</div><div style="font-size:13px;font-weight:600;color:var(--green)">85 / 100 🔴 Prioritaire</div></div>
+            </div>
+          </div>
+        </div>
+        <button class="btn bp" onclick="doSc()">✦ Lancer le scoring IA →</button>
+      </div>
+
+      <div id="is" style="display:none">
+        <div class="stats-row" style="margin-bottom:14px">
+          <div class="scard"><div class="slbl">Analysés</div><div class="sval">24</div></div>
+          <div class="scard"><div class="slbl">🔴 Prioritaires ≥70</div><div class="sval">5</div></div>
+          <div class="scard"><div class="slbl">🟡 À travailler</div><div class="sval">3</div></div>
+          <div class="scard"><div class="slbl">Score moyen</div><div class="sval">61</div></div>
+        </div>
+        <!-- Lemlist export info -->
+        <div style="background:var(--lbg);border:1px solid #FFD5C0;border-radius:8px;padding:11px 16px;margin-bottom:14px;font-size:12.5px;color:var(--t2);display:flex;align-items:center;gap:10px">
+          <span style="color:var(--lemlist);font-size:16px">🔗</span>
+          Chaque profil exporté vers Lemlist apparaîtra dans son historique : <strong>date d'entrée en séquence</strong>, ouverts, clics, réponses — synchronisés en temps réel via webhook.
+        </div>
+        <div class="tw">
+          <div class="thd"><div class="ttl">Résultats scoring IA</div>
+            <button class="btn bo bsm" onclick="notif('⬇ Export CSV Lemlist prêt — 24 lignes')">⬇ Export Lemlist CSV</button>
+            <button class="btn bp bsm" onclick="pushToCRM()">+ Pousser dans CRM</button>
+          </div>
+          <table><thead><tr><th>Profil</th><th>Employeur</th><th>Intitulé</th><th>Ancienneté</th><th>Score</th><th>Priorité</th></tr></thead>
+          <tbody id="srows"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- CHAT -->
+    <div id="pg-chat">
+      <div class="cms" id="cmsgs">
+        <div class="cm ai"><div class="mav ai">✦</div>
+          <div class="mb">Bonjour Baptiste ! Je suis ton assistant CRM Evolve.<br><br>Tu peux me demander :<br>— <em>Quels profils sont bloqués depuis +3 semaines ?</em><br>— <em>Rédige un email de relance pour Thomas Dupont</em><br>— <em>Quelle est ma meilleure source d'acquisition ?</em><br>— <em>État du pipeline</em></div>
+        </div>
+      </div>
+      <div class="cbar">
+        <textarea class="cin" id="cin" placeholder="Pose ta question…" rows="1"
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();send()}"
+          oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,110)+'px'"></textarea>
+        <button class="csend" onclick="send()">↑</button>
+      </div>
+    </div>
+
+  </div><!-- /wrap -->
+</div><!-- /content -->
+
+<!-- PROFILE SIDE PANEL -->
+<div class="ov" id="pmod" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="mhd">
+      <div>
+        <div class="mttl" id="mn">—</div>
+        <div id="m-co" style="font-size:12px;color:var(--t3);margin-top:2px">—</div>
+      </div>
+      <button class="mx" onclick="document.getElementById('pmod').classList.remove('open')">✕</button>
+    </div>
+    <div class="mbd" id="mb"></div>
+  </div>
+</div>
+
+<!-- NEW PROFILE MODAL -->
+<div class="ov" id="nmod" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal" style="width:460px" onclick="event.stopPropagation()">
+    <div class="mhd"><div class="mttl">Nouveau profil</div><button class="mx" onclick="document.getElementById('nmod').classList.remove('open')">✕</button></div>
+    <div class="mbd">
+      <div class="grid2">
+        <div><label class="inlin-lbl">Prénom</label><input class="inlin-input" id="nfn" placeholder="Thomas"></div>
+        <div><label class="inlin-lbl">Nom</label><input class="inlin-input" id="nln" placeholder="Dupont"></div>
+      </div>
+      <div style="margin-bottom:10px"><label class="inlin-lbl">Employeur</label><input class="inlin-input" id="nco" placeholder="Crédit Agricole"></div>
+      <div style="margin-bottom:10px"><label class="inlin-lbl">Intitulé de poste</label><input class="inlin-input" id="nti" placeholder="CGP"></div>
+      <div class="grid2">
+        <div><label class="inlin-lbl">Ville</label><input class="inlin-input" id="nci" placeholder="Toulouse"></div>
+        <div><label class="inlin-lbl">Email</label><input class="inlin-input" id="nem" placeholder="t.dupont@ca.fr"></div>
+      </div>
+      <div class="grid2" style="margin-bottom:10px">
+        <div><label class="inlin-lbl">Source</label>
+          <select class="inlin-sel" id="nsr"><option>Chasse LinkedIn</option><option>Chasse Mail</option><option>Recommandation</option><option>Inbound</option><option>Ads</option><option>Direct contact</option></select>
+        </div>
+        <div><label class="inlin-lbl">Ancienneté estimée</label>
+          <select class="inlin-sel" id="nanc"><option>< 1 an</option><option>1-2 ans</option><option>3-7 ans</option><option>8-12 ans</option><option>> 12 ans</option></select>
+        </div>
+      </div>
+      <button class="btn bp" style="width:100%" onclick="addProfile()">Ajouter au pipeline en R0 →</button>
+    </div>
+  </div>
+</div>
+
+<div class="notif" id="nf"></div>
+
+<script>
+const STG=['R0','R1',"Point d'étape",'R2 Amaury','Démission','Point juridique','Recruté'];
+const MATS=['Froid','Tiède','Chaud','Très chaud'];
+const SC2={'R0':'#6B6158','R1':'#1E5FA0',"Point d'étape":'#0E7490','R2 Amaury':'#7B3FC4','Démission':'#B86B0F','Point juridique':'#C0392B','Recruté':'#1A7A4A'};
+const SB={'R0':'#F3F1EE','R1':'#DBE8F5',"Point d'étape":'#E0F2F7','R2 Amaury':'#EDE0FA','Démission':'#FEF0DC','Point juridique':'#FDDEDE','Recruté':'#D4EDE1'};
+const AV=['avg','avb','ava','avp','avr','avt'];
+const TITLES={dashboard:'Tableau de bord',pipeline:'Pipeline recrutement',profiles:'Tous les profils',analytics:'Analytics',import:'Import & Scoring',chat:'Chat IA'};
+const INTEG_OPTS=['—','Avril 2026','Mai 2026','Juin 2026','Juillet 2026','Septembre 2026','Octobre 2026','Q4 2026'];
+
+const P=[
+  {id:1,fn:'Thomas',ln:'Dupont',co:'Crédit Agricole',ti:'CGP',city:'Toulouse',src:'Chasse LinkedIn',sc:85,stg:'R1',mat:'Chaud',integ:'—',dt:'10 mars',mail:'t.dupont@ca.fr',li:'linkedin.com/in/tdupont',notes:'',
+    acts:[{d:'13 mars',t:'Lemlist',n:'Entré séquence S1 — Captifs LinkedIn',ico:'🔗',type:'lem'},
+          {d:'10 mars',t:'Email envoyé',n:'Séquence S1 — mail 1',ico:'📧',type:'std'},
+          {d:'10 mars',t:'Stade → R1',n:'Passage de R0 à R1',ico:'↗',type:'stg'},
+          {d:'8 mars',t:'LinkedIn : vue profil',n:'A consulté ×2',ico:'👁',type:'std'},
+          {d:'5 mars',t:'Ajouté au CRM',n:'Score 85 — captif Crédit Agricole, 5 ans',ico:'➕',type:'std'}]},
+  {id:2,fn:'Marine',ln:'Laurent',co:'AXA Banque',ti:'Conseillère patrimoniale',city:'Bordeaux',src:'Chasse LinkedIn',sc:80,stg:'R2 Amaury',mat:'Très chaud',integ:'Juin 2026',dt:'8 mars',mail:'m.laurent@axa.fr',li:'linkedin.com/in/mlaurent',notes:'Très motivée, a lu le livre de Cyril Armand sur les CGP indépendants. Dossier propre.',
+    acts:[{d:'8 mars',t:'Stade → R2 Amaury',n:'RDV planifié le 18 mars 10h',ico:'↗',type:'stg'},
+          {d:'8 mars',t:'Maturité → Très chaud',n:'Après appel R1 de 35min',ico:'🌡',type:'mat'},
+          {d:'4 mars',t:'R1 concluant',n:'Très intéressée par le modèle Evolve',ico:'📞',type:'std'},
+          {d:'20 fév',t:'Lemlist',n:'Réponse à S1 — mail 3 — sortie séquence',ico:'🔗',type:'lem'},
+          {d:'15 fév',t:'Lemlist',n:'Email S1 ouvert ×3, lien cliqué',ico:'🔗',type:'lem'},
+          {d:'10 fév',t:'Lemlist',n:'Entré séquence S1 — Captifs LinkedIn',ico:'🔗',type:'lem'}]},
+  {id:3,fn:'Julien',ln:'Morel',co:'Société Générale',ti:'Banquier privé',city:'Lyon',src:'Recommandation',sc:90,stg:'Point juridique',mat:'Très chaud',integ:'Mai 2026',dt:'7 mars',mail:'j.morel@sg.fr',li:'linkedin.com/in/jmorel',notes:'Recommandé par Étienne Thomas. Dossier avancé, délai juridique estimé 2 semaines.',
+    acts:[{d:'7 mars',t:'Point juridique lancé',n:'Revue contrat — notaire Jean-Pierre Aubert',ico:'⚖️',type:'std'},
+          {d:'7 mars',t:'RDV démission reconversion le 21/03',n:'Rendez-vous fixé',ico:'📅',type:'event'},
+          {d:'28 fév',t:'Stade → R2 Amaury',n:'Validation Amaury : go',ico:'↗',type:'stg'},
+          {d:'20 fév',t:'R2 Amaury',n:'Amaury : excellent profil, match Evolve',ico:'🤝',type:'std'}]},
+  {id:4,fn:'Sophie',ln:'Bernard',co:'BNP Paribas',ti:'CGP',city:'Marseille',src:'Chasse Mail',sc:75,stg:"Point d'étape",mat:'Tiède',integ:'—',dt:'6 mars',mail:'s.bernard@bnp.fr',li:'linkedin.com/in/sbernard',notes:'Hésite sur la rémunération variable. A des charges fixes élevées (crédit immo).',
+    acts:[{d:'6 mars',t:'Appel 20min',n:"Hésite sur l'indépendance — peur du variable",ico:'📞',type:'std'},
+          {d:'6 mars',t:'Maturité → Tiède',n:'Réticences exprimées',ico:'🌡',type:'mat'},
+          {d:'25 fév',t:'Stade → Point d\'étape',n:'Passage R1',ico:'↗',type:'stg'},
+          {d:'20 fév',t:'Lemlist',n:'Email S2 ouvert ×1',ico:'🔗',type:'lem'}]},
+  {id:5,fn:'Alexandre',ln:'Petit',co:'Generali',ti:'Conseiller financier',city:'Nice',src:'Inbound',sc:68,stg:'R1',mat:'Tiède',integ:'—',dt:'5 mars',mail:'a.petit@generali.fr',li:'linkedin.com/in/apetit',notes:'',
+    acts:[{d:'5 mars',t:'Formulaire inbound',n:'Site Evolve — page "Rejoindre Evolve"',ico:'📋',type:'std'}]},
+  {id:6,fn:'Camille',ln:'Rousseau',co:"Caisse d'Épargne",ti:'Gestionnaire patrimoine',city:'Nantes',src:'Chasse LinkedIn',sc:82,stg:'R0',mat:'Froid',integ:'—',dt:'12 mars',mail:'c.rousseau@ce.fr',li:'linkedin.com/in/crousseau',notes:'',
+    acts:[{d:'13 mars',t:'Lemlist',n:'Entré séquence S1 — Captifs LinkedIn',ico:'🔗',type:'lem'},
+          {d:'12 mars',t:'Ajouté au CRM',n:'Score 82 — import batch mars',ico:'➕',type:'std'}]},
+  {id:7,fn:'Nicolas',ln:'Fontaine',co:'LCL',ti:'Conseiller clientèle privé',city:'Montpellier',src:'Chasse LinkedIn',sc:78,stg:'R0',mat:'Froid',integ:'—',dt:'12 mars',mail:'n.fontaine@lcl.fr',li:'linkedin.com/in/nfontaine',notes:'',
+    acts:[{d:'13 mars',t:'Lemlist',n:'Entré séquence S1 — Captifs LinkedIn',ico:'🔗',type:'lem'},
+          {d:'12 mars',t:'Ajouté au CRM',n:'Séquence S1 Lemlist démarrée',ico:'➕',type:'std'}]},
+  {id:8,fn:'Pierre',ln:'Lefebvre',co:'Crédit Mutuel',ti:'CGP senior',city:'Aix-en-Provence',src:'Recommandation',sc:92,stg:'Démission',mat:'Très chaud',integ:'Mai 2026',dt:'3 mars',mail:'p.lefebvre@cm.fr',li:'linkedin.com/in/plefebvre',notes:'Recommandé par Marine Laurent. Dossier exemplaire. Très à l\'aise avec l\'indépendance.',
+    acts:[{d:'3 mars',t:'Démission annoncée',n:'Préavis 2 mois — intégration prévue mai',ico:'📋',type:'std'},
+          {d:'3 mars',t:'RDV démission reconversion le 14/03',n:'RDV fixé',ico:'📅',type:'event'},
+          {d:'20 fév',t:'Stade → R2 Amaury',n:'Amaury : excellent, go',ico:'↗',type:'stg'}]},
+  {id:9,fn:'Isabelle',ln:'Roux',co:'Banque Populaire',ti:"Chargée d'affaires",city:'Bordeaux',src:'Chasse LinkedIn',sc:71,stg:'R1',mat:'Chaud',integ:'—',dt:'4 mars',mail:'i.roux@bp.fr',li:'linkedin.com/in/iroux',notes:'',
+    acts:[{d:'4 mars',t:'R1 planifié',n:'RDV le 15 mars 14h — visio',ico:'📅',type:'event'},
+          {d:'1 mars',t:'Réponse LinkedIn',n:'Intéressée, questions sur la structure juridique',ico:'💬',type:'std'},
+          {d:'25 fév',t:'Lemlist',n:'Réponse à S1 — sortie séquence',ico:'🔗',type:'lem'}]},
+  {id:10,fn:'Laurent',ln:'Simon',co:'Swiss Life',ti:'Conseiller patrimonial',city:'Toulouse',src:'Chasse LinkedIn',sc:76,stg:'R0',mat:'Froid',integ:'—',dt:'13 mars',mail:'l.simon@sl.fr',li:'linkedin.com/in/lsimon',notes:'',
+    acts:[{d:'13 mars',t:'Ajouté au CRM',n:'Score 76 — import batch mars',ico:'➕',type:'std'}]},
+  {id:11,fn:'Clara',ln:'Martin',co:'Société Générale',ti:'Banquière privée',city:'Lyon',src:'Chasse Mail',sc:84,stg:'R0',mat:'Tiède',integ:'—',dt:'11 mars',mail:'c.martin@sg.fr',li:'linkedin.com/in/cmartin',notes:'',
+    acts:[{d:'13 mars',t:'Lemlist',n:'Email S1 ouvert ×2',ico:'🔗',type:'lem'},
+          {d:'11 mars',t:'Ajouté au CRM',n:'Score 84 — chasse mail',ico:'➕',type:'std'}]},
+  {id:12,fn:'Mathieu',ln:'Girard',co:'Crédit Agricole',ti:'CGP',city:'Nîmes',src:'Direct contact',sc:88,stg:'Recruté',mat:'Très chaud',integ:'Intégré',dt:'15 jan',mail:'m.girard@ca.fr',li:'linkedin.com/in/mgirard',notes:'',
+    acts:[{d:'15 jan',t:'Recruté ✓',n:'Contrat signé',ico:'🎉',type:'std'}]},
+  {id:13,fn:'Aurélie',ln:'Leroy',co:'AXA',ti:'Conseillère CGP',city:'Toulon',src:'Inbound',sc:79,stg:'Recruté',mat:'Très chaud',integ:'Intégré',dt:'1 fév',mail:'a.leroy@axa.fr',li:'linkedin.com/in/aleroy',notes:'',
+    acts:[{d:'1 fév',t:'Recruté ✓',n:'Intégrée — zone PACA',ico:'🎉',type:'std'}]},
+  {id:14,fn:'Étienne',ln:'Thomas',co:'BNP Paribas',ti:'CGP senior',city:'Marseille',src:'Recommandation',sc:91,stg:'Recruté',mat:'Très chaud',integ:'Intégré',dt:'28 fév',mail:'e.thomas@bnp.fr',li:'linkedin.com/in/ethomas',notes:'',
+    acts:[{d:'28 fév',t:'Recruté ✓',n:'Contrat signé — zone PACA',ico:'🎉',type:'std'}]},
+  {id:15,fn:'Delphine',ln:'Adam',co:'Société Générale',ti:'Private banker',city:'Nice',src:'Chasse Mail',sc:73,stg:'R1',mat:'Tiède',integ:'—',dt:'9 mars',mail:'d.adam@sg.fr',li:'linkedin.com/in/dadam',notes:'Attend des infos sur le niveau de commission moyen des CGP Evolve PACA.',
+    acts:[{d:'9 mars',t:'Réponse email',n:'Demande infos commission — à chiffrer',ico:'📧',type:'std'},
+          {d:'9 mars',t:'Stade → R1',n:'Après réponse positive',ico:'↗',type:'stg'},
+          {d:'6 mars',t:'Lemlist',n:'Réponse à S2 — mail 2',ico:'🔗',type:'lem'}]},
+  {id:16,fn:'Nathalie',ln:'Dubois',co:'Generali',ti:'CGP',city:'Montpellier',src:'Chasse LinkedIn',sc:81,stg:'R0',mat:'Froid',integ:'—',dt:'12 mars',mail:'n.dubois@generali.fr',li:'linkedin.com/in/ndubois',notes:'',
+    acts:[{d:'13 mars',t:'Lemlist',n:'Entré séquence S1 — Captifs LinkedIn',ico:'🔗',type:'lem'},
+          {d:'12 mars',t:'Ajouté au CRM',n:'Score 81',ico:'➕',type:'std'}]},
+  {id:17,fn:'Fabien',ln:'Blanc',co:'LCL',ti:'Conseiller patrimoine',city:'Béziers',src:'Chasse LinkedIn',sc:62,stg:'R0',mat:'Froid',integ:'—',dt:'12 mars',mail:'f.blanc@lcl.fr',li:'linkedin.com/in/fblanc',notes:'',
+    acts:[{d:'12 mars',t:'Ajouté au CRM',n:'Import batch',ico:'➕',type:'std'}]},
+  {id:18,fn:'Lucie',ln:'Chevalier',co:'Crédit Mutuel',ti:'CGP',city:'Aix-en-Provence',src:'Chasse LinkedIn',sc:77,stg:'R0',mat:'Froid',integ:'—',dt:'13 mars',mail:'l.chevalier@cm.fr',li:'linkedin.com/in/lchevalier',notes:'',
+    acts:[{d:'13 mars',t:'Ajouté au CRM',n:'Score 77',ico:'➕',type:'std'}]},
+  {id:19,fn:'Hugo',ln:'Renard',co:'MAIF',ti:'Conseiller financier',city:'Toulouse',src:'Inbound',sc:58,stg:'R0',mat:'Froid',integ:'—',dt:'9 mars',mail:'h.renard@maif.fr',li:'linkedin.com/in/hrenard',notes:'',
+    acts:[{d:'9 mars',t:'Formulaire inbound',n:'Site Evolve',ico:'📋',type:'std'}]},
+  {id:20,fn:'Céline',ln:'Henry',co:'Swiss Life',ti:'Conseillère patrimoniale',city:'Marseille',src:'Chasse Mail',sc:83,stg:'R0',mat:'Tiède',integ:'—',dt:'11 mars',mail:'c.henry@sl.fr',li:'linkedin.com/in/chenry',notes:'',
+    acts:[{d:'13 mars',t:'Lemlist',n:'Email S1 ouvert ×1',ico:'🔗',type:'lem'},
+          {d:'11 mars',t:'Ajouté au CRM',n:'Score 83',ico:'➕',type:'std'}]},
+  {id:21,fn:'Romain',ln:'Mercier',co:"Caisse d'Épargne",ti:'Gestionnaire patrimoine',city:'Perpignan',src:'Chasse LinkedIn',sc:66,stg:'R0',mat:'Froid',integ:'—',dt:'13 mars',mail:'r.mercier@ce.fr',li:'linkedin.com/in/rmercier',notes:'',
+    acts:[{d:'13 mars',t:'Lemlist',n:'Entré séquence S1',ico:'🔗',type:'lem'},
+          {d:'13 mars',t:'Ajouté au CRM',n:'Séquence démarrée',ico:'➕',type:'std'}]},
+  {id:22,fn:'Émilie',ln:'Garnier',co:'Allianz',ti:'CGP',city:'Toulouse',src:'Chasse Mail',sc:35,stg:'R0',mat:'Froid',integ:'—',dt:'11 mars',mail:'e.garnier@gmail.com',li:'linkedin.com/in/egarnier',notes:'Déjà indépendante — hors cible captif.',
+    acts:[{d:'11 mars',t:'Ajouté au CRM',n:'Déjà indépendant — hors cible',ico:'➕',type:'std'}]},
+];
+
+const SD=[
+  {fn:'Yasmine',ln:'Boudali',co:'Crédit Agricole',ti:'CGP',dur:'5 ans',sc:95,pr:'Prioritaire'},
+  {fn:'Marc',ln:'Thibault',co:'BNP Paribas',ti:'Banquier privé',dur:'4 ans',sc:88,pr:'Prioritaire'},
+  {fn:'Inès',ln:'Caramel',co:'Société Générale',ti:'Gestionnaire patrimoine',dur:'6 ans',sc:82,pr:'Prioritaire'},
+  {fn:'Kevin',ln:'Durand',co:'AXA Banque',ti:'Conseiller financier',dur:'3 ans',sc:78,pr:'Prioritaire'},
+  {fn:'Pauline',ln:'Vidal',co:'Generali',ti:'CGP',dur:'5 ans',sc:75,pr:'Prioritaire'},
+  {fn:'Tom',ln:'Gros',co:'Primonial',ti:'Conseiller',dur:'2 ans',sc:45,pr:'À travailler'},
+  {fn:'Anne',ln:'Castillo',co:'Cabinet Castillo',ti:'CGP indépendant',dur:'8 ans',sc:38,pr:'À travailler'},
+  {fn:'Jean',ln:'Morin',co:'Hors secteur',ti:'Commercial',dur:'1 an',sc:15,pr:'À écarter'},
+];
+
+// helpers
+const av=i=>AV[i%AV.length];
+const ini=(a,b)=>(a[0]||'')+(b[0]||'');
+const today=()=>{const d=new Date(2026,2,13);return`${d.getDate()} mars`;};
+function stag(s){return`<span class="tag" style="background:${SB[s]||'#eee'};color:${SC2[s]||'#888'}">${s}</span>`;}
+function scpill(s){return`<span class="sc ${s>=70?'sh':s>=45?'sm2':'sl'}">${s}</span>`;}
+function srctag(s){const m={'Chasse LinkedIn':'tb','Chasse Mail':'tt','Recommandation':'tp','Inbound':'tg','Ads':'ta','Direct contact':'tx'};return`<span class="tag ${m[s]||'tx'}">${s}</span>`;}
+function mattag(m){const mp={'Froid':'tx','Tiède':'ta','Chaud':'tb','Très chaud':'tg'};return`<span class="tag ${mp[m]||'tx'}">${m}</span>`;}
+function priotag(p){if(p==='Prioritaire')return'<span class="pp">🔴 Prioritaire</span>';if(p==='À travailler')return'<span class="pm">🟡 À travailler</span>';return'<span class="pl">⚪ À écarter</span>';}
+
+// nav
+function go(id){
+  document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
+  document.getElementById('pg-pipeline').classList.remove('active');
+  document.getElementById('pg-chat').classList.remove('active');
+  document.getElementById('pg-'+id).classList.add('active');
+  document.querySelectorAll('.nitem').forEach(n=>n.classList.remove('active'));
+  document.querySelector(`.nitem[data-p="${id}"]`)?.classList.add('active');
+  document.getElementById('tbar-ttl').textContent=TITLES[id]||id;
+  closeAllDropdowns();
+}
+document.querySelectorAll('.nitem').forEach(n=>n.addEventListener('click',()=>go(n.dataset.p)));
+
+// dropdowns (stage / maturité inline)
+function closeAllDropdowns(){document.querySelectorAll('.ddrop').forEach(d=>d.classList.remove('open'));}
+document.addEventListener('click',e=>{if(!e.target.closest('.rel'))closeAllDropdowns();});
+
+function mkStagDrop(pid,cur){
+  const opts=STG.map(s=>`<div class="ddi${s===cur?' active-ddi':''}" onclick="changeStg(${pid},'${s}',event)">${stag(s)} ${s}</div>`).join('');
+  return`<div class="rel" onclick="event.stopPropagation()">
+    <span class="tag tag-btn" style="background:${SB[cur]};color:${SC2[cur]}" onclick="toggleDD(this)">${cur} ▾</span>
+    <div class="ddrop">${opts}</div>
+  </div>`;
+}
+function mkMatDrop(pid,cur){
+  const mc={'Froid':'tx','Tiède':'ta','Chaud':'tb','Très chaud':'tg'};
+  const opts=MATS.map(m=>`<div class="ddi${m===cur?' active-ddi':''}" onclick="changeMat(${pid},'${m}',event)">${mattag(m)} ${m}</div>`).join('');
+  return`<div class="rel" onclick="event.stopPropagation()">
+    <span class="tag tag-btn ${mc[cur]||'tx'}" onclick="toggleDD(this)">${cur} ▾</span>
+    <div class="ddrop">${opts}</div>
+  </div>`;
+}
+function toggleDD(el){closeAllDropdowns();el.nextElementSibling.classList.toggle('open');}
+
+function changeStg(pid,newStg,e){
+  e.stopPropagation();closeAllDropdowns();
+  const p=P.find(x=>x.id===pid);if(!p||p.stg===newStg)return;
+  const old=p.stg;p.stg=newStg;
+  p.acts.unshift({d:today(),t:`Stade → ${newStg}`,n:`Changement depuis ${old}`,ico:'↗',type:'stg'});
+  rDash();rP(P);rK();
+  if(document.getElementById('pmod').classList.contains('open'))openP(pid);
+  notif(`${p.fn} ${p.ln} → ${newStg} ✓`);
+}
+function changeMat(pid,newMat,e){
+  e.stopPropagation();closeAllDropdowns();
+  const p=P.find(x=>x.id===pid);if(!p||p.mat===newMat)return;
+  const old=p.mat;p.mat=newMat;
+  p.acts.unshift({d:today(),t:`Maturité → ${newMat}`,n:`Changée depuis ${old}`,ico:'🌡',type:'mat'});
+  rDash();rP(P);
+  if(document.getElementById('pmod').classList.contains('open'))openP(pid);
+  notif(`Maturité de ${p.fn} ${p.ln} → ${newMat} ✓`);
+}
+function changeInteg(pid,val){
+  const p=P.find(x=>x.id===pid);if(!p)return;
+  p.integ=val;rDash();rP(P);
+  if(document.getElementById('pmod').classList.contains('open'))openP(pid);
+  notif(`Date d'intégration → ${val} ✓`);
+}
+
+// dashboard
+function rDash(){
+  document.getElementById('dash-rows').innerHTML=[...P].sort((a,b)=>b.id-a.id).slice(0,7).map((p,i)=>`
+    <tr onclick="openP(${p.id})" style="cursor:pointer">
+      <td><div class="pc"><div class="av ${av(i)}">${ini(p.fn,p.ln)}</div><div><div class="pn">${p.fn} ${p.ln}</div><div class="ps">${p.co}</div></div></div></td>
+      <td style="color:var(--t2);font-size:13px">${p.acts[0]?.t||'—'}</td>
+      <td>${srctag(p.src)}</td><td>${scpill(p.sc)}</td><td>${stag(p.stg)}</td>
+      <td style="font-size:12.5px;color:${p.integ&&p.integ!=='—'&&p.integ!=='Intégré'?'var(--accent)':'var(--t3)'}">${p.integ||'—'}</td>
+    </tr>`).join('');
+  const ip=P.filter(x=>x.integ&&x.integ!=='—'&&x.integ!=='Intégré');
+  document.getElementById('integ-rows').innerHTML=ip.map((p,i)=>`
+    <tr onclick="openP(${p.id})" style="cursor:pointer">
+      <td><div class="pc"><div class="av ${av(i)}">${ini(p.fn,p.ln)}</div><div class="pn">${p.fn} ${p.ln}</div></div></td>
+      <td>${stag(p.stg)}</td>
+      <td style="font-weight:600;color:var(--accent)">${p.integ}</td>
+      <td style="color:var(--t3)">${p.city}</td>
+    </tr>`).join('');
+}
+
+// profiles table
+function rP(data){
+  document.getElementById('pcnt').textContent=data.length+' profils';
+  document.getElementById('ptable').innerHTML=data.map((p,i)=>`
+    <tr>
+      <td style="cursor:pointer" onclick="openP(${p.id})"><div class="pc"><div class="av ${av(i)}">${ini(p.fn,p.ln)}</div><div><div class="pn">${p.fn} ${p.ln}</div><div class="ps">${p.co} · ${p.ti}</div></div></div></td>
+      <td style="color:var(--t2)">${p.city}</td>
+      <td>${srctag(p.src)}</td><td>${scpill(p.sc)}</td>
+      <td>${mkMatDrop(p.id,p.mat)}</td>
+      <td>${mkStagDrop(p.id,p.stg)}</td>
+      <td style="font-size:12.5px;color:${p.integ&&p.integ!=='—'&&p.integ!=='Intégré'?'var(--accent)':'var(--t3)'}">${p.integ||'—'}</td>
+      <td style="color:var(--t3);font-size:12px">${p.dt}</td>
+    </tr>`).join('');
+}
+function filterP(){
+  const s=document.getElementById('fsrc').value,st=document.getElementById('fstg').value;
+  rP(P.filter(p=>(!s||p.src===s)&&(!st||p.stg===st)));
+}
+function gsrch(v){if(document.getElementById('pg-profiles').classList.contains('active'))rP(P.filter(p=>`${p.fn} ${p.ln} ${p.co} ${p.city}`.toLowerCase().includes(v.toLowerCase())));}
+
+// kanban
+function rK(){
+  document.getElementById('kboard').innerHTML=STG.map(st=>{
+    const cards=P.filter(p=>p.stg===st);
+    return`<div class="kcol">
+      <div class="kch" style="background:${SB[st]};color:${SC2[st]}">
+        <span>${st}</span>
+        <span style="background:rgba(255,255,255,0.6);padding:2px 7px;border-radius:10px;font-size:11px">${cards.length}</span>
+      </div>
+      <div>${cards.map(p=>`<div class="kc" style="border-left:3px solid ${SC2[st]}" onclick="openP(${p.id})">
+        <div class="kcn">${p.fn} ${p.ln}</div>
+        <div class="kcc">${p.co} · ${p.city}</div>
+        ${p.integ&&p.integ!=='—'?`<div style="font-size:11px;color:var(--accent);margin-top:4px">📅 ${p.integ}</div>`:''}
+        <div class="kcf">
+          <span class="kcd">${p.dt}</span>
+          ${st!=='Recruté'?`<button class="kbtn" onclick="event.stopPropagation();notif('📅 RDV Meet créé pour ${p.fn} ${p.ln} ✓')">+ RDV</button>`:'<span class="tag tg" style="font-size:10px">Intégré ✓</span>'}
+        </div>
+      </div>`).join('')}</div>
+    </div>`;
+  }).join('');
+}
+
+// analytics
+function rA(period){
+  const D={
+    Mars:{c:34,rep:'41%',r01:'53%',del:'9j',rec:3,
+      src:[{l:'Chasse LinkedIn',v:18,m:34,c:'#1E5FA0'},{l:'Recommandation',v:5,m:34,c:'#7B3FC4'},{l:'Chasse Mail',v:8,m:34,c:'#0E7490'},{l:'Inbound',v:3,m:34,c:'#1A7A4A'}],
+      conv:[{l:'Recommandation',v:80,c:'#7B3FC4'},{l:'Inbound',v:67,c:'#1A7A4A'},{l:'Chasse LinkedIn',v:47,c:'#1E5FA0'},{l:'Chasse Mail',v:38,c:'#0E7490'}],
+      canal:[{l:'LinkedIn',v:18,m:34,c:'#1E5FA0'},{l:'Email',v:10,m:34,c:'#0E7490'},{l:'Téléphone',v:4,m:34,c:'#7B3FC4'},{l:'Présentiel',v:2,m:34,c:'#1A7A4A'}],
+      delay:[{l:'R0 → R1',v:9,m:20,c:'#1E5FA0'},{l:'R1 → Pt étape',v:12,m:20,c:'#0E7490'},{l:'Pt étape → R2',v:7,m:20,c:'#7B3FC4'},{l:'R2 → Démission',v:14,m:20,c:'#B86B0F'},{l:'Démission → Recruté',v:21,m:30,c:'#1A7A4A'}]},
+    '2026':{c:90,rep:'38%',r01:'51%',del:'11j',rec:3,
+      src:[{l:'Chasse LinkedIn',v:46,m:90,c:'#1E5FA0'},{l:'Chasse Mail',v:20,m:90,c:'#0E7490'},{l:'Recommandation',v:14,m:90,c:'#7B3FC4'},{l:'Inbound',v:10,m:90,c:'#1A7A4A'}],
+      conv:[{l:'Recommandation',v:79,c:'#7B3FC4'},{l:'Inbound',v:60,c:'#1A7A4A'},{l:'Chasse LinkedIn',v:44,c:'#1E5FA0'},{l:'Chasse Mail',v:35,c:'#0E7490'}],
+      canal:[{l:'LinkedIn',v:46,m:90,c:'#1E5FA0'},{l:'Email',v:28,m:90,c:'#0E7490'},{l:'Téléphone',v:11,m:90,c:'#7B3FC4'},{l:'Présentiel',v:5,m:90,c:'#1A7A4A'}],
+      delay:[{l:'R0 → R1',v:11,m:20,c:'#1E5FA0'},{l:'R1 → Pt étape',v:13,m:20,c:'#0E7490'},{l:'Pt étape → R2',v:8,m:20,c:'#7B3FC4'},{l:'R2 → Démission',v:16,m:20,c:'#B86B0F'},{l:'Démission → Recruté',v:22,m:30,c:'#1A7A4A'}]},
+    Jan:{c:22,rep:'34%',r01:'48%',del:'13j',rec:1,
+      src:[{l:'Chasse LinkedIn',v:14,m:22,c:'#1E5FA0'},{l:'Chasse Mail',v:5,m:22,c:'#0E7490'},{l:'Recommandation',v:3,m:22,c:'#7B3FC4'}],
+      conv:[{l:'Recommandation',v:100,c:'#7B3FC4'},{l:'Chasse LinkedIn',v:43,c:'#1E5FA0'},{l:'Chasse Mail',v:20,c:'#0E7490'}],
+      canal:[{l:'LinkedIn',v:14,m:22,c:'#1E5FA0'},{l:'Email',v:6,m:22,c:'#0E7490'},{l:'Téléphone',v:2,m:22,c:'#7B3FC4'}],
+      delay:[{l:'R0 → R1',v:13,m:20,c:'#1E5FA0'},{l:'R1 → Pt étape',v:15,m:20,c:'#0E7490'},{l:'Pt étape → R2',v:9,m:20,c:'#7B3FC4'}]},
+    Fév:{c:28,rep:'39%',r01:'50%',del:'10j',rec:1,
+      src:[{l:'Chasse LinkedIn',v:16,m:28,c:'#1E5FA0'},{l:'Chasse Mail',v:7,m:28,c:'#0E7490'},{l:'Inbound',v:5,m:28,c:'#1A7A4A'}],
+      conv:[{l:'Inbound',v:60,c:'#1A7A4A'},{l:'Chasse LinkedIn',v:44,c:'#1E5FA0'},{l:'Chasse Mail',v:29,c:'#0E7490'}],
+      canal:[{l:'LinkedIn',v:16,m:28,c:'#1E5FA0'},{l:'Email',v:8,m:28,c:'#0E7490'},{l:'Téléphone',v:4,m:28,c:'#7B3FC4'}],
+      delay:[{l:'R0 → R1',v:10,m:20,c:'#1E5FA0'},{l:'R1 → Pt étape',v:13,m:20,c:'#0E7490'},{l:'Pt étape → R2',v:7,m:20,c:'#7B3FC4'}]}
+  };
+  const d=D[period]||D.Mars;
+  document.getElementById('a-c').textContent=d.c;
+  document.getElementById('a-rep').textContent=d.rep;
+  document.getElementById('a-r01').textContent=d.r01;
+  document.getElementById('a-del').textContent=d.del;
+  document.getElementById('a-rec').textContent=d.rec;
+  const bars=(data,maxOverride)=>data.map(x=>`<div class="br"><span class="bl">${x.l}</span><div class="bt"><div class="bf" style="width:${Math.round(x.v/(maxOverride||x.m)*100)}%;background:${x.c}"></div></div><span class="bv">${x.v}</span></div>`).join('');
+  const pctBars=(data)=>data.map(x=>`<div class="br"><span class="bl">${x.l}</span><div class="bt"><div class="bf" style="width:${x.v}%;background:${x.c}"></div></div><span class="bv" style="width:30px">${x.v}%</span></div>`).join('');
+  document.getElementById('sc1').innerHTML=bars(d.src);
+  document.getElementById('sc3').innerHTML=pctBars(d.conv);
+  document.getElementById('sc2').innerHTML=bars(d.canal);
+  document.getElementById('delay-chart').innerHTML=d.delay.map(x=>`<div class="br"><span class="bl">${x.l}</span><div class="bt"><div class="bf" style="width:${Math.round(x.v/x.m*100)}%;background:${x.c}"></div></div><span class="bv" style="width:28px">${x.v}j</span></div>`).join('');
+  // funnel
+  const fn=[{l:'R0 contactés',n:d.c},{l:'R1 — 1er RDV',n:Math.round(d.c*.53)},{l:"Point d'étape",n:Math.round(d.c*.32)},{l:'R2 Amaury',n:Math.round(d.c*.21)},{l:'Démission',n:Math.round(d.c*.12)},{l:'Point juridique',n:Math.round(d.c*.09)},{l:'Recruté',n:d.rec}];
+  const fc=Object.values(SC2);
+  document.getElementById('fun').innerHTML=fn.map((f,i)=>`<div class="fr"><span class="fl">${f.l}</span><div style="flex:1"><div class="fb" style="width:${Math.max(6,Math.round(f.n/d.c*100))}%;background:${fc[i]}">${f.n}</div></div><span class="fls">${i>0?'-'+Math.round((1-f.n/fn[i-1].n)*100)+'%':''}</span></div>`).join('');
+  // zone chart
+  const zones=[{l:'Occitanie',v:9,c:'#1E5FA0'},{l:'PACA',v:7,c:'#0E7490'},{l:'Nvlle-Aquitaine',v:6,c:'#7B3FC4'},{l:'Auvergne-RA',v:5,c:'#1A7A4A'}];
+  document.getElementById('zone-chart').innerHTML=bars(zones,9);
+  // lemlist
+  const lems=[{l:'S1 — Captifs LinkedIn',v:11,c:'#FF6B35'},{l:'S2 — Semi-captifs',v:4,c:'#FFB085'},{l:'S3 — Recommandés',v:2,c:'#FFD5C0'}];
+  document.getElementById('lem-chart').innerHTML=lems.map(x=>`<div class="br"><span class="bl">${x.l}</span><div class="bt"><div class="bf" style="width:${Math.round(x.v/11*100)}%;background:${x.c}"></div></div><span class="bv">${x.v}</span></div>`).join('');
+  // integrations
+  const ics=['Mai 2026','Mai 2026','Juin 2026'];
+  document.getElementById('integ-chart').innerHTML=`
+    <div style="font-size:12px;color:var(--t3);margin-bottom:10px">Profils avec date d'intégration fixée</div>
+    ${P.filter(x=>x.integ&&x.integ!=='—'&&x.integ!=='Intégré').map(p=>`
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+      <div class="av ${av(p.id%6)}" style="width:26px;height:26px;font-size:11px">${ini(p.fn,p.ln)}</div>
+      <div style="flex:1"><div style="font-size:12.5px;font-weight:500">${p.fn} ${p.ln}</div><div style="font-size:11px;color:var(--t3)">${stag(p.stg)}</div></div>
+      <span style="font-size:12px;font-weight:600;color:var(--accent)">${p.integ}</span>
+    </div>`).join('')}`;
+}
+function setPer(el,p){
+  document.querySelectorAll('.pb').forEach(b=>b.classList.remove('active'));el.classList.add('active');rA(p);
+}
+
+// import
+function iTab(el,id){
+  document.querySelectorAll('.itab').forEach(t=>t.classList.remove('active'));el.classList.add('active');
+  ['iu','im','is'].forEach(t=>{const x=document.getElementById(t);if(x)x.style.display=t===id?'block':'none';});
+}
+let _impType='csv';
+function doUp(type){
+  _impType=type||'csv';
+  iTab(document.querySelectorAll('.itab')[1],'im');
+  if(type==='pdf'){document.getElementById('im-csv').style.display='none';document.getElementById('im-pdf').style.display='block';}
+  else{document.getElementById('im-csv').style.display='block';document.getElementById('im-pdf').style.display='none';}
+  notif(type==='pdf'?'📑 PDF analysé — 1 profil extrait ✓':'✓ 24 profils détectés dans le CSV');
+}
+function doSc(){
+  iTab(document.querySelectorAll('.itab')[2],'is');
+  document.getElementById('srows').innerHTML=SD.map((p,i)=>`<tr>
+    <td><div class="pc"><div class="av ${av(i)}">${p.fn[0]}${p.ln[0]}</div><div class="pn">${p.fn} ${p.ln}</div></div></td>
+    <td style="font-size:12.5px">${p.co}</td><td style="font-size:12.5px;color:var(--t2)">${p.ti}</td>
+    <td style="font-size:12.5px;color:var(--t3)">${p.dur}</td>
+    <td>${scpill(p.sc)}</td><td>${priotag(p.pr)}</td>
+  </tr>`).join('');
+  notif('✦ Scoring IA terminé — 5 prioritaires identifiés');
+}
+function pushToCRM(){
+  notif('✓ 5 profils prioritaires ajoutés au CRM · Entrée Lemlist enregistrée dans leur historique');
+}
+
+// profile side panel
+function openP(id){
+  const p=P.find(x=>x.id===id);if(!p)return;
+  document.getElementById('mn').textContent=`${p.fn} ${p.ln}`;
+  document.getElementById('m-co').textContent=`${p.co} · ${p.ti} · ${p.city}`;
+  const ns=STG[STG.indexOf(p.stg)+1];
+  document.getElementById('mb').innerHTML=`
+    <!-- INFORMATIONS -->
+    <div class="mstl">Informations</div>
+    <div class="dr"><span class="dk">Email</span><span style="color:var(--accent)">${p.mail}</span></div>
+    <div class="dr"><span class="dk">LinkedIn</span><span style="color:var(--accent);font-size:12px">${p.li}</span></div>
+    <div class="dr"><span class="dk">Source</span>${srctag(p.src)}</div>
+    <div class="dr"><span class="dk">Score</span>${scpill(p.sc)}</div>
+    <div class="dr"><span class="dk">Maturité</span>${mkMatDrop(p.id,p.mat)}</div>
+    <div class="dr"><span class="dk">Stade</span>${mkStagDrop(p.id,p.stg)}</div>
+    <div class="dr"><span class="dk">Intégration prév.</span>
+      <select class="inlin-sel" style="width:auto;font-size:13px;padding:4px 8px" onchange="changeInteg(${p.id},this.value)">
+        ${INTEG_OPTS.map(o=>`<option${o===p.integ?' selected':''}>${o}</option>`).join('')}
+        <option${p.integ==='Intégré'?' selected':''}>Intégré</option>
+      </select>
+    </div>
+
+    <div class="sdiv"></div>
+
+    <!-- NOTES -->
+    <div class="mstl" style="margin-top:0">Notes &amp; récapitulatifs</div>
+    <textarea class="note-box" id="note-${p.id}" rows="3" placeholder="Récapitulatif d'échange, points de blocage, motivations…">${p.notes}</textarea>
+    <button class="btn bo bsm" style="margin-top:6px;margin-bottom:16px" onclick="saveNote(${p.id})">💾 Enregistrer la note</button>
+
+    <!-- AJOUTER UN ÉVÉNEMENT -->
+    <div class="mstl">Ajouter un événement / rappel</div>
+    <div class="grid2" style="margin-bottom:8px">
+      <div><label class="inlin-lbl">Type</label>
+        <select class="inlin-sel" id="ev-type-${p.id}">
+          <option>RDV planifié</option>
+          <option>RDV démission reconversion</option>
+          <option>Point téléphonique</option>
+          <option>Relance prévue</option>
+          <option>Point juridique</option>
+          <option>Signature contrat</option>
+          <option>Note libre</option>
+        </select>
+      </div>
+      <div><label class="inlin-lbl">Date</label>
+        <input class="inlin-input" type="text" id="ev-date-${p.id}" placeholder="ex : 21/03">
+      </div>
+    </div>
+    <textarea class="note-box" id="ev-note-${p.id}" rows="2" placeholder="Détail optionnel…"></textarea>
+    <button class="btn bp bsm" style="margin-top:7px;margin-bottom:16px" onclick="addEvent(${p.id})">+ Ajouter à l'historique</button>
+
+    ${p.stg!=='Recruté'?`
+    <!-- ACTIONS RAPIDES -->
+    <div class="mstl">Actions rapides</div>
+    <button class="ab" onclick="notif('📅 RDV Google Meet créé · Invitation envoyée ✓')">📅 Planifier un RDV Google Meet</button>
+    ${ns?`<button class="ab" onclick="changeStg(${p.id},'${ns}',event)">↗ Avancer vers ${ns}</button>`:''}
+    `:''}
+
+    <!-- HISTORIQUE -->
+    <div class="mstl">Historique d'activité</div>
+    <div id="acts-${p.id}">
+    ${p.acts.map(a=>`<div class="ai2${a.type==='lem'?' lem-ev':a.type==='stg'?' stg-ev':a.type==='mat'?' mat-ev':''}">
+      <div class="ad">${a.d}</div>
+      <div><div class="at"><span class="act-ico">${a.ico||'•'}</span>${a.t}</div><div class="an">${a.n}</div></div>
+    </div>`).join('')}
+    </div>
+  `;
+  document.getElementById('pmod').classList.add('open');
+}
+
+function saveNote(pid){
+  const p=P.find(x=>x.id===pid);if(!p)return;
+  const v=document.getElementById(`note-${pid}`)?.value||'';
+  p.notes=v;
+  p.acts.unshift({d:today(),t:'Note mise à jour',n:v.slice(0,60)+(v.length>60?'…':''),ico:'📝',type:'std'});
+  document.getElementById(`acts-${pid}`).innerHTML=p.acts.map(a=>`<div class="ai2${a.type==='lem'?' lem-ev':a.type==='stg'?' stg-ev':a.type==='mat'?' mat-ev':''}"><div class="ad">${a.d}</div><div><div class="at"><span class="act-ico">${a.ico||'•'}</span>${a.t}</div><div class="an">${a.n}</div></div></div>`).join('');
+  notif('💾 Note enregistrée ✓');
+}
+
+function addEvent(pid){
+  const p=P.find(x=>x.id===pid);if(!p)return;
+  const type=document.getElementById(`ev-type-${pid}`)?.value||'Événement';
+  const date=document.getElementById(`ev-date-${pid}`)?.value||today();
+  const note=document.getElementById(`ev-note-${pid}`)?.value||'';
+  const ico={'RDV planifié':'📅','RDV démission reconversion':'📅','Point téléphonique':'📞','Relance prévue':'📩','Point juridique':'⚖️','Signature contrat':'✍️','Note libre':'📝'}[type]||'📌';
+  p.acts.unshift({d:date,t:type,n:note||type,ico,type:'event'});
+  document.getElementById(`acts-${pid}`).innerHTML=p.acts.map(a=>`<div class="ai2${a.type==='lem'?' lem-ev':a.type==='stg'?' stg-ev':a.type==='mat'?' mat-ev':''}"><div class="ad">${a.d}</div><div><div class="at"><span class="act-ico">${a.ico||'•'}</span>${a.t}</div><div class="an">${a.n}</div></div></div>`).join('');
+  if(document.getElementById(`ev-note-${pid}`))document.getElementById(`ev-note-${pid}`).value='';
+  if(document.getElementById(`ev-date-${pid}`))document.getElementById(`ev-date-${pid}`).value='';
+  notif(`Événement ajouté : ${type} · ${date} ✓`);
+}
+
+// new profile
+function openNew(){document.getElementById('nmod').classList.add('open');}
+function addProfile(){
+  const fn=document.getElementById('nfn').value.trim()||'Nouveau';
+  const ln=document.getElementById('nln').value.trim()||'Profil';
+  const co=document.getElementById('nco').value.trim()||'—';
+  const ti=document.getElementById('nti').value.trim()||'—';
+  const city=document.getElementById('nci').value.trim()||'—';
+  const mail=document.getElementById('nem').value.trim()||'—';
+  const src=document.getElementById('nsr').value;
+  P.unshift({id:Date.now(),fn,ln,co,ti,city,src,sc:0,stg:'R0',mat:'Froid',integ:'—',dt:today(),mail,li:'—',notes:'',
+    acts:[{d:today(),t:'Ajouté au CRM',n:`Entré manuellement en R0`,ico:'➕',type:'std'}]});
+  document.getElementById('nmod').classList.remove('open');
+  rDash();rP(P);rK();
+  notif(`${fn} ${ln} ajouté au pipeline en R0 ✓`);
+}
+
+// chat
+const CR={
+  bloqu:"D'après le pipeline, <strong>3 profils</strong> sont bloqués depuis +2 semaines :<br><br>• <strong>Sophie Bernard</strong> (BNP) — Point d'étape, hésite sur le variable<br>• <strong>Alexandre Petit</strong> (Generali) — R1 en attente depuis 8j<br>• <strong>Delphine Adam</strong> (SG) — R1, attend infos commission<br><br>Veux-tu un email de relance pour l'un d'eux ?",
+  email:"Voici un email de relance pour <strong>Thomas Dupont</strong> (Crédit Agricole, score 85) :<br><br><em>Objet : Un point sur votre projet d'indépendance ?</em><br><br>Bonjour Thomas,<br><br>Je souhaitais revenir vers vous. Seriez-vous disponible 20 minutes cette semaine pour voir ce que nos CGP gagnent concrètement à 12 mois ?<br><br>Cordialement, Baptiste — Evolve Investissement</em>",
+  source:"En mars 2026, ta meilleure source en volume est <strong>Chasse LinkedIn</strong> (18 profils, 47% de taux R0→R1).<br><br>Mais la <strong>Recommandation</strong> a le meilleur taux de conversion : <strong>80%</strong> atteignent le R1. Canal très sous-exploité à développer.",
+  pipeline:"État au 13 mars 2026 :<br><br>• R0 → <strong>11</strong> profils · R1 → <strong>4</strong> · Point d'étape → <strong>1</strong><br>• R2 Amaury → <strong>1</strong> (Marine Laurent, 18/03) · Démission → <strong>1</strong><br>• Point juridique → <strong>1</strong> · Recrutés → <strong>3</strong><br><br>⚠️ Goulot principal : <strong>R0→R1</strong>, −47% des profils.<br>Délai moyen R0→R1 : <strong>9 jours</strong>.<br>Prochaines intégrations : <strong>Julien Morel &amp; Pierre Lefebvre</strong> — mai 2026."
+};
+function send(){
+  const inp=document.getElementById('cin'),msg=inp.value.trim();if(!msg)return;
+  inp.value='';inp.style.height='auto';
+  const c=document.getElementById('cmsgs');
+  c.innerHTML+=`<div class="cm u"><div class="mav u">B</div><div class="mb">${msg}</div></div>`;
+  c.scrollTop=9999;
+  setTimeout(()=>{
+    const lc=msg.toLowerCase();
+    let r=CR.pipeline;
+    if(lc.includes('bloqu')||lc.includes('inactif'))r=CR.bloqu;
+    else if(lc.includes('email')||lc.includes('relance'))r=CR.email;
+    else if(lc.includes('source')||lc.includes('acquisit')||lc.includes('meilleur'))r=CR.source;
+    c.innerHTML+=`<div class="cm ai"><div class="mav ai">✦</div><div class="mb">${r}</div></div>`;
+    c.scrollTop=9999;
+  },650);
+}
+
+function notif(msg){const n=document.getElementById('nf');n.textContent='';n.innerHTML=msg;n.classList.add('show');setTimeout(()=>n.classList.remove('show'),3200);}
+
+// init
+rDash();rP(P);rK();rA('Mars');
+</script>
+</body>
+</html>
