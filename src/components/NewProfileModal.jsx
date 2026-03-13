@@ -11,9 +11,9 @@ export default function NewProfileModal({ onClose }) {
   const [mail, setMail] = useState('')
   const [src, setSrc] = useState('Chasse LinkedIn')
 
-  const handleSubmit = () => {
-    addProfile({ fn, ln, co, ti, city, mail, src })
-    onClose()
+  const handleSubmit = async () => {
+    const ok = await addProfile({ fn, ln, co, ti, city, mail, src })
+    if (ok) onClose()
   }
 
   return (

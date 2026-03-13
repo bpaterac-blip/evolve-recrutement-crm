@@ -2,12 +2,10 @@ import { useState } from 'react'
 import { useCRM } from '../context/CRMContext'
 import { STAGES, MATURITIES, STAGE_COLORS } from '../lib/data'
 
-const AV = ['avg', 'avb', 'ava', 'avp', 'avr', 'avt']
 const SRC_TAG = { 'Chasse LinkedIn': 'tb', 'Chasse Mail': 'tt', 'Recommandation': 'tp', 'Inbound': 'tg', 'Ads': 'ta', 'Direct contact': 'tx' }
-const MAT_TAG = { Froid: 'tx', Tiède: 'ta', Chaud: 'tb', 'Très chaud': 'tg' }
 
 export default function Profiles() {
-  const { filteredProfiles, changeStage, changeMaturity } = useCRM()
+  const { filteredProfiles, changeStage, changeMaturity, loading } = useCRM()
   const [srcFilter, setSrcFilter] = useState('')
   const [stgFilter, setStgFilter] = useState('')
 
@@ -47,7 +45,11 @@ export default function Profiles() {
             <th className="text-left text-[11px] font-medium uppercase tracking-wider text-[var(--t3)] py-2 px-4 bg-[var(--s2)] border-b border-[var(--border)]">Contact</th>
           </tr></thead>
           <tbody>
-            {P.map((p, i) => (
+            {loading ? (
+              <tr><td colSpan={8} className="py-12 text-center text-[var(--t3)]">Chargement…</td></tr>
+            ) : P.length === 0 ? (
+              <tr><td colSpan={8} className="py-12 text-center text-[var(--t3)]">Aucun profil</td></tr>
+            ) : P.map((p, i) => (
               <tr key={p.id} className="border-b border-[var(--border)] hover:bg-[#F8F5F1] last:border-b-0">
                 <td className="py-2.5 px-4 cursor-pointer" onClick={() => window.dispatchEvent(new CustomEvent('open-profile', { detail: p }))}>
                   <div className="pc flex items-center gap-2.5">
