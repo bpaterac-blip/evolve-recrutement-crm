@@ -1,34 +1,83 @@
 import { useState, useRef, useEffect } from 'react'
+import { useCRM } from '../context/CRMContext'
 
-const CR = {
-  bloqu: "D'après le pipeline, <strong>3 profils</strong> sont bloqués depuis +2 semaines :<br><br>• <strong>Sophie Bernard</strong> (BNP) — Point d'étape, hésite sur le variable<br>• <strong>Alexandre Petit</strong> (Generali) — R1 en attente depuis 8j<br>• <strong>Delphine Adam</strong> (SG) — R1, attend infos commission<br><br>Veux-tu un email de relance pour l'un d'eux ?",
-  email: "Voici un email de relance pour <strong>Thomas Dupont</strong> (Crédit Agricole, score 85) :<br><br><em>Objet : Un point sur votre projet d'indépendance ?</em><br><br>Bonjour Thomas,<br><br>Je souhaitais revenir vers vous. Seriez-vous disponible 20 minutes cette semaine pour voir ce que nos CGP gagnent concrètement à 12 mois ?<br><br>Cordialement, Baptiste — Evolve Investissement</em>",
-  source: "En mars 2026, ta meilleure source en volume est <strong>Chasse LinkedIn</strong> (18 profils, 47% de taux R0→R1).<br><br>Mais la <strong>Recommandation</strong> a le meilleur taux de conversion : <strong>80%</strong> atteignent le R1. Canal très sous-exploité à développer.",
-  pipeline: "État au 13 mars 2026 :<br><br>• R0 → <strong>11</strong> profils · R1 → <strong>4</strong> · Point d'étape → <strong>1</strong><br>• R2 Amaury → <strong>1</strong> (Marine Laurent, 18/03) · Démission → <strong>1</strong><br>• Point juridique → <strong>1</strong> · Recrutés → <strong>3</strong><br><br>⚠️ Goulot principal : <strong>R0→R1</strong>, −47% des profils.<br>Délai moyen R0→R1 : <strong>9 jours</strong>.<br>Prochaines intégrations : <strong>Julien Morel & Pierre Lefebvre</strong> — mai 2026.",
+function buildPipelineContext(profiles) {
+  const byStage = {}
+  profiles.forEach((p) => {
+    const s = p.stg || 'R0'
+    byStage[s] = (byStage[s] || 0) + 1
+  })
+  const lines = Object.entries(byStage).map(([s, n]) => `• ${s} → ${n} profils`).join('\n')
+  const top = profiles.slice(0, 15).map((p) => `  - ${p.fn} ${p.ln} (${p.co}) — ${p.stg}, score ${p.sc}`).join('\n')
+  return `Pipeline Evolve Recruiter actuel:\n${lines}\n\nProfils (extrait):\n${top}`
 }
 
 export default function ChatIA() {
+  const { filteredProfiles } = useCRM()
   const [messages, setMessages] = useState([
-    { role: 'ai', content: "Bonjour Baptiste ! Je suis ton assistant CRM Evolve.<br><br>Tu peux me demander :<br>— <em>Quels profils sont bloqués depuis +3 semaines ?</em><br>— <em>Rédige un email de relance pour Thomas Dupont</em><br>— <em>Quelle est ma meilleure source d'acquisition ?</em><br>— <em>État du pipeline</em>" },
+    { role: 'ai', content: "Bonjour ! Je suis ton assistant CRM Evolve.<br><br>Tu peux me demander :<br>— <em>Quels profils sont bloqués ?</em><br>— <em>Rédige un email de relance pour [nom]</em><br>— <em>Quelle est ma meilleure source d'acquisition ?</em><br>— <em>État du pipeline</em>" },
   ])
   const [input, setInput] = useState('')
+  const [loading, setLoading] = useState(false)
   const endRef = useRef(null)
+
+  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
-  const send = () => {
+  const send = async () => {
     const msg = input.trim()
     if (!msg) return
+    if (!apiKey) {
+      setMessages((prev) => [...prev, { role: 'u', content: msg }, { role: 'ai', content: "⚠️ <strong>Clé API Anthropic manquante.</strong><br><br>Ajoute <code>VITE_ANTHROPIC_API_KEY</code> dans <code>.env.local</code> pour activer le chat IA." }])
+      setInput('')
+      return
+    }
     setInput('')
     setMessages((prev) => [...prev, { role: 'u', content: msg }])
-    setTimeout(() => {
-      const lc = msg.toLowerCase()
-      let r = CR.pipeline
-      if (lc.includes('bloqu') || lc.includes('inactif')) r = CR.bloqu
-      else if (lc.includes('email') || lc.includes('relance')) r = CR.email
-      else if (lc.includes('source') || lc.includes('acquisit') || lc.includes('meilleur')) r = CR.source
-      setMessages((prev) => [...prev, { role: 'ai', content: r }])
-    }, 650)
+    setLoading(true)
+
+    const stripHtml = (s) => (typeof s === 'string' ? s.replace(/<[^>]+>/g, '') : s)
+    const context = buildPipelineContext(filteredProfiles)
+    const systemContent = `Tu es l'assistant CRM Evolve Recruiter. Tu aides au recrutement de CGP/conseillers patrimoine. Réponds en français, de façon concise et actionnable. Utilise le contexte pipeline fourni pour répondre précisément.
+
+Contexte actuel:
+${context}`
+
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1024,
+          system: systemContent,
+          messages: [
+            ...messages.map((m) => ({ role: m.role === 'u' ? 'user' : 'assistant', content: stripHtml(m.content) })),
+            { role: 'user', content: msg },
+          ].slice(-20),
+        }),
+      })
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error?.message || `API ${res.status}`)
+      }
+
+      const data = await res.json()
+      const text = data.content?.[0]?.text || ''
+      const formatted = text.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\*(.*?)\*/g, '<em>$1</em>')
+      setMessages((prev) => [...prev, { role: 'ai', content: formatted }])
+    } catch (err) {
+      setMessages((prev) => [...prev, { role: 'ai', content: `⚠️ Erreur : ${err?.message}` }])
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -42,6 +91,12 @@ export default function ChatIA() {
             </div>
           </div>
         ))}
+        {loading && (
+          <div className="cm flex gap-2.5 items-start">
+            <div className="mav w-[30px] h-[30px] rounded-full flex items-center justify-center text-xs font-semibold shrink-0 bg-[var(--accent)] text-[var(--gold)]">✦</div>
+            <div className="mb py-2.5 px-3.5 rounded-xl text-[13.5px] text-[var(--t3)]">…</div>
+          </div>
+        )}
         <div ref={endRef} />
       </div>
       <div className="cbar py-3 px-5 border-t border-[var(--border)] bg-[var(--surface)] flex gap-2 items-end shrink-0">
@@ -52,8 +107,9 @@ export default function ChatIA() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), send())}
+          disabled={loading}
         />
-        <button type="button" className="csend w-[38px] h-[38px] rounded-lg bg-[var(--accent)] border-none cursor-pointer flex items-center justify-center text-white text-[17px] shrink-0 hover:bg-[var(--a2)] transition-colors" onClick={send}>↑</button>
+        <button type="button" className="csend w-[38px] h-[38px] rounded-lg bg-[var(--accent)] border-none cursor-pointer flex items-center justify-center text-white text-[17px] shrink-0 hover:bg-[var(--a2)] transition-colors disabled:opacity-60" onClick={send} disabled={loading}>↑</button>
       </div>
     </div>
   )

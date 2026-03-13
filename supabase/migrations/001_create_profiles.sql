@@ -1,21 +1,21 @@
 -- Table profiles pour Evolve Recruiter CRM
+-- Colonnes: first_name, last_name, company, title, city, email, linkedin_url,
+--           source, score, stage, maturity, sequence_lemlist, integration_date
 create table if not exists profiles (
   id uuid default gen_random_uuid() primary key,
-  fn text,
-  ln text,
-  co text,
-  ti text,
+  first_name text,
+  last_name text,
+  company text,
+  title text,
   city text,
-  src text default 'Chasse LinkedIn',
-  sc int default 0,
-  stg text default 'R0',
-  mat text default 'Froid',
-  integ text default '—',
-  dt text,
-  mail text,
-  li text,
-  notes text default '',
-  acts jsonb default '[]',
+  email text,
+  linkedin_url text,
+  source text default 'Chasse LinkedIn',
+  score int default 0,
+  stage text default 'R0',
+  maturity text default 'Froid',
+  sequence_lemlist text,
+  integration_date text default '—',
   created_at timestamptz default now()
 );
 

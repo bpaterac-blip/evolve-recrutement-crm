@@ -5,7 +5,19 @@ import { STAGES, MATURITIES, INTEG_OPTS, STAGE_COLORS } from '../lib/data'
 const SRC_TAG = { 'Chasse LinkedIn': 'tb', 'Chasse Mail': 'tt', 'Recommandation': 'tp', 'Inbound': 'tg', 'Ads': 'ta', 'Direct contact': 'tx' }
 
 export default function ProfileModal({ profile: initialProfile, onClose }) {
-  const { profiles, changeStage, changeMaturity, changeInteg, saveNote, addEvent, today } = useCRM()
+  const {
+    profiles,
+    changeStage,
+    changeMaturity,
+    changeInteg,
+    saveNote,
+    addEvent,
+    updateProfileScore,
+    today,
+    loadProfileDetail,
+    profileNotes,
+    profileActivities,
+  } = useCRM()
   const profile = initialProfile ? profiles.find((p) => p.id === initialProfile.id) || initialProfile : null
   const [note, setNote] = useState('')
   const [evType, setEvType] = useState('RDV planifié')
@@ -13,16 +25,37 @@ export default function ProfileModal({ profile: initialProfile, onClose }) {
   const [evNote, setEvNote] = useState('')
   const [ddStage, setDdStage] = useState(false)
   const [ddMat, setDdMat] = useState(false)
+  const [scoreEdit, setScoreEdit] = useState(false)
+  const [newScore, setNewScore] = useState('')
+  const [loadingDetail, setLoadingDetail] = useState(false)
 
   useEffect(() => {
-    if (profile) setNote(profile.notes || '')
-  }, [profile])
+    if (profile) {
+      setNote(profileNotes[profile.id] ?? profile.notes ?? '')
+      setLoadingDetail(true)
+      loadProfileDetail(profile.id).then(({ notes, acts }) => {
+        setNote(notes || '')
+        setLoadingDetail(false)
+      })
+    }
+  }, [profile?.id, profileNotes])
 
   if (!profile) return null
+
+  const acts = profileActivities[profile.id] || profile.acts || []
 
   const scpill = (s) => s >= 70 ? 'bg-[var(--gbg)] text-[var(--green)]' : s >= 45 ? 'bg-[var(--abg)] text-[var(--amber)]' : 'bg-[var(--s2)] text-[var(--t3)]'
   const srctag = (s) => `tag ${SRC_TAG[s] || 'tx'}`
   const mattag = (m) => ({ Froid: 'tx', Tiède: 'ta', Chaud: 'tb', 'Très chaud': 'tg' }[m] || 'tx')
+
+  const handleSaveScore = () => {
+    const sc = parseInt(newScore, 10)
+    if (!isNaN(sc) && sc >= 0 && sc <= 100) {
+      updateProfileScore(profile.id, sc)
+      setScoreEdit(false)
+      setNewScore('')
+    }
+  }
 
   return (
     <div className="ov fixed inset-0 bg-black/35 z-[200] flex items-start justify-end" onClick={onClose}>
@@ -39,7 +72,21 @@ export default function ProfileModal({ profile: initialProfile, onClose }) {
           <div className="dr flex items-start gap-2.5 mb-2 text-[13.5px]"><span className="dk text-[var(--t3)] w-[120px] shrink-0 pt-0.5">Email</span><span className="text-[var(--accent)]">{profile.mail}</span></div>
           <div className="dr flex items-start gap-2.5 mb-2 text-[13.5px]"><span className="dk text-[var(--t3)] w-[120px] shrink-0 pt-0.5">LinkedIn</span><span className="text-[var(--accent)] text-xs">{profile.li}</span></div>
           <div className="dr flex items-start gap-2.5 mb-2"><span className="dk text-[var(--t3)] w-[120px] shrink-0 pt-0.5">Source</span><span className={`tag ${srctag(profile.src)}`}>{profile.src}</span></div>
-          <div className="dr flex items-start gap-2.5 mb-2"><span className="dk text-[var(--t3)] w-[120px] shrink-0 pt-0.5">Score</span><span className={`sc inline-flex items-center justify-center w-9 h-6 rounded-md text-xs font-semibold font-mono ${scpill(profile.sc)}`}>{profile.sc}</span></div>
+          <div className="dr flex items-start gap-2.5 mb-2">
+            <span className="dk text-[var(--t3)] w-[120px] shrink-0 pt-0.5">Score</span>
+            {scoreEdit ? (
+              <div className="flex gap-2 items-center">
+                <input type="number" min={0} max={100} className="inlin-input w-20 py-1 px-2" value={newScore} onChange={(e) => setNewScore(e.target.value)} placeholder={profile.sc} />
+                <button type="button" className="btn bp bsm" onClick={handleSaveScore}>Valider</button>
+                <button type="button" className="btn bo bsm" onClick={() => { setScoreEdit(false); setNewScore(''); }}>Annuler</button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className={`sc inline-flex items-center justify-center w-9 h-6 rounded-md text-xs font-semibold font-mono ${scpill(profile.sc)}`}>{profile.sc}</span>
+                <button type="button" className="text-xs text-[var(--t3)] hover:text-[var(--accent)]" onClick={() => { setScoreEdit(true); setNewScore(String(profile.sc)); }}>✎ Corriger</button>
+              </div>
+            )}
+          </div>
           <div className="dr flex items-start gap-2.5 mb-2 relative">
             <span className="dk text-[var(--t3)] w-[120px] shrink-0 pt-0.5">Maturité</span>
             <div className="relative">
@@ -65,11 +112,38 @@ export default function ProfileModal({ profile: initialProfile, onClose }) {
               <option value="Intégré">Intégré</option>
             </select>
           </div>
+          {profile.dur && (
+            <div className="dr flex items-start gap-2.5 mb-2 text-[13.5px]">
+              <span className="dk text-[var(--t3)] w-[120px] shrink-0 pt-0.5">Ancienneté</span>
+              <span className="text-[var(--t2)]">{profile.dur}</span>
+            </div>
+          )}
+
+          {Array.isArray(profile.experiences) && profile.experiences.length > 0 && (
+            <>
+              <div className="sdiv h-px bg-[var(--border)] my-4" />
+              <div className="mstl text-[11px] uppercase tracking-wider text-[var(--t3)] mb-2.5 font-medium">Expériences passées</div>
+              <div className="tl relative pl-5 border-l-2 border-[var(--border)] ml-0.5">
+                {profile.experiences.map((exp, i) => (
+                  <div key={i} className="relative pb-4 last:pb-0">
+                    <div className="absolute -left-[11px] top-1 w-2.5 h-2.5 rounded-full bg-[var(--accent)] border-2 border-[var(--surface)]" />
+                    <div className="text-[13px] font-semibold text-[var(--text)]">{exp.company}</div>
+                    <div className="text-[12.5px] text-[var(--t2)] mt-0.5">{exp.title}</div>
+                    {(exp.duration || exp.city) && (
+                      <div className="text-[11.5px] text-[var(--t3)] mt-1">
+                        {exp.duration}{exp.duration && exp.city ? ' · ' : ''}{exp.city}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
 
           <div className="sdiv h-px bg-[var(--border)] my-4" />
 
           <div className="mstl text-[11px] uppercase tracking-wider text-[var(--t3)] mb-2.5 font-medium">Notes & récapitulatifs</div>
-          <textarea className="note-box w-full py-2 px-2.5 border border-[var(--b2)] rounded-lg text-[13px] resize-none outline-none bg-[var(--bg)] leading-normal focus:border-[var(--accent)] focus:bg-white transition-colors" rows={3} placeholder="Récapitulatif d'échange…" value={note} onChange={(e) => setNote(e.target.value)} />
+          <textarea className="note-box w-full py-2 px-2.5 border border-[var(--b2)] rounded-lg text-[13px] resize-none outline-none bg-[var(--bg)] leading-normal focus:border-[var(--accent)] focus:bg-white transition-colors" rows={3} placeholder="Récapitulatif d'échange…" value={note} onChange={(e) => setNote(e.target.value)} disabled={loadingDetail} />
           <button type="button" className="btn bo bsm mt-1.5 mb-4" onClick={() => saveNote(profile.id, note)}>💾 Enregistrer la note</button>
 
           <div className="mstl text-[11px] uppercase tracking-wider text-[var(--t3)] mb-2.5 font-medium">Ajouter un événement / rappel</div>
@@ -96,12 +170,13 @@ export default function ProfileModal({ profile: initialProfile, onClose }) {
 
           <div className="mstl text-[11px] uppercase tracking-wider text-[var(--t3)] mb-2.5 font-medium mt-5">Historique d'activité</div>
           <div>
-            {(profile.acts || []).map((a, i) => (
+            {acts.map((a, i) => (
               <div key={i} className={`ai2 flex gap-3 py-2.5 border-b border-[var(--border)] text-[13px] last:border-b-0 ${a.type === 'lem' ? 'lem-ev bg-[var(--lbg)] mx-[-4px] px-1 py-2.5 rounded-md border-none' : ''} ${a.type === 'stg' ? 'stg-ev bg-[#EDF4FF] mx-[-4px] px-1 py-2.5 rounded-md border-none' : ''} ${a.type === 'mat' ? 'mat-ev bg-[#F5F0FA] mx-[-4px] px-1 py-2.5 rounded-md border-none' : ''}`}>
                 <div className="ad text-[var(--t3)] text-[11.5px] w-[78px] shrink-0 mt-0.5">{a.d}</div>
                 <div><div className="at font-medium mb-0.5 flex items-center gap-1.5"><span className="act-ico text-[13px]">{a.ico || '•'}</span>{a.t}</div><div className="an text-[var(--t2)] text-[12.5px] leading-snug">{a.n}</div></div>
               </div>
             ))}
+            {acts.length === 0 && !loadingDetail && <div className="text-[var(--t3)] text-sm py-4">Aucune activité</div>}
           </div>
         </div>
       </div>

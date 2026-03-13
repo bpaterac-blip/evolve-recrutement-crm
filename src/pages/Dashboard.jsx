@@ -6,7 +6,11 @@ const SRC_TAG = { 'Chasse LinkedIn': 'tb', 'Chasse Mail': 'tt', 'Recommandation'
 export default function Dashboard() {
   const { filteredProfiles } = useCRM()
   const navigate = useNavigate()
-  const P = [...filteredProfiles].sort((a, b) => b.id - a.id)
+  const P = [...filteredProfiles].sort((a, b) => {
+    if (a.created_at && b.created_at) return new Date(b.created_at) - new Date(a.created_at)
+    if (typeof a.id === 'number' && typeof b.id === 'number') return b.id - a.id
+    return String(b.id || '').localeCompare(String(a.id || ''))
+  })
   const recent = P.slice(0, 7)
   const integrs = P.filter((x) => x.integ && x.integ !== '—' && x.integ !== 'Intégré')
   const pipeline = P.filter((p) => p.stg !== 'Recruté')
@@ -67,7 +71,7 @@ export default function Dashboard() {
                     <div><div className="pn font-medium text-[13.5px]">{p.fn} {p.ln}</div><div className="ps text-xs text-[var(--t3)] mt-0.5">{p.co}</div></div>
                   </div>
                 </td>
-                <td className="py-2.5 px-4 text-[var(--t2)] text-[13px]">{p.acts?.[0]?.t || '—'}</td>
+                <td className="py-2.5 px-4 text-[var(--t2)] text-[13px]">{p.acts?.[0]?.t || (p.dt ? `Ajouté le ${p.dt}` : '—')}</td>
                 <td className="py-2.5 px-4"><span className={`tag ${srctag(p.src)}`}>{p.src}</span></td>
                 <td className="py-2.5 px-4"><span className={`sc inline-flex items-center justify-center w-9 h-6 rounded-md ${scpill(p.sc)}`}>{p.sc}</span></td>
                 <td className="py-2.5 px-4"><span className="tag px-2 py-0.5 rounded-md text-xs" style={stag(p.stg)}>{p.stg}</span></td>
