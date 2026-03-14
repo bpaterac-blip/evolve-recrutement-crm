@@ -1,5 +1,6 @@
-import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { Outlet, NavLink, Link, useLocation, useNavigate } from 'react-router-dom'
 import { useCRM } from '../context/CRMContext'
+import { useAuth } from '../context/AuthContext'
 
 const TITLES = {
   '/': 'Tableau de bord',
@@ -11,7 +12,8 @@ const TITLES = {
 }
 
 export default function Layout() {
-  const { searchQuery, setSearchQuery, showNotif } = useCRM()
+  const { searchQuery, setSearchQuery } = useCRM()
+  const { user, signOut } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   const title = TITLES[location.pathname] || 'Evolve Recruiter'
@@ -20,9 +22,29 @@ export default function Layout() {
     <div className="flex h-screen overflow-hidden">
       {/* Sidebar */}
       <aside className="w-[220px] flex-shrink-0 bg-[var(--accent)] flex flex-col overflow-y-auto overflow-x-hidden">
-        <div className="logo px-5 pt-[22px] pb-[18px] border-b border-white/10">
-          <div className="logo-word font-serif text-xl text-white">Evolve</div>
-          <div className="logo-sub text-[10.5px] text-white/40 mt-0.5 uppercase tracking-wider">CRM Recrutement</div>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          width: '100%',
+          marginLeft: '-8px',
+          padding: '24px 0'
+        }}>
+          <Link
+            to="/"
+            className="group block relative py-2 rounded-[8px] transition-all duration-200 hover:bg-[rgba(255,255,255,0.08)]"
+            style={{ cursor: 'pointer' }}
+          >
+            <div className="relative flex flex-col items-center">
+              <img src="/logo-evolve.svg" alt="Evolve Recruiter" width="120" />
+              <span
+                className="absolute top-full left-1/2 -translate-x-1/2 mt-2 py-1.5 px-2.5 whitespace-nowrap text-[12px] font-medium opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 z-10"
+                style={{ background: '#fff', color: '#173731', borderRadius: 6 }}
+              >
+                Retour au Tableau de bord
+              </span>
+            </div>
+          </Link>
         </div>
         <div className="nav-sec pt-3.5 px-3 pb-1.5">
           <div className="nav-lbl text-[10px] uppercase tracking-widest text-white/35 px-2 mb-1.5">Vues</div>
@@ -36,11 +58,24 @@ export default function Layout() {
           <NavLink to="/import" className={({ isActive }) => `nitem flex items-center gap-2.5 py-2 px-2.5 rounded-lg cursor-pointer text-[13.5px] transition-all duration-[0.13s] mb-0.5 select-none ${isActive ? 'active bg-white/15 text-white font-medium' : 'text-white/60 hover:bg-white/[0.08] hover:text-white'}`}><span className="nico text-sm w-[18px] text-center shrink-0">⇪</span>Import & Scoring</NavLink>
           <NavLink to="/chat" className={({ isActive }) => `nitem flex items-center gap-2.5 py-2 px-2.5 rounded-lg cursor-pointer text-[13.5px] transition-all duration-[0.13s] mb-0.5 select-none ${isActive ? 'active bg-white/15 text-white font-medium' : 'text-white/60 hover:bg-white/[0.08] hover:text-white'}`}><span className="nico text-sm w-[18px] text-center shrink-0">✦</span>Chat IA</NavLink>
         </div>
-        <div className="mt-auto pt-3 px-3 border-t border-white/10 pb-3">
+        <div className="mt-auto pt-3 px-3 border-t border-white/10 pb-3 space-y-2">
           <div className="uchip flex items-center gap-2.5 py-2 px-2.5">
-            <div className="uav w-[30px] h-[30px] rounded-full bg-[var(--gold)] text-[var(--accent)] text-xs font-semibold flex items-center justify-center shrink-0">B</div>
-            <div><div className="text-[13px] text-white/80">Baptiste</div><div className="text-[11px] text-white/40">Responsable réseau</div></div>
+            <div className="uav w-[30px] h-[30px] rounded-full bg-[var(--gold)] text-[var(--accent)] text-xs font-semibold flex items-center justify-center shrink-0">
+              {(user?.email?.[0] || 'U').toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-[13px] text-white/80 truncate">{user?.email || 'Utilisateur'}</div>
+              <div className="text-[11px] text-white/40">Connecté</div>
+            </div>
           </div>
+          <button
+            type="button"
+            onClick={() => signOut()}
+            className="w-full flex items-center gap-2.5 py-2 px-2.5 rounded-lg text-[13px] text-white/60 hover:bg-white/10 hover:text-white transition-all cursor-pointer font-[inherit] border-none bg-transparent text-left"
+          >
+            <span className="nico text-sm w-[18px] text-center shrink-0">↪</span>
+            Se déconnecter
+          </button>
         </div>
       </aside>
 
