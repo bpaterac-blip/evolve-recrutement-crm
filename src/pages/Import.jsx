@@ -359,6 +359,8 @@ export default function Import() {
   const [expandedRowKey, setExpandedRowKey] = useState(null) // 'prior-0' | 'work-1' | 'ecarte-2'
   const [expandedChatKey, setExpandedChatKey] = useState(null)
   const [chatHistory, setChatHistory] = useState({}) // { [rowKey]: [{ role, content }] }
+  const [learningRefresh, setLearningRefresh] = useState(0)
+  const [learningStats, setLearningStats] = useState(null) // { total, topCompanies, configUpdatedAt }
   const csvInputRef = useRef(null)
   const pdfInputRef = useRef(null)
 
@@ -564,7 +566,6 @@ export default function Import() {
     setChatHistory((prev) => ({ ...prev, [key]: newMessages }))
   }
 
-  const [learningRefresh, setLearningRefresh] = useState(0)
   const handleProfileCorrection = (profile, updates) => {
     setParsedRows((prev) => prev.map((p) => {
       const match = p.fn === profile?.fn && p.ln === profile?.ln && (p.co === profile?.co || p.company === profile?.co)
