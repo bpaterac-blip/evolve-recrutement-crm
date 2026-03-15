@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
+import { IconEnvelope } from '../components/Icons'
 
 const fieldClass = 'w-full py-3 px-4 rounded-lg bg-white border border-white/20 text-[var(--text)] font-[inherit] text-[15px] outline-none focus:border-white/40 focus:ring-2 focus:ring-white/20 transition-all placeholder:text-[var(--t3)]'
 
@@ -43,7 +44,7 @@ export default function ForgotPassword() {
 
         {sent ? (
           <div className="bg-white/10 rounded-xl py-8 px-6 text-center">
-            <div className="text-[48px] mb-3">✉</div>
+            <div className="mb-3 inline-flex items-center justify-center text-white" style={{ width: 48, height: 48 }}><span style={{ transform: 'scale(3.4)' }}><IconEnvelope /></span></div>
             <p className="text-white text-[15px] leading-relaxed">
               Un lien de réinitialisation a été envoyé à <strong className="text-white">{email}</strong>.
             </p>

@@ -1,6 +1,7 @@
 import { Outlet, NavLink, Link, useLocation, useNavigate } from 'react-router-dom'
 import { useCRM } from '../context/CRMContext'
 import { useAuth } from '../context/AuthContext'
+import { IconArrowUp, IconStar } from './Icons'
 
 const TITLES = {
   '/': 'Tableau de bord',
@@ -12,6 +13,7 @@ const TITLES = {
   '/tickets': 'Tickets',
   '/admin/console': 'Console Administrateur',
   '/admin/tickets': 'Tickets (Admin)',
+  '/admin/scoring-learning': 'Apprentissage Scoring',
 }
 
 export default function Layout() {
@@ -55,18 +57,19 @@ export default function Layout() {
           <NavLink to="/" end className={({ isActive }) => `nitem flex items-center gap-2.5 py-2 px-2.5 rounded-lg cursor-pointer text-[13.5px] transition-all duration-[0.13s] mb-0.5 select-none ${isActive ? 'active bg-white/15 text-white font-medium' : 'text-white/60 hover:bg-white/[0.08] hover:text-white'}`}><span className="nico text-sm w-[18px] text-center shrink-0">⌂</span>Tableau de bord</NavLink>
           <NavLink to="/pipeline" className={({ isActive }) => `nitem flex items-center gap-2.5 py-2 px-2.5 rounded-lg cursor-pointer text-[13.5px] transition-all duration-[0.13s] mb-0.5 select-none ${isActive ? 'active bg-white/15 text-white font-medium' : 'text-white/60 hover:bg-white/[0.08] hover:text-white'}`}><span className="nico text-sm w-[18px] text-center shrink-0">◫</span>Pipeline</NavLink>
           <NavLink to="/profiles" className={({ isActive }) => `nitem flex items-center gap-2.5 py-2 px-2.5 rounded-lg cursor-pointer text-[13.5px] transition-all duration-[0.13s] mb-0.5 select-none ${isActive ? 'active bg-white/15 text-white font-medium' : 'text-white/60 hover:bg-white/[0.08] hover:text-white'}`}><span className="nico text-sm w-[18px] text-center shrink-0">◎</span>Tous les profils</NavLink>
-          <NavLink to="/analytics" className={({ isActive }) => `nitem flex items-center gap-2.5 py-2 px-2.5 rounded-lg cursor-pointer text-[13.5px] transition-all duration-[0.13s] mb-0.5 select-none ${isActive ? 'active bg-white/15 text-white font-medium' : 'text-white/60 hover:bg-white/[0.08] hover:text-white'}`}><span className="nico text-sm w-[18px] text-center shrink-0">↗</span>Analytics</NavLink>
+          <NavLink to="/analytics" className={({ isActive }) => `nitem flex items-center gap-2.5 py-2 px-2.5 rounded-lg cursor-pointer text-[13.5px] transition-all duration-[0.13s] mb-0.5 select-none ${isActive ? 'active bg-white/15 text-white font-medium' : 'text-white/60 hover:bg-white/[0.08] hover:text-white'}`}><span className="nico text-sm w-[18px] shrink-0 inline-flex items-center justify-center"><IconArrowUp /></span>Analytics</NavLink>
         </div>
         <div className="nav-sec pt-3.5 px-3 pb-1.5">
           <div className="nav-lbl text-[10px] uppercase tracking-widest text-white/35 px-2 mb-1.5">Outils</div>
           <NavLink to="/import" className={({ isActive }) => `nitem flex items-center gap-2.5 py-2 px-2.5 rounded-lg cursor-pointer text-[13.5px] transition-all duration-[0.13s] mb-0.5 select-none ${isActive ? 'active bg-white/15 text-white font-medium' : 'text-white/60 hover:bg-white/[0.08] hover:text-white'}`}><span className="nico text-sm w-[18px] text-center shrink-0">⇪</span>Import & Scoring</NavLink>
-          <NavLink to="/chat" className={({ isActive }) => `nitem flex items-center gap-2.5 py-2 px-2.5 rounded-lg cursor-pointer text-[13.5px] transition-all duration-[0.13s] mb-0.5 select-none ${isActive ? 'active bg-white/15 text-white font-medium' : 'text-white/60 hover:bg-white/[0.08] hover:text-white'}`}><span className="nico text-sm w-[18px] text-center shrink-0">✦</span>Chat IA</NavLink>
+          <NavLink to="/chat" className={({ isActive }) => `nitem flex items-center gap-2.5 py-2 px-2.5 rounded-lg cursor-pointer text-[13.5px] transition-all duration-[0.13s] mb-0.5 select-none ${isActive ? 'active bg-white/15 text-white font-medium' : 'text-white/60 hover:bg-white/[0.08] hover:text-white'}`}><span className="nico text-sm w-[18px] shrink-0 inline-flex items-center justify-center"><IconStar /></span>Chat IA</NavLink>
           <NavLink to="/tickets" className={({ isActive }) => `nitem flex items-center gap-2.5 py-2 px-2.5 rounded-lg cursor-pointer text-[13.5px] transition-all duration-[0.13s] mb-0.5 select-none ${isActive ? 'active bg-white/15 text-white font-medium' : 'text-white/60 hover:bg-white/[0.08] hover:text-white'}`}><span className="nico text-sm w-[18px] text-center shrink-0 inline-flex items-center justify-center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 9a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V9Z"/><path d="M7 9v6"/><path d="M12 9v6"/><path d="M17 9v6"/></svg></span>Tickets</NavLink>
         </div>
         {role === 'admin' && (
           <div className="nav-sec pt-3.5 px-3 pb-1.5">
             <div className="nav-lbl text-[10px] uppercase tracking-widest text-white/35 px-2 mb-1.5">Administrateur</div>
             <NavLink to="/admin/console" className={({ isActive }) => `nitem flex items-center gap-2.5 py-2 px-2.5 rounded-lg cursor-pointer text-[13.5px] transition-all duration-[0.13s] mb-0.5 select-none ${isActive ? 'active bg-white/15 text-white font-medium' : 'text-white/60 hover:bg-white/[0.08] hover:text-white'}`}><span className="nico text-sm w-[18px] text-center shrink-0 inline-flex items-center justify-center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>Console</NavLink>
+            <NavLink to="/admin/scoring-learning" className={({ isActive }) => `nitem flex items-center gap-2.5 py-2 px-2.5 rounded-lg cursor-pointer text-[13.5px] transition-all duration-[0.13s] mb-0.5 select-none ${isActive ? 'active bg-white/15 text-white font-medium' : 'text-white/60 hover:bg-white/[0.08] hover:text-white'}`}><span className="nico text-sm w-[18px] text-center shrink-0 inline-flex items-center justify-center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1 .34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0-.34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z"/></svg></span>Apprentissage</NavLink>
             <NavLink to="/admin/tickets" className={({ isActive }) => `nitem flex items-center gap-2.5 py-2 px-2.5 rounded-lg cursor-pointer text-[13.5px] transition-all duration-[0.13s] mb-0.5 select-none ${isActive ? 'active bg-white/15 text-white font-medium' : 'text-white/60 hover:bg-white/[0.08] hover:text-white'}`}><span className="nico text-sm w-[18px] text-center shrink-0 inline-flex items-center justify-center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 9a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V9Z"/><path d="M7 9v6"/><path d="M12 9v6"/><path d="M17 9v6"/></svg></span>Tickets</NavLink>
           </div>
         )}

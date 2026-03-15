@@ -1,17 +1,197 @@
 /**
- * Scoring CGP Evolve : employeur captif, intitulé, ancienneté, expériences passées, formation
- * Employeur captif = 50pts | CGP/BP = 30pts | Ancienneté 3-10 ans = 20pts
- * BONUS: CGP dans exp passées = +20pts | Formation Master/Gestion Patrimoine = +10pts
+ * Scoring CGP Evolve : employeur captif, intitulé, ancienneté, expériences passées
+ * Poids configurables via scoring_config (Supabase) - chargés au démarrage
  */
-const CGP_TITLE_KEYWORDS = ['cgp', 'conseiller en gestion de patrimoine', 'conseiller gestion patrimoine', 'gestionnaire patrimoine', 'banquier privé', 'conseiller patrimonial', 'wealth', 'conseiller en gestion']
-const BANK_KEYWORDS = ['crédit agricole', 'bnp', 'société générale', 'axa', 'generali', 'lcl', "caisse d'épargne", 'banque populaire', 'crédit mutuel', 'swiss life', 'ag2r', 'groupama']
-const FORMATION_CGP = ['master', 'ms ', 'mastère', 'gestion de patrimoine', 'gestionnaire patrimoine', 'cgp', 'conseiller patrimoine']
 
-const CAPTIF_EMPLOYER = 50
-const CGP_TITLE = 30
-const TENURE_3_10 = 20
-const PAST_CGP_BONUS = 20
-const FORMATION_BONUS = 10
+import { getScoringConfig } from './scoringConfig'
+
+const BANQUES_CAPTIVES = [
+  'bnp paribas', 'société générale', 'credit agricole',
+  'crédit agricole', 'lcl', 'banque populaire',
+  "caisse d'épargne", 'bred', 'cic', 'hsbc',
+  'la banque postale', 'credit mutuel', 'crédit mutuel',
+  'boursorama', 'hello bank', 'orange bank',
+  'banque de savoie', 'banque palatine', 'tarneaud',
+  'laydernier', 'nuger', 'kolb', 'rhône alpes',
+  'sgpb', 'société générale private banking',
+]
+
+const ASSURANCES_CAPTIVES = [
+  'axa', 'allianz', 'generali', 'groupama', 'maif',
+  'macif', 'mma', 'ag2r', 'malakoff', 'predica',
+  'cardif', 'gan', 'aviva', 'swisslife', 'swiss life',
+  'apicil', 'humanis', 'mutex', 'maaf', 'pacifica',
+  'franfinance', 'sogecap', 'antarius', 'oradea',
+  'spirica', 'suravenir', 'generali vie',
+]
+
+/** Normalise une chaîne pour comparaison : minuscules, sans accents, espaces unifiés */
+function normalize(str) {
+  if (!str || typeof str !== 'string') return ''
+  return str
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/[''`]/g, "'")
+    .trim()
+}
+
+const TITRES_CGP_RAW = [
+  'conseiller en gestion de patrimoine',
+  'conseiller patrimonial',
+  'consultant en gestion de patrimoine',
+  'conseiller en strategie patrimoniale',
+  'conseiller en stratégie patrimoniale',
+  'conseiller gestion privee',
+  'conseiller gestion privée',
+  'conseiller en gestion privee',
+  'conseiller en gestion privée',
+  'conseiller senior gestion de patrimoine',
+  'senior conseiller patrimonial',
+  'conseiller patrimoine senior',
+  'conseiller patrimoine financier',
+  'conseiller en investissement',
+  'conseiller en placements financiers',
+  'conseiller en strategie financiere',
+  'conseiller en stratégie financière',
+  'banquier prive',
+  'banquier privé',
+  'private banker',
+  'banque privee',
+  'banque privée',
+  'conseiller banque privee',
+  'conseiller banque privée',
+  'wealth manager',
+  'wealth advisor',
+  'senior wealth advisor',
+  'senior wealth manager',
+  'wealth consultant',
+  'wealth planning advisor',
+  'financial wealth advisor',
+  'private wealth advisor',
+  'head of wealth management',
+  'head of private banking',
+  'financial advisor',
+  'financial planner',
+  'investment advisor',
+  'investment consultant',
+  'financial consultant',
+  'senior financial advisor',
+  'investment manager',
+  'portfolio advisor',
+  'portfolio manager',
+  'gestionnaire de portefeuille',
+  'gestionnaire patrimonial',
+  'gestionnaire de patrimoine',
+  'gestionnaire clientele patrimoniale',
+  'gestionnaire clientèle patrimoniale',
+  'gestionnaire fortune',
+  'private client advisor',
+  'private client manager',
+  'client advisor private banking',
+  'relationship manager private banking',
+  'investment relationship manager',
+  'senior relationship manager',
+  'conseiller clientele patrimoniale',
+  'conseiller clientèle patrimoniale',
+  'charge de clientele patrimoniale',
+  'chargé de clientèle patrimoniale',
+  'conseiller clientele privee',
+  'conseiller clientèle privée',
+  'conseiller de clientele privee',
+  'conseiller de clientèle privée',
+  'conseiller prive',
+  'conseiller privé',
+  'responsable clientele privee',
+  'responsable clientèle privée',
+  'responsable gestion de patrimoine',
+  'responsable banque privee',
+  'responsable banque privée',
+  'responsable developpement patrimonial',
+  'responsable développement patrimonial',
+  'responsable clientele patrimoniale',
+  'responsable clientèle patrimoniale',
+  'courtier en gestion de patrimoine',
+  'courtier financier',
+  'courtier en epargne',
+  'courtier en épargne',
+  'inspecteur patrimonial',
+  'inspecteur en gestion de patrimoine',
+  "charge d'affaires patrimonial",
+  "chargé d'affaires patrimonial",
+  'conseiller en investissements financiers',
+  'cif',
+  'family officer',
+  'junior family officer',
+  'conseiller family office',
+  'conseiller en planification financiere',
+  'conseiller en planification financière',
+  'financial planning advisor',
+  'cgp',
+  'cgpi',
+]
+
+const TITRES_MOYENS_RAW = [
+  'conseiller clientele premium',
+  'conseiller clientèle premium',
+  'charge de clientele premium',
+  'chargé de clientèle premium',
+  'conseiller clientele haut de gamme',
+  'conseiller clientèle haut de gamme',
+  'responsable clientele premium',
+  'responsable clientèle premium',
+  'conseiller clientele particuliers',
+  'conseiller clientèle particuliers',
+  'charge de clientele particuliers',
+  'chargé de clientèle particuliers',
+  'responsable clientele particuliers',
+  'responsable clientèle particuliers',
+  "charge d'affaires particuliers",
+  "chargé d'affaires particuliers",
+  'conseiller financier',
+  'conseiller en epargne',
+  'conseiller en épargne',
+  'conseiller retraite',
+  'courtier en assurance',
+  'conseiller en protection sociale',
+  'conseiller en prevoyance',
+  'conseiller en prévoyance',
+  'conseiller en assurance de personnes',
+  'conseiller assurance vie',
+  'agent general assurance',
+  'agent général assurance',
+  "agent d'assurance",
+  'inspecteur commercial assurance',
+  'conseiller banque de detail',
+  'conseiller banque de détail',
+  'charge d\'affaires professionnels',
+  'chargé d\'affaires professionnels',
+  'conseiller professionnels banque',
+  'charge d\'affaires entreprises',
+  'chargé d\'affaires entreprises',
+  'conseiller clientele entreprises',
+  'conseiller clientèle entreprises',
+  'conseiller clientele professionnels',
+  'conseiller clientèle professionnels',
+  'relationship manager',
+  'conseiller clientele',
+  'conseiller clientèle',
+  'charge de clientele',
+  'chargé de clientèle',
+  'directeur agence',
+  'responsable secteur',
+  'conseiller commercial',
+]
+
+const TITRES_CGP = TITRES_CGP_RAW.map(normalize)
+const TITRES_MOYENS = TITRES_MOYENS_RAW.map(normalize)
+
+const MOTS_CABINET_INDEPENDANT = [
+  'cabinet', 'indépendant', 'courtier', 'broker',
+  'patrimoine conseil', 'conseil en patrimoine',
+  'gestion privée indépendante', 'cgpi',
+]
 
 function parseTenureYears(dur) {
   if (!dur || typeof dur !== 'string') return 0
@@ -22,32 +202,135 @@ function parseTenureYears(dur) {
   return 0
 }
 
-export function calculateScore(profile) {
+export function scoreProfile(profile, experiences = []) {
   let score = 0
-  const ti = (profile.ti || profile.title || '').toLowerCase()
-  const co = (profile.co || profile.company || '').toLowerCase()
-  const dur = profile.dur || profile.duration || ''
-  const experiences = Array.isArray(profile.experiences) ? profile.experiences : []
-  const formation = (profile.formation || '').toLowerCase()
+  const signals = []
 
-  if (BANK_KEYWORDS.some((k) => co.includes(k))) score += CAPTIF_EMPLOYER
-  else if (co && co !== '—') score += 25
+  const company = (profile.company || profile.co || profile.companyName || '').toLowerCase()
+  const titleNorm = normalize(profile.title || profile.ti || profile.jobTitle || '')
 
-  if (CGP_TITLE_KEYWORDS.some((k) => ti.includes(k))) score += CGP_TITLE
-  else if (ti.includes('conseiller') || ti.includes('gestionnaire') || ti.includes('banquier')) score += 15
-
-  const years = parseTenureYears(dur)
-  if (years >= 3 && years <= 10) score += TENURE_3_10
-  else if (years > 10) score += 10
-  else if (years >= 1) score += 5
-
-  const hasPastCGP = experiences.some((e) => {
-    const t = (e.title || '').toLowerCase()
-    return CGP_TITLE_KEYWORDS.some((k) => t.includes(k)) || t.includes('conseiller en gestion de patrimoine')
+  console.log('Scoring profil:', {
+    company: profile.company || profile.co || profile.companyName,
+    title: profile.title || profile.ti || profile.jobTitle,
+    linkedin: profile.li || profile.linkedinUrl,
   })
-  if (hasPastCGP) score += PAST_CGP_BONUS
+  const dur = profile.dur || profile.duration || ''
+  const exps = Array.isArray(experiences) ? experiences : []
 
-  if (FORMATION_CGP.some((k) => formation.includes(k))) score += FORMATION_BONUS
+  const cfg = getScoringConfig()
+  const wEmployer = cfg.weight_employer ?? 50
+  const wTitle = cfg.weight_title ?? 30
+  const wSeniority = cfg.weight_seniority ?? 20
+  const bonusCGP = cfg.bonus_cgp_experience ?? 20
+  const thPriority = cfg.threshold_priority ?? 70
+  const thTowork = cfg.threshold_towork ?? 50
 
-  return Math.min(100, Math.max(0, Math.round(score)))
+  // 1. EMPLOYEUR ACTUEL
+  const isBanque = BANQUES_CAPTIVES.some((b) => company.includes(b))
+  const isAssurance = ASSURANCES_CAPTIVES.some((a) => company.includes(a))
+
+  if (isBanque) {
+    score += wEmployer
+    signals.push('Banque captive')
+  } else if (isAssurance) {
+    score += wEmployer
+    signals.push('Assurance captive')
+  } else if (MOTS_CABINET_INDEPENDANT.some((c) => company.includes(c))) {
+    score += Math.round(wEmployer * 0.2)
+    signals.push('Cabinet indépendant')
+  }
+
+  // 2. INTITULÉ ACTUEL
+  if (TITRES_CGP.some((t) => titleNorm.includes(t))) {
+    score += wTitle
+    signals.push('Titre CGP / Banquier privé')
+  } else if (TITRES_MOYENS.some((t) => titleNorm.includes(t))) {
+    score += Math.round(wTitle * 0.5)
+    signals.push('Titre conseiller')
+  }
+
+  // 3. ANCIENNETÉ
+  let years = 0
+  if (exps.length > 0) {
+    const currentExp = exps.find((e) => e.isCurrent)
+    if (currentExp?.startYear) {
+      years = new Date().getFullYear() - currentExp.startYear
+      if (years >= 3 && years <= 7) {
+        score += wSeniority
+        signals.push(`Ancienneté idéale : ${years} ans`)
+      } else if (years >= 8 && years <= 12) {
+        score += Math.round(wSeniority * 0.75)
+        signals.push(`Ancienneté bonne : ${years} ans`)
+      } else if (years >= 1 && years < 3) {
+        score += Math.round(wSeniority * 0.5)
+        signals.push(`Ancienneté courte : ${years} ans`)
+      } else {
+        score += Math.round(wSeniority * 0.25)
+        signals.push(`Ancienneté : ${years} ans`)
+      }
+    }
+  } else if (dur) {
+    years = parseTenureYears(dur)
+    if (years >= 3 && years <= 10) score += wSeniority
+    else if (years > 10) score += Math.round(wSeniority * 0.75)
+    else if (years >= 1) score += Math.round(wSeniority * 0.5)
+    else score += Math.round(wSeniority * 0.25)
+  }
+
+  // 4. BONUS EXPÉRIENCES PASSÉES
+  if (exps.length > 1) {
+    const pastExperiences = exps.filter((e) => !e.isCurrent)
+
+    const hadCGP = pastExperiences.some((exp) => {
+      const t = (exp.title || '').toLowerCase()
+      const c = (exp.company || '').toLowerCase()
+      return (
+        TITRES_CGP.some((x) => t.includes(x)) ||
+        MOTS_CABINET_INDEPENDANT.some((x) => c.includes(x))
+      )
+    })
+    if (hadCGP) {
+      score += bonusCGP
+      signals.push('⚡ Expérience passée en cabinet CGP')
+    }
+
+    const hadBanque = pastExperiences.some((exp) => {
+      const c = (exp.company || '').toLowerCase()
+      return (
+        BANQUES_CAPTIVES.some((b) => c.includes(b)) ||
+        ASSURANCES_CAPTIVES.some((a) => c.includes(a))
+      )
+    })
+    if (hadBanque && !isBanque && !isAssurance) {
+      score += Math.round(bonusCGP * 0.5)
+      signals.push('Parcours banque/assurance passé')
+    }
+  }
+
+  let priority = 'À écarter'
+  if (score >= thPriority) priority = 'Prioritaire'
+  else if (score >= thTowork) priority = 'À travailler'
+
+  return { score: Math.min(100, Math.max(0, Math.round(score))), priority, signals }
+}
+
+/** Compatibilité : retourne le score numérique pour addProfile, Import, etc. */
+export function calculateScore(profile) {
+  const exps = Array.isArray(profile?.experiences) ? profile.experiences : []
+  return scoreProfile(profile || {}, exps).score
+}
+
+/** Badge pour la timeline : 'cabinet' | 'captif' | null */
+export function getExperienceBadge(exp) {
+  const c = (exp.company || '').toLowerCase()
+  const t = normalize(exp.title || '')
+  const isCabinet =
+    TITRES_CGP.some((x) => t.includes(x)) ||
+    MOTS_CABINET_INDEPENDANT.some((x) => c.includes(x))
+  const isCaptif =
+    BANQUES_CAPTIVES.some((b) => c.includes(b)) ||
+    ASSURANCES_CAPTIVES.some((a) => c.includes(a))
+  if (isCabinet) return 'cabinet'
+  if (isCaptif) return 'captif'
+  return null
 }

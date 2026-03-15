@@ -23,9 +23,16 @@ export default function Profiles() {
   const { filteredProfiles, changeStage, changeMaturity, changeSource, changeInteg, loading } = useCRM()
   const [srcFilter, setSrcFilter] = useState('')
   const [stgFilter, setStgFilter] = useState('')
+  const [matFilter, setMatFilter] = useState('')
   const [editingCell, setEditingCell] = useState(null) // { profileId, field, rect, integCustomMode?, integCustomValue? }
 
-  const P = filteredProfiles.filter((p) => (!srcFilter || p.src === srcFilter) && (!stgFilter || p.stg === stgFilter))
+  const P = filteredProfiles.filter((p) => {
+    if (srcFilter && p.src !== srcFilter) return false
+    if (stgFilter && p.stg !== stgFilter) return false
+    if (matFilter === 'Sans archivés' && p.mat === 'Archivé') return false
+    if (matFilter && matFilter !== 'Sans archivés' && p.mat !== matFilter) return false
+    return true
+  })
 
   const ini = (a, b) => (a?.[0] || '') + (b?.[0] || '')
   const scpill = (s) => s >= 70 ? 'sh' : s >= 45 ? 'sm2' : 'sl'
@@ -86,7 +93,7 @@ export default function Profiles() {
                   <InlineDropdown options={MATURITIES} value={p.mat} onChange={(v) => changeMaturity(p.id, v)} buttonStyle={(v) => MATURITY_COLORS[v] || {}} buttonClassName="tag tag-btn px-2 py-0.5 rounded-md text-xs" />
                 </td>
                 <td className="py-2.5 px-4" onClick={(e) => e.stopPropagation()}>
-                  <InlineDropdown options={STAGES} value={p.stg} onChange={(v) => changeStage(p.id, v)} buttonStyle={(v) => STAGE_COLORS[v] || {}} buttonClassName="tag tag-btn px-2 py-0.5 rounded-md text-xs" />
+                  <InlineDropdown options={STAGES} value={p.stg} onChange={(v) => changeStage(p.id, v)} buttonStyle={(v) => STAGE_COLORS[v] || {}} buttonClassName="tag tag-btn px-2 py-0.5 rounded-md text-xs" placeholder="—" />
                 </td>
                 <td className="py-2.5 px-4" onClick={(e) => e.stopPropagation()}>
                   <button type="button" className="tag tag-btn px-2 py-0.5 rounded-md text-xs" style={{ background: '#D4EDE1', color: '#1A7A4A' }} onClick={(e) => openDropdown(e, editingCell, setEditingCell, p.id, 'integ')}>{(p.integ || '—')} ▾</button>

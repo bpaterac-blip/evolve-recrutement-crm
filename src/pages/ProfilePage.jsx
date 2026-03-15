@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { jsPDF } from 'jspdf'
 import { supabase } from '../lib/supabase'
 import { useCRM } from '../context/CRMContext'
+import { enrichProfileWithNetrows } from '../lib/netrows'
+import { scoreProfile, getExperienceBadge } from '../lib/scoring'
 import {
   STAGES,
   MATURITIES,
@@ -16,6 +18,18 @@ import {
   EVENT_TYPES,
 } from '../lib/data'
 import InlineDropdown from '../components/InlineDropdown'
+import ScoreCorrectionModal from '../components/ScoreCorrectionModal'
+import { ActivityIcon, IconMap, IconCalendar, IconUpload, IconTrash, IconPencil, IconClose } from '../components/Icons'
+
+const ICON_S = 14
+const IconEnvelope = () => <svg width={ICON_S} height={ICON_S} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" /><polyline points="22,6 12,13 2,6" /></svg>
+const IconLink = () => <svg width={ICON_S} height={ICON_S} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>
+const IconBuilding = () => <svg width={ICON_S} height={ICON_S} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" ry="2" /><path d="M9 22v-4h6v4" /><path d="M8 6h2" /><path d="M14 6h2" /><path d="M8 10h2" /><path d="M14 10h2" /><path d="M8 14h2" /><path d="M14 14h2" /></svg>
+const IconTag = () => <svg width={ICON_S} height={ICON_S} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" /><line x1="7" y1="7" x2="7.01" y2="7" /></svg>
+const IconMapPin = () => <svg width={ICON_S} height={ICON_S} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg>
+const IconStar = () => <svg width={ICON_S} height={ICON_S} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
+const IconUser = () => <svg width={ICON_S} height={ICON_S} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
+const IconLinkedIn = () => <svg width={14} height={14} viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
 
 console.log('Supabase URL:', import.meta.env.VITE_SUPABASE_URL)
 console.log('Supabase KEY:', import.meta.env.VITE_SUPABASE_ANON_KEY ? 'OK' : 'MANQUANTE')
@@ -65,13 +79,6 @@ function formatActivityDateTime(ts) {
   return `${date} à ${time.replace(':', 'h')}`
 }
 
-function notePreview(content, maxLines = 3) {
-  if (!content) return { lines: [], hasMore: false }
-  const lines = content.split('\n')
-  const preview = lines.slice(0, maxLines)
-  return { lines: preview, hasMore: lines.length > maxLines }
-}
-
 function capFirst(str) {
   if (!str || typeof str !== 'string') return ''
   return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase()
@@ -79,6 +86,22 @@ function capFirst(str) {
 
 function initials(fn, ln) {
   return ((fn?.[0] || '') + (ln?.[0] || '')).toUpperCase() || '?'
+}
+
+const MOIS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sept', 'Oct', 'Nov', 'Déc']
+function formatExperiencePeriod(exp) {
+  const sy = exp.startYear
+  const sm = exp.startMonth
+  const ey = exp.endYear
+  const em = exp.endMonth
+  const startStr = sm ? `${MOIS[Math.min(sm - 1, 11)]} ${sy}` : String(sy || '')
+  if (exp.isCurrent || !ey) {
+    const years = sy ? new Date().getFullYear() - sy : 0
+    return `Depuis ${startStr} (${years} an${years > 1 ? 's' : ''})`
+  }
+  const endStr = em ? `${MOIS[Math.min(em - 1, 11)]} ${ey}` : String(ey || '')
+  const years = sy && ey ? ey - sy : 0
+  return `${startStr} - ${endStr} (${years} an${years > 1 ? 's' : ''})`
 }
 
 export default function ProfilePage() {
@@ -125,34 +148,49 @@ export default function ProfilePage() {
   const [showEventForm, setShowEventForm] = useState(false)
   const [ddIntegCustom, setDdIntegCustom] = useState(false)
   const [integCustomVal, setIntegCustomVal] = useState('')
-  const [activeTab, setActiveTab] = useState('activity')
+  const [activeTab, setActiveTab] = useState('notes')
   const [loadingDetail, setLoadingDetail] = useState(true)
   const [localActivities, setLocalActivities] = useState([])
   const [localEvents, setLocalEvents] = useState([])
   const [editingNoteId, setEditingNoteId] = useState(null)
   const [editingNoteContent, setEditingNoteContent] = useState('')
-  const [expandedNoteIds, setExpandedNoteIds] = useState(new Set())
+  const [editingEventId, setEditingEventId] = useState(null)
+  const [editingEventType, setEditingEventType] = useState('R0')
+  const [editingEventDate, setEditingEventDate] = useState('')
+  const [editingEventDetail, setEditingEventDetail] = useState('')
+  const [confirmDeleteNote, setConfirmDeleteNote] = useState(null)
+  const [confirmDeleteEvent, setConfirmDeleteEvent] = useState(null)
+  const [expandedNoteId, setExpandedNoteId] = useState(null)
+  const [expandedEventId, setExpandedEventId] = useState(null)
+  const [enriching, setEnriching] = useState(false)
+  const [scoreCorrectionOpen, setScoreCorrectionOpen] = useState(false)
 
   const mapActivityRow = (a) => {
-    // Schéma réel activities : profile_id, type, note, date (text), icon, source, created_at
     const tsSource = a.created_at || a.date
     const ts = tsSource ? new Date(tsSource).getTime() : undefined
-    const mainText = a.note || ''
     const formatted = ts ? formatActivityDateTime(ts) : ''
+    let mainText = a.note || ''
+    let ico = a.icon || 'dot'
+    if (a.activity_type === 'score_corrected' && a.new_value) {
+      mainText = a.new_value
+      ico = 'score_warning'
+    } else if (a.activity_type && !a.note) {
+      mainText = a.new_value || a.activity_type
+    }
     return {
       id: a.id,
       _source: 'activity',
-      d: formatted,        // unique date string
-      t: mainText,         // description lisible
-      n: undefined,        // pas de seconde ligne de date
-      ico: a.icon || '•',
-      type: a.type || 'std',
+      d: formatted,
+      t: mainText,
+      n: undefined,
+      ico,
+      type: a.activity_type === 'score_corrected' ? 'score_warning' : (a.type || 'std'),
       ts,
     }
   }
 
   const mapEventRow = (e) => {
-    // Schéma réel events : profile_id, content, date (text), created_at
+    // Schéma réel events : profile_id, content, date (text), notes, next_step, next_step_date, created_at
     const tsSource = e.created_at || e.date
     const ts = tsSource ? new Date(tsSource).getTime() : undefined
     const mainText = e.content || ''
@@ -163,9 +201,11 @@ export default function ProfilePage() {
       d: formatted,        // unique date string
       t: mainText,         // description (content)
       n: undefined,
-      ico: '📌',
+      ico: 'pin',
       type: 'event',
       ts,
+      nextStep: e.next_step || '',
+      nextStepDate: e.next_step_date || '',
     }
   }
 
@@ -223,8 +263,10 @@ export default function ProfilePage() {
     )
   }
 
-  const stag = (s) => STAGE_COLORS[s] ? { backgroundColor: STAGE_COLORS[s].bg, color: STAGE_COLORS[s].text } : {}
-  const matStyle = (m) => MATURITY_COLORS[m] ? { backgroundColor: MATURITY_COLORS[m].bg, color: MATURITY_COLORS[m].text } : { color: PAGE_STYLE.textSecondary }
+  const matColor = (m) => MATURITY_COLORS[m] || { bg: '#F3F4F6', text: '#6B7280' }
+  const stageColor = (s) => STAGE_COLORS[s] || { bg: '#F3F4F6', text: '#6B7280' }
+  const stag = (s) => ({ background: stageColor(s).bg, color: stageColor(s).text })
+  const matStyle = (m) => ({ background: matColor(m).bg, color: matColor(m).text })
 
   const handleDeleteActivity = async (a) => {
     if (!a.id || !a._source) return
@@ -252,7 +294,7 @@ export default function ProfilePage() {
       type: 'field_edit',
       note: `${field}: ${oldVal} → ${editValue.trim()}`,
       date: new Date().toISOString().split('T')[0],
-      icon: '✏️',
+      icon: 'pencil',
       source: 'manual',
     })
     await loadActivitiesAndEvents()
@@ -274,9 +316,28 @@ export default function ProfilePage() {
       type: 'note_added',
       note: noteContent,
       date: new Date().toISOString().split('T')[0],
-      icon: '📝',
+      icon: 'document',
       source: 'manual',
     })
+    await loadActivitiesAndEvents()
+  }
+
+  const startEditEvent = (evt) => {
+    const parts = (evt.content || '').split(' — ')
+    setEditingEventId(evt.id)
+    setEditingEventType(EVENT_TYPES.includes(parts[0]) ? parts[0] : 'Autre')
+    setEditingEventDate(evt.date || today())
+    setEditingEventDetail(parts.slice(1).join(' — ').trim())
+  }
+
+  const handleSaveEventEdit = async () => {
+    if (!editingEventId || !profile?.id) return
+    const content = editingEventType + (editingEventDetail ? ' — ' + editingEventDetail : '')
+    await supabase.from('events').update({ content, date: editingEventDate }).eq('id', editingEventId)
+    setEditingEventId(null)
+    setEditingEventType('R0')
+    setEditingEventDate('')
+    setEditingEventDetail('')
     await loadActivitiesAndEvents()
   }
 
@@ -306,7 +367,7 @@ export default function ProfilePage() {
       type: 'event_added',
       note: eventForm.type + (eventForm.detail ? ' — ' + eventForm.detail : ''),
       date: new Date().toISOString().split('T')[0],
-      icon: '📌',
+      icon: 'pin',
       source: 'manual',
     })
     setEvDate('')
@@ -402,7 +463,7 @@ export default function ProfilePage() {
       type: 'stage_change',
       note: `${oldStage} → ${newStage}`,
       date: new Date().toISOString().split('T')[0],
-      icon: '🔄',
+      icon: 'refresh',
       source: 'manual',
     })
     console.log('Insert activité result:', actError)
@@ -420,7 +481,7 @@ export default function ProfilePage() {
       type: 'maturity_change',
       note: `${oldMat} → ${newMat}`,
       date: new Date().toISOString().split('T')[0],
-      icon: '🌡',
+      icon: 'thermometer',
       source: 'manual',
     })
     await loadActivitiesAndEvents()
@@ -437,7 +498,7 @@ export default function ProfilePage() {
       type: 'source_change',
       note: `${oldSrc} → ${newSrc}`,
       date: new Date().toISOString().split('T')[0],
-      icon: '📋',
+      icon: 'document',
       source: 'manual',
     })
     await loadActivitiesAndEvents()
@@ -454,7 +515,7 @@ export default function ProfilePage() {
       type: 'region_change',
       note: `${oldRegion || '—'} → ${newRegion || '—'}`,
       date: new Date().toISOString().split('T')[0],
-      icon: '📍',
+      icon: 'mappin',
       source: 'manual',
     })
     await loadActivitiesAndEvents()
@@ -471,16 +532,37 @@ export default function ProfilePage() {
       type: 'integration_change',
       note: `${oldInteg || '—'} → ${newInteg || '—'}`,
       date: new Date().toISOString().split('T')[0],
-      icon: '📅',
+      icon: 'calendar',
       source: 'manual',
     })
     await loadActivitiesAndEvents()
   }
 
+  const handleEnrichNetrows = async () => {
+    const linkedinUrl = profile?.li
+    if (!linkedinUrl) return
+    setEnriching(true)
+    try {
+      const result = await enrichProfileWithNetrows(linkedinUrl)
+      const { score } = scoreProfile(profile, result.experiences)
+      const updated = { ...profile, experiences: result.experiences, sc: score }
+      updateProfile(profile.id, { experiences: result.experiences, sc: score })
+      if (useSupabase) {
+        await supabase.from('profiles').update({ experiences: result.experiences, score }).eq('id', profile.id)
+      }
+      showNotif('Profil enrichi ✓')
+    } catch (err) {
+      showNotif(`Erreur Netrows : ${err?.message}`)
+    } finally {
+      setEnriching(false)
+    }
+  }
+
   const linkUrl = (v) => (v && (v.startsWith('http') ? v : `https://${v}`))
+  const iconStyle = { color: '#6B6B6B', width: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }
   const FieldRow = ({ field, value, label, icon, placeholder, isLink }) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: `1px solid ${PAGE_STYLE.border}` }}>
-      <span style={{ color: PAGE_STYLE.textSecondary, fontSize: 13, width: 24 }}>{icon}</span>
+      <span style={iconStyle}>{icon}</span>
       <span style={{ color: PAGE_STYLE.textSecondary, fontSize: 13, width: 100, flexShrink: 0 }}>{label}</span>
       {editingField === field ? (
         <div style={{ display: 'flex', gap: 8, flex: 1 }}>
@@ -510,7 +592,7 @@ export default function ProfilePage() {
               <span style={{ fontSize: 13, color: value ? PAGE_STYLE.text : PAGE_STYLE.textSecondary }}>{(value || placeholder || '—').toString().trim() || '—'}</span>
             )}
           </div>
-          <button type="button" onClick={() => startEdit(field, value)} style={{ padding: 4, background: 'none', border: 'none', cursor: 'pointer', color: PAGE_STYLE.textSecondary, fontSize: 12 }} title="Modifier">✎</button>
+          <button type="button" onClick={() => startEdit(field, value)} style={{ padding: 4, background: 'none', border: 'none', cursor: 'pointer', color: PAGE_STYLE.textSecondary, fontSize: 12, display: 'inline-flex' }} title="Modifier"><IconPencil /></button>
         </>
       )}
     </div>
@@ -555,7 +637,7 @@ export default function ProfilePage() {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 500, ...stag(profile.stg) }}>{profile.stg}</span>
-          <span style={{ padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 500, ...matStyle(profile.mat), background: 'rgba(0,0,0,0.06)' }}>{profile.mat}</span>
+          <span style={{ padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 500, ...matStyle(profile.mat) }}>{profile.mat}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button type="button" onClick={goPrev} disabled={currentNum <= 1} style={{ width: 36, height: 36, borderRadius: 8, border: `1px solid ${PAGE_STYLE.border}`, background: PAGE_STYLE.cardBg, cursor: currentNum <= 1 ? 'not-allowed' : 'pointer', opacity: currentNum <= 1 ? 0.5 : 1 }}>←</button>
@@ -569,44 +651,63 @@ export default function ProfilePage() {
         <div style={{ overflowY: 'auto', minHeight: 0 }}>
           <div style={{ background: PAGE_STYLE.cardBg, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: PAGE_STYLE.radius, padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
             <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: PAGE_STYLE.textSecondary, marginBottom: 16 }}>Informations</div>
-            <FieldRow field="fn" value={profile.fn} label="Prénom" icon="👤" />
-            <FieldRow field="ln" value={profile.ln} label="Nom" icon="👤" />
-            <FieldRow field="mail" value={profile.mail} label="Email" icon="✉" placeholder="email@…" />
-            <FieldRow field="li" value={profile.li} label="LinkedIn" icon="🔗" placeholder="linkedin.com/in/…" isLink />
-            <FieldRow field="co" value={profile.co} label="Employeur" icon="🏢" />
-            <FieldRow field="ti" value={profile.ti} label="Intitulé" icon="💼" />
-            <FieldRow field="city" value={profile.city} label="Ville" icon="📍" />
+            <FieldRow field="fn" value={profile.fn} label="Prénom" icon={<IconUser />} />
+            <FieldRow field="ln" value={profile.ln} label="Nom" icon={<IconUser />} />
+            <FieldRow field="mail" value={profile.mail} label="Email" icon={<IconEnvelope />} placeholder="email@…" />
+            <FieldRow field="li" value={profile.li} label="LinkedIn" icon={<IconLink />} placeholder="linkedin.com/in/…" isLink />
+            <FieldRow field="city" value={profile.city} label="Ville" icon={<IconMapPin />} />
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: `1px solid ${PAGE_STYLE.border}` }}>
-              <span style={{ width: 24 }}>🗺</span>
+              <span style={{ ...iconStyle, width: 24, display: 'flex', alignItems: 'center' }}><IconMap /></span>
               <span style={{ color: PAGE_STYLE.textSecondary, fontSize: 13, width: 100 }}>Région</span>
               <select value={profile.region || ''} onChange={(e) => handleChangeRegion(e.target.value)} style={{ flex: 1, padding: '6px 10px', fontSize: 13, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6 }}>
                 <option value="">—</option>
                 {REGIONS.map((r) => <option key={r} value={r}>{r}</option>)}
               </select>
             </div>
+            <FieldRow field="co" value={profile.co} label="Employeur" icon={<IconBuilding />} />
+            <FieldRow field="ti" value={profile.ti} label="Intitulé" icon={<IconTag />} />
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: `1px solid ${PAGE_STYLE.border}` }}>
-              <span style={{ width: 24 }}>📌</span>
+              <span style={iconStyle}><IconTag /></span>
               <span style={{ color: PAGE_STYLE.textSecondary, fontSize: 13, width: 100 }}>Source</span>
-              <div style={{ flex: 1 }}>
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <InlineDropdown options={SOURCES} value={profile.src} onChange={handleChangeSource} buttonStyle={() => ({ border: `1px solid ${PAGE_STYLE.border}`, background: PAGE_STYLE.cardBg, color: PAGE_STYLE.text })} />
+                {profile.sequence_lemlist && (
+                  <span style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, background: '#FFF7ED', color: '#F97316', fontWeight: 500 }}>Lemlist : {profile.sequence_lemlist}</span>
+                )}
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: `1px solid ${PAGE_STYLE.border}` }}>
-              <span style={{ width: 24 }}>🌡</span>
+              <span style={iconStyle}><IconStar /></span>
+              <span style={{ color: PAGE_STYLE.textSecondary, fontSize: 13, width: 100 }}>Score</span>
+              <div className="score-row" style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontWeight: 600, fontSize: 13 }}>{profile.sc ?? '—'}</span>
+                <button
+                  type="button"
+                  onClick={() => setScoreCorrectionOpen(true)}
+                  className="score-inexact-btn"
+                  style={{ fontSize: 12, color: '#F97316', background: 'transparent', border: 'none', cursor: 'pointer', opacity: 0, transition: 'opacity 0.15s' }}
+                  title="Signaler un score inexact"
+                >
+                  ⚠ Score inexact
+                </button>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: `1px solid ${PAGE_STYLE.border}` }}>
+              <span style={iconStyle}><IconTag /></span>
               <span style={{ color: PAGE_STYLE.textSecondary, fontSize: 13, width: 100 }}>Maturité</span>
               <div style={{ flex: 1 }}>
                 <InlineDropdown options={MATURITIES} value={profile.mat} onChange={handleChangeMaturity} buttonStyle={matStyle} />
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: `1px solid ${PAGE_STYLE.border}` }}>
-              <span style={{ width: 24 }}>↗</span>
+              <span style={iconStyle}><IconStar /></span>
               <span style={{ color: PAGE_STYLE.textSecondary, fontSize: 13, width: 100 }}>Stade</span>
               <div style={{ flex: 1 }}>
-                <InlineDropdown options={STAGES} value={profile.stg} onChange={handleChangeStage} buttonStyle={stag} />
+                <InlineDropdown options={STAGES} value={profile.stg} onChange={handleChangeStage} buttonStyle={stag} placeholder="—" />
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0' }}>
-              <span style={{ width: 24 }}>📅</span>
+              <span style={iconStyle}><IconCalendar /></span>
               <span style={{ color: PAGE_STYLE.textSecondary, fontSize: 13, width: 100 }}>Intégration potentielle</span>
               {!ddIntegCustom ? (
                 <select value={profile.integ || '—'} onChange={(e) => { const v = e.target.value; if (v === INTEG_ADD_DATE) setDdIntegCustom(true); else handleChangeInteg(v); }} style={{ flex: 1, padding: '6px 10px', fontSize: 13, borderRadius: 6, border: 'none', background: '#D4EDE1', color: '#1A7A4A', cursor: 'pointer' }}>
@@ -622,23 +723,74 @@ export default function ProfilePage() {
                 </div>
               )}
             </div>
+            {profile.li && (
+              <div style={{ marginTop: 16 }}>
+                <button
+                  type="button"
+                  onClick={handleEnrichNetrows}
+                  disabled={enriching}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '10px 14px',
+                    background: '#fff',
+                    border: '1px solid #173731',
+                    borderRadius: 8,
+                    color: '#173731',
+                    fontSize: 13,
+                    cursor: enriching ? 'not-allowed' : 'pointer',
+                    opacity: enriching ? 0.7 : 1,
+                    width: '100%',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <IconLinkedIn />
+                  {enriching ? 'Enrichissement…' : 'Enrichir via Netrows'}
+                </button>
+              </div>
+            )}
           </div>
 
           <div style={{ marginTop: 24, background: PAGE_STYLE.cardBg, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: PAGE_STYLE.radius, padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
             <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: PAGE_STYLE.textSecondary, marginBottom: 16 }}>Actions rapides</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <button type="button" style={{ padding: '10px 14px', textAlign: 'left', borderRadius: 8, border: `1px solid ${PAGE_STYLE.border}`, background: 'none', cursor: 'pointer', fontSize: 13, transition: PAGE_STYLE.transition }}>📅 Planifier un RDV Google Meet</button>
-              <button type="button" onClick={handleExportPDF} style={{ padding: '10px 14px', textAlign: 'left', borderRadius: 8, border: `1px solid ${PAGE_STYLE.border}`, background: 'none', cursor: 'pointer', fontSize: 13, transition: PAGE_STYLE.transition }}>📤 Exporter la fiche</button>
-              <button type="button" onClick={handleDeleteProfile} style={{ padding: '10px 14px', textAlign: 'left', borderRadius: 8, border: '1px solid #e5c0c0', background: 'none', color: '#c0392b', cursor: 'pointer', fontSize: 13 }}>🗑 Supprimer le profil</button>
+              <button type="button" style={{ padding: '10px 14px', textAlign: 'left', borderRadius: 8, border: `1px solid ${PAGE_STYLE.border}`, background: 'none', cursor: 'pointer', fontSize: 13, transition: PAGE_STYLE.transition, display: 'flex', alignItems: 'center', gap: 8 }}><IconCalendar /> Planifier un RDV Google Meet</button>
+              <button type="button" onClick={handleExportPDF} style={{ padding: '10px 14px', textAlign: 'left', borderRadius: 8, border: `1px solid ${PAGE_STYLE.border}`, background: 'none', cursor: 'pointer', fontSize: 13, transition: PAGE_STYLE.transition, display: 'flex', alignItems: 'center', gap: 8 }}><IconUpload /> Exporter la fiche</button>
+              <button type="button" onClick={handleDeleteProfile} style={{ padding: '10px 14px', textAlign: 'left', borderRadius: 8, border: '1px solid #e5c0c0', background: 'none', color: '#c0392b', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}><IconTrash /> Supprimer le profil</button>
             </div>
           </div>
+
+          {Array.isArray(profile.experiences) && profile.experiences.length > 0 && (
+            <div style={{ marginTop: 24, background: PAGE_STYLE.cardBg, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: PAGE_STYLE.radius, padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+              <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: PAGE_STYLE.textSecondary, marginBottom: 16 }}>Parcours professionnel</div>
+              <div style={{ position: 'relative', paddingLeft: 20 }}>
+                <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 2, background: PAGE_STYLE.accent, borderRadius: 1 }} />
+                {profile.experiences.map((exp, i) => {
+                  const badge = getExperienceBadge(exp)
+                  return (
+                    <div key={i} style={{ position: 'relative', paddingBottom: 20 }}>
+                      <div style={{ position: 'absolute', left: -24, top: 4, width: 10, height: 10, borderRadius: '50%', background: PAGE_STYLE.cardBg, border: `2px solid ${PAGE_STYLE.accent}` }} />
+                      <div style={{ fontWeight: 600, fontSize: 13, color: PAGE_STYLE.text }}>{exp.company || '—'}</div>
+                      <div style={{ fontSize: 12, color: PAGE_STYLE.textSecondary, marginTop: 2 }}>{exp.title || '—'}</div>
+                      <div style={{ fontSize: 12, color: PAGE_STYLE.textSecondary, marginTop: 4 }}>{formatExperiencePeriod(exp)}</div>
+                      <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+                        {badge === 'cabinet' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#D4EDE1', color: '#1A7A4A', fontWeight: 500 }}>Cabinet CGP</span>}
+                        {badge === 'captif' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#FDE8E8', color: '#c0392b', fontWeight: 500 }}>Captif</span>}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         <div style={{ background: PAGE_STYLE.cardBg, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: PAGE_STYLE.radius, padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.04)', overflowY: 'auto', minHeight: 0 }}>
           <div style={{ display: 'flex', borderBottom: `1px solid ${PAGE_STYLE.border}`, marginBottom: 20 }}>
-            <button type="button" style={tabStyle(activeTab === 'activity')} onClick={() => setActiveTab('activity')}>Activité</button>
             <button type="button" style={tabStyle(activeTab === 'notes')} onClick={() => setActiveTab('notes')}>Notes</button>
             <button type="button" style={tabStyle(activeTab === 'events')} onClick={() => setActiveTab('events')}>Événements</button>
+            <button type="button" style={tabStyle(activeTab === 'activity')} onClick={() => setActiveTab('activity')}>Activité</button>
           </div>
 
           {activeTab === 'activity' && (
@@ -653,13 +805,13 @@ export default function ProfilePage() {
                   <div key={a.id ? `${a._source}-${a.id}` : `act-${i}`} style={{ position: 'relative', paddingBottom: 20 }} className="activity-row">
                     <div style={{ position: 'absolute', left: -28, top: 2, width: 10, height: 10, borderRadius: '50%', background: PAGE_STYLE.cardBg, border: `2px solid ${PAGE_STYLE.accent}` }} />
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                      <span style={{ fontSize: 16 }}>{a.ico || '•'}</span>
+                      <span style={{ fontSize: 16, display: 'inline-flex', color: a.ico === 'score_warning' ? '#F97316' : 'inherit' }}><ActivityIcon ico={a.ico} size={16} /></span>
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 13, fontWeight: 500, color: PAGE_STYLE.text }}>{a.t}</div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: a.ico === 'score_warning' ? '#F97316' : PAGE_STYLE.text }}>{a.t}</div>
                         <div style={{ fontSize: 11, color: PAGE_STYLE.textSecondary, marginTop: 4 }}>{a.d}</div>
                       </div>
                       {a.id && a._source && (
-                        <button type="button" onClick={() => handleDeleteActivity(a)} title="Supprimer" style={{ opacity: 0.5, padding: 4, background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: PAGE_STYLE.textSecondary, flexShrink: 0 }} className="activity-delete-btn">✕</button>
+                        <button type="button" onClick={() => handleDeleteActivity(a)} title="Supprimer" style={{ opacity: 0.5, padding: 4, background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: PAGE_STYLE.textSecondary, flexShrink: 0, display: 'inline-flex' }} className="activity-delete-btn"><IconClose /></button>
                       )}
                     </div>
                   </div>
@@ -678,7 +830,7 @@ export default function ProfilePage() {
                   <select value={noteTemplate} onChange={(e) => setNoteTemplate(e.target.value)} style={{ marginBottom: 12, padding: '8px 12px', fontSize: 13, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6 }}>
                     {Object.keys(NOTE_TEMPLATES).map((k) => <option key={k} value={k}>{k}</option>)}
                   </select>
-                  <textarea value={noteContent} onChange={(e) => setNoteContent(e.target.value)} placeholder="Saisir une note…" rows={5} style={{ width: '100%', padding: 12, fontSize: 13, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6, resize: 'vertical', marginBottom: 12 }} />
+                  <textarea value={noteContent} onChange={(e) => setNoteContent(e.target.value)} placeholder="Saisir une note…" style={{ width: '100%', minHeight: 400, padding: 12, fontSize: 13, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6, resize: 'vertical', marginBottom: 12 }} />
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button type="button" onClick={handleSaveNote} style={{ padding: '8px 16px', background: PAGE_STYLE.green, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>Enregistrer</button>
                     <button type="button" onClick={() => { setShowNoteForm(false); setNoteContent(NOTE_TEMPLATES[noteTemplate] ?? ''); }} style={{ padding: '8px 16px', background: 'none', border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>Annuler</button>
@@ -686,33 +838,35 @@ export default function ProfilePage() {
                 </div>
               )}
               {notesList.map((n) => (
-                <div key={n.id} style={{ position: 'relative', marginBottom: 16, padding: 16, background: PAGE_STYLE.cardBg, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: PAGE_STYLE.radius, transition: PAGE_STYLE.transition }} className="note-card">
-                  <div style={{ fontSize: 11, color: PAGE_STYLE.textSecondary, marginBottom: 8, textAlign: 'left' }}>
-                    {formatNoteDate(n.created_at)}
-                    {n.updated_at && new Date(n.updated_at).getTime() !== new Date(n.created_at).getTime() && (
-                      <div style={{ marginTop: 4 }}>Modifiée le {formatNoteDate(n.updated_at)}</div>
-                    )}
-                  </div>
+                <div key={n.id} style={{ position: 'relative', marginBottom: 16, padding: 16, background: PAGE_STYLE.cardBg, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: PAGE_STYLE.radius, transition: PAGE_STYLE.transition, cursor: 'pointer' }} className="note-card">
                   {editingNoteId === n.id ? (
-                    <div>
-                      <textarea value={editingNoteContent} onChange={(e) => setEditingNoteContent(e.target.value)} rows={6} style={{ width: '100%', padding: 12, fontSize: 13, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6, resize: 'vertical', marginBottom: 10 }} />
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <textarea value={editingNoteContent} onChange={(e) => setEditingNoteContent(e.target.value)} style={{ width: '100%', minHeight: 400, padding: 12, fontSize: 13, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6, resize: 'vertical', marginBottom: 10 }} />
                       <div style={{ display: 'flex', gap: 8 }}>
                         <button type="button" onClick={handleSaveNoteEdit} style={{ padding: '8px 16px', background: PAGE_STYLE.green, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>Enregistrer les modifications</button>
-                        <button type="button" onClick={() => { setEditingNoteId(null); setEditingNoteContent(''); }} style={{ padding: '8px 16px', background: 'none', border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>Annuler</button>
+                        <button type="button" onClick={() => { setEditingNoteId(null); setEditingNoteContent(''); setExpandedNoteId(null); }} style={{ padding: '8px 16px', background: 'none', border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>Annuler</button>
                       </div>
                     </div>
                   ) : (
                     <>
-                      <button type="button" onClick={() => { setEditingNoteId(n.id); setEditingNoteContent(n.content || ''); }} style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, whiteSpace: 'pre-wrap', color: PAGE_STYLE.text }}>
-                        {(() => { const { lines, hasMore } = notePreview(n.content); const expanded = expandedNoteIds.has(n.id); return expanded ? (n.content || '') : (lines.join('\n') + (hasMore ? '\n…' : '')); })()}
-                      </button>
-                      {notePreview(n.content).hasMore && !expandedNoteIds.has(n.id) && (
-                        <button type="button" onClick={(e) => { e.stopPropagation(); setExpandedNoteIds((s) => new Set([...s, n.id])); }} style={{ marginTop: 6, fontSize: 12, color: PAGE_STYLE.accent, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Voir plus...</button>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }} onClick={() => setExpandedNoteId((prev) => (prev === n.id ? null : n.id))}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 600, fontSize: 13, color: PAGE_STYLE.text }}>{n.template || 'Note libre'}</div>
+                          <div style={{ color: '#6B6B6B', fontSize: 12, marginTop: 4 }}>{formatNoteDate(n.created_at)}</div>
+                          {expandedNoteId === n.id && (
+                            <div style={{ marginTop: 12, padding: 12, background: '#F8F5F1', borderRadius: 8, fontSize: 13, color: PAGE_STYLE.text, whiteSpace: 'pre-wrap' }} onClick={(e) => e.stopPropagation()}>
+                              {n.content || '—'}
+                            </div>
+                          )}
+                        </div>
+                        <span style={{ flexShrink: 0, fontSize: 12, color: '#6B6B6B', transition: 'transform 0.2s', transform: expandedNoteId === n.id ? 'rotate(180deg)' : 'none' }}>▾</span>
+                      </div>
+                      {expandedNoteId === n.id && (
+                        <div className="note-actions" style={{ display: 'flex', gap: 6, marginTop: 12 }} onClick={(e) => e.stopPropagation()}>
+                          <button type="button" onClick={() => { setEditingNoteId(n.id); setEditingNoteContent(n.content || ''); }} style={{ padding: '3px 10px', fontSize: 12, color: '#173731', background: 'transparent', border: '1px solid #E5E0D8', borderRadius: 6, cursor: 'pointer' }} title="Éditer">Éditer</button>
+                          <button type="button" onClick={() => setConfirmDeleteNote({ id: n.id, content: n.content })} style={{ padding: 3, background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626', display: 'inline-flex' }} title="Supprimer"><IconTrash /></button>
+                        </div>
                       )}
-                      {expandedNoteIds.has(n.id) && (
-                        <button type="button" onClick={(e) => { e.stopPropagation(); setExpandedNoteIds((s) => { const next = new Set(s); next.delete(n.id); return next; }); }} style={{ marginTop: 6, fontSize: 12, color: PAGE_STYLE.textSecondary, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Voir moins</button>
-                      )}
-                      <button type="button" onClick={async (e) => { e.stopPropagation(); if (!window.confirm('Supprimer cette note ?')) return; await deleteNote(profile.id, n.id, n.content); const list = await fetchNotes(profile.id); setNotesList(list || []); }} style={{ position: 'absolute', top: 12, right: 12, padding: 4, background: 'none', border: 'none', cursor: 'pointer', opacity: 0, fontSize: 14 }} title="Supprimer" className="note-delete-btn">✕</button>
                     </>
                   )}
                 </div>
@@ -747,28 +901,99 @@ export default function ProfilePage() {
                   </div>
                 </div>
               )}
-              {eventsMapped.map((a, i) => (
-                <div
-                  key={a.id || i}
-                  style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, padding: 14, background: PAGE_STYLE.cardBg, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: PAGE_STYLE.radius, cursor: 'pointer' }}
-                  onClick={() => a.id && navigate(`/events/${a.id}`)}
-                >
-                  <span style={{ fontSize: 18 }}>{a.ico || '📌'}</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 500 }}>{a.t}</div>
-                    <div style={{ fontSize: 12, color: PAGE_STYLE.textSecondary }}>{a.d}</div>
+              {eventsMapped.map((a, i) => {
+                const raw = localEvents.find((ev) => ev.id === a.id)
+                return (
+                  <div
+                    key={a.id || i}
+                    className="event-card"
+                    style={{ display: 'flex', flexDirection: 'column', marginBottom: 12, padding: 14, background: PAGE_STYLE.cardBg, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: PAGE_STYLE.radius, cursor: 'pointer', position: 'relative' }}
+                  >
+                    {editingEventId === a.id && raw ? (
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <select value={editingEventType} onChange={(e) => setEditingEventType(e.target.value)} style={{ padding: '8px 12px', fontSize: 13, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6, minWidth: 160, marginBottom: 10 }}>
+                          {EVENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                        <input type="date" value={editingEventDate} onChange={(e) => setEditingEventDate(e.target.value)} style={{ padding: '8px 12px', fontSize: 13, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6, marginBottom: 10, display: 'block', width: '100%' }} />
+                        <textarea value={editingEventDetail} onChange={(e) => setEditingEventDetail(e.target.value)} placeholder="Décrivez le déroulé, les points clés, les prochaines étapes..." rows={4} style={{ width: '100%', padding: 10, fontSize: 13, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6, resize: 'vertical', marginBottom: 10 }} />
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button type="button" onClick={handleSaveEventEdit} style={{ padding: '8px 16px', background: PAGE_STYLE.green, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>Enregistrer</button>
+                          <button type="button" onClick={() => { setEditingEventId(null); setEditingEventType('R0'); setEditingEventDate(''); setEditingEventDetail(''); setExpandedEventId(null); }} style={{ padding: '8px 16px', background: 'none', border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>Annuler</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }} onClick={() => setExpandedEventId((prev) => (prev === a.id ? null : a.id))}>
+                          <span style={{ fontSize: 18, display: 'inline-flex', flexShrink: 0 }}><ActivityIcon ico={a.ico || 'pin'} size={18} /></span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: PAGE_STYLE.text }}>{(a.t || '').split(' — ')[0] || 'Événement'}</div>
+                            <div style={{ fontSize: 12, color: PAGE_STYLE.textSecondary, marginTop: 4 }}>{a.d}</div>
+                            {expandedEventId === a.id && raw && (
+                              <div style={{ marginTop: 12, padding: 12, background: '#F8F5F1', borderRadius: 8, fontSize: 13, color: PAGE_STYLE.text, whiteSpace: 'pre-wrap' }} onClick={(e) => e.stopPropagation()}>
+                                {[raw.content, raw.notes && `\n\nNotes : ${raw.notes}`, raw.next_step && `\n\nProchaine étape : ${raw.next_step}${raw.next_step_date ? ` (${raw.next_step_date})` : ''}`].filter(Boolean).join('') || '—'}
+                              </div>
+                            )}
+                          </div>
+                          <span style={{ flexShrink: 0, fontSize: 12, color: '#6B6B6B', transition: 'transform 0.2s', transform: expandedEventId === a.id ? 'rotate(180deg)' : 'none' }}>▾</span>
+                        </div>
+                        {expandedEventId === a.id && raw && (
+                          <div className="event-actions" style={{ display: 'flex', gap: 6, marginTop: 12 }} onClick={(e) => e.stopPropagation()}>
+                            <button type="button" onClick={() => startEditEvent(raw)} style={{ padding: '3px 10px', fontSize: 12, color: '#173731', background: 'transparent', border: '1px solid #E5E0D8', borderRadius: 6, cursor: 'pointer' }}>Éditer</button>
+                            <button type="button" onClick={() => setConfirmDeleteEvent({ id: raw.id, content: raw.content })} style={{ padding: 3, background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626', display: 'inline-flex' }} title="Supprimer"><IconTrash /></button>
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
-                </div>
-              ))}
+                )
+              })}
               {eventsMapped.length === 0 && !showEventForm && <div style={{ color: PAGE_STYLE.textSecondary, fontSize: 13 }}>Aucun événement</div>}
             </>
           )}
         </div>
       </div>
 
+      {/* Modales de confirmation suppression */}
+      {confirmDeleteNote && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setConfirmDeleteNote(null)}>
+          <div style={{ background: 'white', padding: 24, borderRadius: 12, boxShadow: '0 4px 20px rgba(0,0,0,0.15)', minWidth: 320 }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 20 }}>Supprimer cette note ?</div>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+              <button type="button" onClick={() => setConfirmDeleteNote(null)} style={{ padding: '8px 16px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, background: 'white', cursor: 'pointer', color: '#6B6B6B' }}>Annuler</button>
+              <button type="button" onClick={async () => { await deleteNote(profile.id, confirmDeleteNote.id, confirmDeleteNote.content); const list = await fetchNotes(profile.id); setNotesList(list || []); setConfirmDeleteNote(null); }} style={{ padding: '8px 16px', fontSize: 13, border: 'none', borderRadius: 6, background: '#DC2626', color: 'white', cursor: 'pointer' }}>Confirmer</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {scoreCorrectionOpen && (
+        <ScoreCorrectionModal
+          profile={profile}
+          onClose={() => setScoreCorrectionOpen(false)}
+          onSaved={async ({ correctedScore }) => {
+            updateProfile(profile.id, { sc: correctedScore })
+            showNotif('Score corrigé ✓')
+            await loadActivitiesAndEvents()
+          }}
+          useSupabase={useSupabase}
+        />
+      )}
+
+      {confirmDeleteEvent && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setConfirmDeleteEvent(null)}>
+          <div style={{ background: 'white', padding: 24, borderRadius: 12, boxShadow: '0 4px 20px rgba(0,0,0,0.15)', minWidth: 320 }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 20 }}>Supprimer cet événement ?</div>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+              <button type="button" onClick={() => setConfirmDeleteEvent(null)} style={{ padding: '8px 16px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, background: 'white', cursor: 'pointer', color: '#6B6B6B' }}>Annuler</button>
+              <button type="button" onClick={async () => { await deleteEvent(profile.id, confirmDeleteEvent.id, confirmDeleteEvent.content); await loadActivitiesAndEvents(); setConfirmDeleteEvent(null); }} style={{ padding: '8px 16px', fontSize: 13, border: 'none', borderRadius: 6, background: '#DC2626', color: 'white', cursor: 'pointer' }}>Confirmer</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style>{`
-        .note-card:hover .note-delete-btn { opacity: 1; }
         .activity-row:hover .activity-delete-btn { opacity: 1; }
+        .score-inexact-btn { padding: 0 4px; }
+        .score-row:hover .score-inexact-btn { opacity: 1 !important; }
         @media (max-width: 900px) {
           .profile-grid { grid-template-columns: 1fr !important; }
         }

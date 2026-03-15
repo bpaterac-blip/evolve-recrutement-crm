@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useCRM } from '../context/CRMContext'
+import { IconClose } from './Icons'
 
 export default function NewProfileModal({ onClose }) {
   const { addProfile } = useCRM()
@@ -21,7 +22,7 @@ export default function NewProfileModal({ onClose }) {
       <div className="modal bg-[var(--surface)] w-[460px] h-screen overflow-y-auto shadow-[-20px_0_60px_rgba(0,0,0,0.15)]" onClick={(e) => e.stopPropagation()}>
         <div className="mhd py-4 px-5 border-b border-[var(--border)] flex items-center justify-between">
           <div className="mttl text-base font-semibold">Nouveau profil</div>
-          <button type="button" className="text-lg cursor-pointer text-[var(--t3)] bg-none border-none" onClick={onClose}>✕</button>
+          <button type="button" className="text-lg cursor-pointer text-[var(--t3)] bg-none border-none inline-flex items-center justify-center" onClick={onClose}><IconClose /></button>
         </div>
         <div className="mbd p-5">
           <div className="grid2 grid grid-cols-2 gap-2.5 mb-2.5">
@@ -39,7 +40,7 @@ export default function NewProfileModal({ onClose }) {
               <option>Chasse LinkedIn</option><option>Chasse Mail</option><option>Recommandation</option><option>Inbound</option><option>Ads</option><option>Direct contact</option>
             </select>
           </div>
-          <button type="button" className="btn bp w-full py-2.5" onClick={handleSubmit}>Ajouter au pipeline en R0 →</button>
+          <button type="button" className="btn bp w-full py-2.5" onClick={handleSubmit}>Ajouter ce profil</button>
         </div>
       </div>
     </div>

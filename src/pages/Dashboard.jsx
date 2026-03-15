@@ -26,12 +26,12 @@ export default function Dashboard() {
     if (typeof a.id === 'number' && typeof b.id === 'number') return b.id - a.id
     return String(b.id || '').localeCompare(String(a.id || ''))
   })
-  const recent = P.slice(0, 7)
+  const recent = P.filter((p) => p.mat !== 'Archivé').slice(0, 7)
   const currentProfile = editingCell ? recent.find((p) => p.id === editingCell.profileId) : null
   const INTEG_STAGES = ['R2 Amaury', 'Point juridique', 'Démission reconversion', 'Recruté']
-  const integrs = P.filter((x) => x.integ && x.integ !== '—' && x.integ !== 'Intégré' && INTEG_STAGES.includes(x.stg))
-  const pipeline = P.filter((p) => p.stg !== 'Recruté')
-  const recruited = P.filter((p) => p.stg === 'Recruté')
+  const integrs = P.filter((x) => x.mat !== 'Archivé' && x.integ && x.integ !== '—' && x.integ !== 'Intégré' && INTEG_STAGES.includes(x.stg))
+  const pipeline = P.filter((p) => p.stg && p.stg !== 'Recruté' && p.mat !== 'Archivé')
+  const recruited = P.filter((p) => p.stg === 'Recruté' && p.mat !== 'Archivé')
 
   const ini = (a, b) => (a?.[0] || '') + (b?.[0] || '')
   const scpill = (s) => s >= 70 ? 'sh' : s >= 45 ? 'sm2' : 'sl'
@@ -94,7 +94,7 @@ export default function Dashboard() {
                 </td>
                 <td className="py-2.5 px-4"><span className={`sc inline-flex items-center justify-center w-9 h-6 rounded-md ${scpill(p.sc)}`}>{p.sc}</span></td>
                 <td className="py-2.5 px-4 align-middle" onClick={(e) => e.stopPropagation()}>
-                  <InlineDropdown options={STAGES} value={p.stg} onChange={(v) => changeStage(p.id, v)} buttonStyle={(v) => stag(v)} buttonClassName="tag tag-btn px-2 py-0.5 rounded-md text-xs" />
+                  <InlineDropdown options={STAGES} value={p.stg} onChange={(v) => changeStage(p.id, v)} buttonStyle={(v) => stag(v)} buttonClassName="tag tag-btn px-2 py-0.5 rounded-md text-xs" placeholder="—" />
                 </td>
                 <td className="py-2.5 px-4 align-middle" onClick={(e) => e.stopPropagation()}>
                   <button type="button" className="tag tag-btn px-2 py-0.5 rounded-md text-xs" style={{ background: '#D4EDE1', color: '#1A7A4A' }} onClick={(e) => openDropdown(e, editingCell, setEditingCell, p.id, 'integ')}>{(p.integ || '—')} ▾</button>

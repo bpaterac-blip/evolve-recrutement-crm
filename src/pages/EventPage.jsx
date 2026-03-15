@@ -15,6 +15,13 @@ const PAGE_STYLE = {
   radius: 12,
 }
 
+const EVENT_TYPE_STYLES = {
+  'RDV planifié': { bg: '#DBE8F5', text: '#1E5FA0', border: '#1E5FA0' },
+  'Point d\'étape': { bg: '#FDEBC8', text: '#B86B0F', border: '#B86B0F' },
+  'Démission reconversion': { bg: '#FDDEDE', text: '#C0392B', border: '#C0392B' },
+  'Relance': { bg: '#E0F2F7', text: '#0E7490', border: '#0E7490' },
+}
+
 function formatDateTime(ts) {
   if (!ts) return ''
   const d = new Date(ts)
@@ -24,17 +31,22 @@ function formatDateTime(ts) {
 }
 
 export default function EventPage() {
+  // 1. TOUS les hooks ici
+  const { profiles } = useCRM()
   const { eventId } = useParams()
   const navigate = useNavigate()
-  const { profiles } = useCRM()
   const [event, setEvent] = useState(null)
   const [loading, setLoading] = useState(true)
   const [detail, setDetail] = useState('')
   const [notes, setNotes] = useState('')
-  const [savingDetail, setSavingDetail] = useState(false)
-  const [savingNotes, setSavingNotes] = useState(false)
+  const [nextStep, setNextStep] = useState('')
+  const [nextStepDate, setNextStepDate] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
   const [lastNotesUpdate, setLastNotesUpdate] = useState(null)
 
+  // 2. TOUS les useEffect ici
+  // Chargement de l'événement
   useEffect(() => {
     const load = async () => {
       setLoading(true)
@@ -47,13 +59,44 @@ export default function EventPage() {
       setEvent(data)
       setDetail(data.content || '')
       setNotes(data.notes || '')
+      setNextStep(data.next_step || '')
+      setNextStepDate(data.next_step_date || '')
       setLastNotesUpdate(data.updated_at || data.created_at || null)
       setLoading(false)
     }
     if (eventId) load()
   }, [eventId])
 
+  // Autosave global pour détail, notes et prochaine étape
+  useEffect(() => {
+    if (!eventId || !event) return
+    const timeout = setTimeout(async () => {
+      setSaving(true)
+      const { error } = await supabase
+        .from('events')
+        .update({
+          content: detail,
+          notes,
+          next_step: nextStep,
+          next_step_date: nextStepDate,
+        })
+        .eq('id', eventId)
+      if (error) {
+        console.error('Erreur autosave event', error)
+      } else {
+        const nowIso = new Date().toISOString()
+        setLastNotesUpdate(nowIso)
+        setSaved(true)
+        setTimeout(() => setSaved(false), 2000)
+      }
+      setSaving(false)
+    }, 2000)
+    return () => clearTimeout(timeout)
+  }, [event, eventId, detail, notes, nextStep, nextStepDate])
+
+  // 3. Fonctions helpers (pas de hooks)
   if (loading) {
+    // 4. Return conditionnel EN DERNIER (mais avant le JSX principal)
     return (
       <div style={{ background: PAGE_STYLE.bg, minHeight: '100%', padding: 22 }}>
         <div style={{ color: PAGE_STYLE.textSecondary }}>Chargement de l&apos;événement…</div>
@@ -72,26 +115,21 @@ export default function EventPage() {
 
   const profile = profiles.find((p) => String(p.id) === String(event.profile_id))
   const headerTitle = (event.content || '').split('—')[0].trim() || (event.content || 'Événement')
-  const eventDate = event.date || event.created_at
+  const eventDate = event.created_at || event.date
+  const baseType = headerTitle
+  const typeStyle = EVENT_TYPE_STYLES[baseType] || { bg: '#F3F1EE', text: '#173731', border: '#173731' }
 
-  const handleSaveDetail = async () => {
-    setSavingDetail(true)
-    const { error } = await supabase.from('events').update({ content: detail }).eq('id', eventId)
-    if (error) console.error('Erreur save detail', error)
-    setSavingDetail(false)
-  }
+  const isUpcoming = (() => {
+    const refDate = event.date || event.created_at
+    if (!refDate) return false
+    const d = new Date(refDate)
+    const now = new Date()
+    return d.getTime() > now.getTime()
+  })()
 
-  const handleSaveNotes = async () => {
-    setSavingNotes(true)
-    const { error } = await supabase.from('events').update({ notes }).eq('id', eventId)
-    if (error) {
-      console.error('Erreur save notes', error)
-    } else {
-      setLastNotesUpdate(new Date().toISOString())
-    }
-    setSavingNotes(false)
-  }
+  const savedLabel = saving ? 'Enregistrement…' : saved ? 'Enregistré ✓' : ''
 
+  // 4. JSX principal
   return (
     <div style={{ background: PAGE_STYLE.bg, minHeight: '100%', padding: 22 }}>
       <button
@@ -103,12 +141,41 @@ export default function EventPage() {
       </button>
 
       <div style={{ maxWidth: 880, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
-        <div style={{ background: PAGE_STYLE.cardBg, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 12, padding: 22 }}>
+        <div
+          style={{
+            background: PAGE_STYLE.cardBg,
+            border: `1px solid ${PAGE_STYLE.border}`,
+            borderRadius: 12,
+            padding: 22,
+            boxShadow: '0 6px 14px rgba(0,0,0,0.05)',
+            borderLeft: `4px solid ${typeStyle.border}`,
+          }}
+        >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
             <div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: PAGE_STYLE.text, marginBottom: 6 }}>{headerTitle}</div>
+              <div
+                style={{
+                  display: 'inline-flex',
+                  padding: '4px 10px',
+                  borderRadius: 999,
+                  background: typeStyle.bg,
+                  color: typeStyle.text,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.06em',
+                  marginBottom: 8,
+                }}
+              >
+                {baseType}
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: PAGE_STYLE.text, marginBottom: 4 }}>{headerTitle}</div>
               <div style={{ fontSize: 13, color: PAGE_STYLE.textSecondary }}>
                 {eventDate ? formatDateTime(eventDate) : 'Date inconnue'}
+                {' · '}
+                <span style={{ fontWeight: 600, color: isUpcoming ? PAGE_STYLE.green : PAGE_STYLE.textSecondary }}>
+                  {isUpcoming ? 'À venir' : 'Passé'}
+                </span>
               </div>
             </div>
             {profile && (
@@ -118,22 +185,34 @@ export default function EventPage() {
                   to={`/profiles/${profile.id}`}
                   style={{ fontSize: 14, fontWeight: 600, color: PAGE_STYLE.accent, textDecoration: 'none' }}
                 >
-                  {profile.fn} {profile.ln}
+                  {profile.fn} {profile.ln} →
                 </Link>
               </div>
             )}
           </div>
+          {savedLabel && (
+            <div style={{ marginTop: 8, fontSize: 11, color: PAGE_STYLE.green }}>{savedLabel}</div>
+          )}
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-          <div style={{ background: PAGE_STYLE.cardBg, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 12, padding: 20 }}>
+          <div
+            style={{
+              background: PAGE_STYLE.cardBg,
+              border: `1px solid ${PAGE_STYLE.border}`,
+              borderRadius: 12,
+              padding: 20,
+              boxShadow: '0 4px 10px rgba(0,0,0,0.04)',
+            }}
+          >
             <div style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.06em', color: PAGE_STYLE.textSecondary, marginBottom: 10 }}>
-              Détail
+              Résumé de l&apos;échange
             </div>
             <textarea
               value={detail}
               onChange={(e) => setDetail(e.target.value)}
               rows={5}
+              placeholder="Décrivez le déroulé de l'échange..."
               style={{
                 width: '100%',
                 padding: 12,
@@ -144,37 +223,25 @@ export default function EventPage() {
                 color: PAGE_STYLE.text,
               }}
             />
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
-              <button
-                type="button"
-                onClick={handleSaveDetail}
-                disabled={savingDetail}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: 8,
-                  border: 'none',
-                  background: PAGE_STYLE.gold,
-                  color: PAGE_STYLE.accent,
-                  fontSize: 13,
-                  fontWeight: 600,
-                  cursor: savingDetail ? 'default' : 'pointer',
-                  opacity: savingDetail ? 0.7 : 1,
-                }}
-              >
-                {savingDetail ? 'Enregistrement…' : 'Enregistrer le détail'}
-              </button>
-            </div>
           </div>
 
-          <div style={{ background: PAGE_STYLE.cardBg, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 12, padding: 20 }}>
+          <div
+            style={{
+              background: PAGE_STYLE.cardBg,
+              border: `1px solid ${PAGE_STYLE.border}`,
+              borderRadius: 12,
+              padding: 20,
+              boxShadow: '0 4px 10px rgba(0,0,0,0.04)',
+            }}
+          >
             <div style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.06em', color: PAGE_STYLE.textSecondary, marginBottom: 10 }}>
-              Notes de l&apos;événement
+              Notes privées
             </div>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={6}
-              placeholder="Prendre des notes pendant ou après l'événement…"
+              placeholder="Vos observations, points clés, prochaines étapes..."
               style={{
                 width: '100%',
                 padding: 12,
@@ -189,24 +256,50 @@ export default function EventPage() {
               <div style={{ fontSize: 11, color: PAGE_STYLE.textSecondary }}>
                 {lastNotesUpdate && `Dernière modification le ${formatDateTime(lastNotesUpdate)}`}
               </div>
-              <button
-                type="button"
-                onClick={handleSaveNotes}
-                disabled={savingNotes}
+              <div style={{ fontSize: 11, color: PAGE_STYLE.textSecondary }}>
+                {notes.length} caractères
+              </div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              background: PAGE_STYLE.cardBg,
+              border: `1px solid ${PAGE_STYLE.border}`,
+              borderRadius: 12,
+              padding: 20,
+              boxShadow: '0 4px 10px rgba(0,0,0,0.04)',
+            }}
+          >
+            <div style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.06em', color: PAGE_STYLE.textSecondary, marginBottom: 10 }}>
+              Prochaine étape
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+              <input
+                type="text"
+                value={nextStep}
+                onChange={(e) => setNextStep(e.target.value)}
+                placeholder="Quelle est la prochaine étape ?"
                 style={{
-                  padding: '8px 16px',
-                  borderRadius: 8,
-                  border: 'none',
-                  background: PAGE_STYLE.gold,
-                  color: PAGE_STYLE.accent,
+                  flex: 1,
+                  minWidth: 180,
+                  padding: '8px 12px',
                   fontSize: 13,
-                  fontWeight: 600,
-                  cursor: savingNotes ? 'default' : 'pointer',
-                  opacity: savingNotes ? 0.7 : 1,
+                  border: `1px solid ${PAGE_STYLE.border}`,
+                  borderRadius: 6,
                 }}
-              >
-                {savingNotes ? 'Enregistrement…' : 'Enregistrer les notes'}
-              </button>
+              />
+              <input
+                type="date"
+                value={nextStepDate}
+                onChange={(e) => setNextStepDate(e.target.value)}
+                style={{
+                  padding: '8px 12px',
+                  fontSize: 13,
+                  border: `1px solid ${PAGE_STYLE.border}`,
+                  borderRadius: 6,
+                }}
+              />
             </div>
           </div>
         </div>

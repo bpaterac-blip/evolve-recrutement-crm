@@ -19,6 +19,7 @@ import ChatIA from './pages/ChatIA'
 import Tickets from './pages/Tickets'
 import AdminConsole from './pages/AdminConsole'
 import AdminTickets from './pages/AdminTickets'
+import AdminScoringLearning from './pages/AdminScoringLearning'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -81,6 +82,7 @@ function AppContent() {
           <Route path="tickets" element={<Tickets />} />
           <Route path="admin/console" element={<AdminProtectedRoute><AdminConsole /></AdminProtectedRoute>} />
           <Route path="admin/tickets" element={<AdminProtectedRoute><AdminTickets /></AdminProtectedRoute>} />
+          <Route path="admin/scoring-learning" element={<AdminProtectedRoute><AdminScoringLearning /></AdminProtectedRoute>} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

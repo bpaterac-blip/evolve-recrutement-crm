@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { calculateScore } from '../lib/scoring'
+import { loadScoringConfig } from '../lib/scoringConfig'
 import { INITIAL_PROFILES } from '../lib/data'
 
 const CRMContext = createContext(null)
@@ -31,7 +32,7 @@ function mapRowToProfile(row) {
     region: row.region ?? '',
     src: row.source ?? 'Chasse LinkedIn',
     sc: row.score ?? 0,
-    stg: row.stage ?? 'R0',
+    stg: row.stage ?? null,
     mat: row.maturity ?? 'Froid',
     integ: row.integration_date ?? '—',
     dt: row.created_at ? new Date(row.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) : '',
@@ -41,6 +42,8 @@ function mapRowToProfile(row) {
     dur: row.duration ?? '',
     notes: '',
     acts: [],
+    sequence_lemlist: row.sequence_lemlist ?? '',
+    lead_status: row.lead_status ?? '',
   }
 }
 
@@ -58,10 +61,11 @@ function mapProfileToRow(profile) {
     linkedin_url: profile.li ?? '—',
     source: profile.src ?? 'Chasse LinkedIn',
     score: profile.sc ?? 0,
-    stage: profile.stg ?? 'R0',
+    stage: profile.stg ?? null,
     maturity: profile.mat ?? 'Froid',
     sequence_lemlist: profile.sequence_lemlist ?? '',
     integration_date: profile.integ ?? '—',
+    lead_status: profile.lead_status ?? '',
   }
   if (experiences.length) row.experiences = experiences
   if (profile.dur) row.duration = profile.dur
@@ -119,18 +123,21 @@ export function CRMProvider({ children }) {
     const { data } = await supabase.from(ACTIVITIES_TABLE).select('*').eq('profile_id', profileId).order('created_at', { ascending: false })
     return (data || []).map((a) => {
       let t = a.activity_type
-      let ico = '•'
-      if (a.activity_type === 'stage_change') { t = `Stade → ${a.new_value}`; ico = '↗' }
-      else if (a.activity_type === 'maturity_change') { t = `Maturité → ${a.new_value}`; ico = '🌡' }
-      else if (a.activity_type === 'source_change') { t = `Source → ${a.new_value}`; ico = '📌' }
-      else if (a.activity_type === 'integration_change') { t = `Intégration → ${a.new_value}`; ico = '📅' }
-      else if (a.activity_type === 'field_edit') { t = a.new_value || 'Champ modifié'; ico = '✎' }
-      else if (a.activity_type === 'region_change') { t = `Région → ${a.new_value || '—'}`; ico = '📍' }
-      else if (a.activity_type === 'note_added') { t = 'Note ajoutée'; ico = '📝'; }
-      else if (a.activity_type === 'note_edited') { t = 'Note modifiée'; ico = '📝'; }
-      else if (a.activity_type === 'note_deleted') { t = 'Note supprimée'; ico = '🗑'; }
-      else if (a.activity_type === 'event_added') { t = a.new_value || 'Événement ajouté'; ico = '📌' }
-      else if (a.activity_type === 'profile_added') { t = 'Profil ajouté'; ico = '➕' }
+      let ico = 'dot'
+      if (a.activity_type === 'stage_change') { t = `Stade → ${a.new_value}`; ico = 'arrow_up' }
+      else if (a.activity_type === 'maturity_change') { t = `Maturité → ${a.new_value}`; ico = 'thermometer' }
+      else if (a.activity_type === 'source_change') { t = `Source → ${a.new_value}`; ico = 'pin' }
+      else if (a.activity_type === 'integration_change') { t = `Intégration → ${a.new_value}`; ico = 'calendar' }
+      else if (a.activity_type === 'field_edit') { t = a.new_value || 'Champ modifié'; ico = 'pencil' }
+      else if (a.activity_type === 'region_change') { t = `Région → ${a.new_value || '—'}`; ico = 'mappin' }
+      else if (a.activity_type === 'note_added') { t = 'Note ajoutée'; ico = 'document'; }
+      else if (a.activity_type === 'note_edited') { t = 'Note modifiée'; ico = 'document'; }
+      else if (a.activity_type === 'note_deleted') { t = 'Note supprimée'; ico = 'trash'; }
+      else if (a.activity_type === 'event_deleted') { t = 'Événement supprimé'; ico = 'trash'; }
+      else if (a.activity_type === 'event_added') { t = a.new_value || 'Événement ajouté'; ico = 'pin' }
+      else if (a.activity_type === 'profile_added') { t = 'Profil ajouté'; ico = 'plus' }
+      else if (a.activity_type === 'lemlist_contact') { t = a.new_value || 'Premier contact Lemlist'; ico = 'envelope' }
+      else if (a.activity_type === 'score_corrected') { t = a.new_value || 'Score corrigé'; ico = 'score_warning' }
       return {
         id: a.id,
         _source: 'activity',
@@ -138,7 +145,7 @@ export function CRMProvider({ children }) {
         t,
         n: a.old_value ? `Depuis ${a.old_value}` : a.new_value,
         ico,
-        type: a.activity_type === 'stage_change' ? 'stg' : a.activity_type === 'maturity_change' ? 'mat' : 'std',
+        type: a.activity_type === 'stage_change' ? 'stg' : a.activity_type === 'maturity_change' ? 'mat' : a.activity_type === 'score_corrected' ? 'score_warning' : 'std',
         _ts: new Date(a.created_at).getTime(),
       }
     })
@@ -147,14 +154,14 @@ export function CRMProvider({ children }) {
   const fetchEvents = useCallback(async (profileId) => {
     if (!useSupabase || !profileId) return []
     const { data } = await supabase.from(EVENTS_TABLE).select('*').eq('profile_id', profileId).order('created_at', { ascending: false })
-    const icos = { 'RDV planifié': '📅', 'RDV démission reconversion': '📅', 'Point téléphonique': '📞', 'Relance prévue': '📩', 'Point juridique': '⚖️', 'Signature contrat': '✍️', 'Note libre': '📝' }
+    const icos = { 'RDV planifié': 'calendar', 'RDV démission reconversion': 'calendar', 'Point téléphonique': 'mappin', 'Relance prévue': 'envelope', 'Point juridique': 'document', 'Signature contrat': 'pencil', 'Note libre': 'document' }
     return (data || []).map((e) => ({
       id: e.id,
       _source: 'event',
       d: e.event_date || new Date(e.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }),
       t: e.event_type,
       n: e.description || e.event_type,
-      ico: icos[e.event_type] || '📌',
+      ico: icos[e.event_type] || 'pin',
       type: 'event',
       _ts: new Date(e.created_at).getTime(),
     }))
@@ -187,18 +194,31 @@ export function CRMProvider({ children }) {
     setProfileActivities((prev) => ({ ...prev, [profileId]: acts }))
   }, [useSupabase, fetchActivities, fetchEvents])
 
-  const deleteEvent = useCallback(async (profileId, eventId) => {
+  const insertActivity = useCallback(async (profileId, activityType, oldValue, newValue) => {
+    if (!useSupabase) return
+    await supabase.from(ACTIVITIES_TABLE).insert({
+      profile_id: profileId,
+      activity_type: activityType,
+      old_value: oldValue,
+      new_value: newValue,
+    })
+  }, [useSupabase])
+
+  const deleteEvent = useCallback(async (profileId, eventId, contentSnapshot) => {
     if (!useSupabase) return
     await supabase.from(EVENTS_TABLE).delete().eq('id', eventId)
+    insertActivity(profileId, 'event_deleted', (contentSnapshot || '').slice(0, 200), '')
     const [activities, events] = await Promise.all([fetchActivities(profileId), fetchEvents(profileId)])
     const acts = [...activities, ...events]
       .filter((a) => a._ts)
       .sort((a, b) => (b._ts || 0) - (a._ts || 0))
       .map(({ _ts, ...rest }) => ({ ...rest, ts: _ts }))
     setProfileActivities((prev) => ({ ...prev, [profileId]: acts }))
-  }, [useSupabase, fetchActivities, fetchEvents])
+    showNotif('Événement supprimé')
+  }, [useSupabase, fetchActivities, fetchEvents, insertActivity, showNotif])
 
   useEffect(() => {
+    if (isSupabaseConfigured()) loadScoringConfig()
     fetchProfiles()
   }, [fetchProfiles])
 
@@ -221,16 +241,6 @@ export function CRMProvider({ children }) {
     await supabase.from(PROFILES_TABLE).update(row).eq('id', id)
   }, [useSupabase])
 
-  const insertActivity = useCallback(async (profileId, activityType, oldValue, newValue) => {
-    if (!useSupabase) return
-    await supabase.from(ACTIVITIES_TABLE).insert({
-      profile_id: profileId,
-      activity_type: activityType,
-      old_value: oldValue,
-      new_value: newValue,
-    })
-  }, [useSupabase])
-
   const changeStage = useCallback((id, newStg) => {
     let oldStg = ''
     setProfiles((prev) => {
@@ -247,7 +257,7 @@ export function CRMProvider({ children }) {
       showNotif(`${p.fn} ${p.ln} → ${newStg} ✓`)
       setProfileActivities((prev) => {
         const acts = prev[id] || []
-        return { ...prev, [id]: [{ d: today(), t: `Stade → ${newStg}`, n: `Depuis ${oldStg || p.stg}`, ico: '↗', type: 'stg' }, ...acts] }
+        return { ...prev, [id]: [{ d: today(), t: `Stade → ${newStg}`, n: `Depuis ${oldStg || p.stg}`, ico: 'arrow_up', type: 'stg' }, ...acts] }
       })
     }
   }, [profiles, showNotif, persistProfileUpdate, insertActivity, today])
@@ -268,7 +278,7 @@ export function CRMProvider({ children }) {
       showNotif(`Maturité de ${p.fn} ${p.ln} → ${newMat} ✓`)
       setProfileActivities((prev) => {
         const acts = prev[id] || []
-        return { ...prev, [id]: [{ d: today(), t: `Maturité → ${newMat}`, n: `Depuis ${oldMat || p.mat}`, ico: '🌡', type: 'mat' }, ...acts] }
+        return { ...prev, [id]: [{ d: today(), t: `Maturité → ${newMat}`, n: `Depuis ${oldMat || p.mat}`, ico: 'thermometer', type: 'mat' }, ...acts] }
       })
     }
   }, [profiles, showNotif, persistProfileUpdate, insertActivity, today])
@@ -295,7 +305,7 @@ export function CRMProvider({ children }) {
     showNotif(`Source ${p.fn} ${p.ln} → ${newSrc} ✓`)
     setProfileActivities((prev) => {
       const acts = prev[id] || []
-      return { ...prev, [id]: [{ d: today(), t: `Source → ${newSrc}`, n: `Depuis ${oldSrc}`, ico: '📌', type: 'std' }, ...acts] }
+      return { ...prev, [id]: [{ d: today(), t: `Source → ${newSrc}`, n: `Depuis ${oldSrc}`, ico: 'pin', type: 'std' }, ...acts] }
     })
   }, [profiles, showNotif, persistProfileUpdate, insertActivity, today])
 
@@ -323,7 +333,7 @@ export function CRMProvider({ children }) {
     insertActivity(id, 'field_edit', `${label}: ${oldVal}`, `${label}: ${newValue}`)
     setProfileActivities((prev) => {
       const acts = prev[id] || []
-      return { ...prev, [id]: [{ d: today(), t: `${label} → ${newValue}`, n: `Depuis ${oldVal}`, ico: '✎', type: 'std' }, ...acts] }
+      return { ...prev, [id]: [{ d: today(), t: `${label} → ${newValue}`, n: `Depuis ${oldVal}`, ico: 'pencil', type: 'std' }, ...acts] }
     })
     showNotif(`${label} mis à jour ✓`)
   }, [profiles, showNotif, persistProfileUpdate, insertActivity, today])
@@ -336,9 +346,9 @@ export function CRMProvider({ children }) {
     setProfileNotes((prev) => ({ ...prev, [id]: note }))
     setProfileActivities((prev) => {
       const acts = prev[id] || []
-      return { ...prev, [id]: [{ d: today(), t: 'Note ajoutée', n: note.slice(0, 60) + (note.length > 60 ? '…' : ''), ico: '📝', type: 'std' }, ...acts] }
+      return { ...prev, [id]: [{ d: today(), t: 'Note ajoutée', n: note.slice(0, 60) + (note.length > 60 ? '…' : ''), ico: 'document', type: 'std' }, ...acts] }
     })
-    showNotif('💾 Note enregistrée ✓')
+    showNotif('Note enregistrée ✓')
   }, [showNotif, today, useSupabase, insertActivity])
 
   const updateNote = useCallback(async (profileId, noteId, newContent, oldContent) => {
@@ -349,7 +359,7 @@ export function CRMProvider({ children }) {
     setProfileNotes((prev) => ({ ...prev, [profileId]: list?.[0]?.content ?? '' }))
     setProfileActivities((prev) => {
       const acts = prev[profileId] || []
-      return { ...prev, [profileId]: [{ d: today(), t: 'Note modifiée', n: (newContent || '').slice(0, 60) + ((newContent || '').length > 60 ? '…' : ''), ico: '📝', type: 'std' }, ...acts] }
+      return { ...prev, [profileId]: [{ d: today(), t: 'Note modifiée', n: (newContent || '').slice(0, 60) + ((newContent || '').length > 60 ? '…' : ''), ico: 'document', type: 'std' }, ...acts] }
     })
     showNotif('Note mise à jour ✓')
   }, [useSupabase, fetchNotes, showNotif, insertActivity, today])
@@ -381,7 +391,7 @@ export function CRMProvider({ children }) {
     }
     setProfileActivities((prev) => {
       const acts = prev[id] || []
-      const ico = { 'RDV planifié': '📅', 'Relance': '📩', "Point d'étape": '📌', 'Démission reconversion': '📅', 'Autre': '📌' }[type] || '📌'
+      const ico = { 'RDV planifié': 'calendar', 'Relance': 'envelope', "Point d'étape": 'pin', 'Démission reconversion': 'calendar', 'Autre': 'pin' }[type] || 'pin'
       return { ...prev, [id]: [{ d: date || today(), t: type, n: note || type, ico, type: 'event' }, ...acts] }
     })
     showNotif(`Événement ajouté : ${type} ✓`)
@@ -413,7 +423,7 @@ export function CRMProvider({ children }) {
       city: data.city || '—',
       region: data.region || '',
       src: data.src || 'Chasse LinkedIn',
-      stg: 'R0',
+      stg: null,
       mat: 'Froid',
       integ: '—',
       dt: today(),
@@ -448,36 +458,72 @@ export function CRMProvider({ children }) {
     } else {
       setProfiles((prev) => [{ ...newP, id: Date.now() }, ...prev])
     }
-    showNotif(`${newP.fn} ${newP.ln} ajouté au pipeline en R0 ✓ (score: ${sc})`)
+    showNotif(`${newP.fn} ${newP.ln} ajouté ✓ (score: ${sc})`)
     return true
   }, [today, showNotif, useSupabase, insertActivity])
 
   const addProfilesBatch = useCallback(async (profilesData) => {
     const rows = profilesData.map((p) => {
-      const base = { fn: p.fn || '', ln: p.ln || '', co: p.co || '—', ti: p.ti || '—', city: p.city || '—', region: p.region || '', src: p.src || 'Chasse LinkedIn', mail: p.mail || '—', li: p.li || '—', stg: 'R0', mat: 'Froid', integ: '—', dur: p.dur || '', experiences: Array.isArray(p.experiences) ? p.experiences : [], formation: p.formation || '' }
+      const base = {
+        fn: p.fn || '',
+        ln: p.ln || '',
+        co: p.co || '—',
+        ti: p.ti || '—',
+        city: p.city || '—',
+        region: p.region || '',
+        src: p.src || 'Chasse LinkedIn',
+        mail: p.mail || '—',
+        li: p.li || '—',
+        stg: null,
+        mat: 'Froid',
+        integ: '—',
+        dur: p.dur || '',
+        experiences: Array.isArray(p.experiences) ? p.experiences : [],
+        formation: p.formation || '',
+        sequence_lemlist: p.sequence_lemlist || '',
+        lead_status: p.lead_status || '',
+      }
       const sc = p.sc != null ? p.sc : calculateScore(base)
       return mapProfileToRow({ ...base, sc })
     })
     if (useSupabase && rows.length) {
-      let { data, error } = await supabase.from(PROFILES_TABLE).insert(rows).select('id, first_name, last_name, company, title, city, region, email, linkedin_url, source, score, stage, maturity, integration_date, created_at, experiences, duration')
+      let { data, error } = await supabase.from(PROFILES_TABLE).insert(rows).select('id, first_name, last_name, company, title, city, region, email, linkedin_url, source, score, stage, maturity, integration_date, created_at, experiences, duration, sequence_lemlist, lead_status')
       if (error && error.message && error.message.includes('region')) {
         const rowsWithoutRegion = rows.map((r) => { const { region: _r, ...rest } = r; return rest })
-        const res = await supabase.from(PROFILES_TABLE).insert(rowsWithoutRegion).select('id, first_name, last_name, company, title, city, email, linkedin_url, source, score, stage, maturity, integration_date, created_at, experiences, duration')
+        const res = await supabase.from(PROFILES_TABLE).insert(rowsWithoutRegion).select('id, first_name, last_name, company, title, city, email, linkedin_url, source, score, stage, maturity, integration_date, created_at, experiences, duration, sequence_lemlist, lead_status')
         error = res.error
         data = res.data
       }
       if (error) throw error
       const newProfiles = (data || []).map(mapRowToProfile)
       setProfiles((prev) => [...newProfiles, ...prev])
+      for (let i = 0; i < newProfiles.length; i++) {
+        const lastContacted = profilesData[i]?.lastContactedDate
+        if (lastContacted && newProfiles[i]?.id) {
+          await supabase.from(ACTIVITIES_TABLE).insert({
+            profile_id: newProfiles[i].id,
+            activity_type: 'lemlist_contact',
+            old_value: '',
+            new_value: `Premier contact Lemlist — ${lastContacted}`,
+          })
+        }
+      }
       return newProfiles.length
     }
     return 0
   }, [useSupabase])
 
   const searchTrimmed = (searchQuery || '').trim()
-  const filteredProfiles = searchTrimmed
-    ? profiles.filter((p) => `${p.fn} ${p.ln} ${p.co} ${p.city} ${p.region || ''}`.toLowerCase().includes(searchTrimmed.toLowerCase()))
-    : profiles
+  const filteredProfiles = profiles.filter((p) => {
+    const q = searchTrimmed.toLowerCase()
+    if (!q) return true
+    return (
+      p.fn?.toLowerCase().startsWith(q) ||
+      p.ln?.toLowerCase().startsWith(q) ||
+      (p.fn + ' ' + p.ln).toLowerCase().includes(q) ||
+      (p.ln + ' ' + p.fn).toLowerCase().includes(q)
+    )
+  })
 
   return (
     <CRMContext.Provider
