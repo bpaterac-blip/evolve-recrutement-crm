@@ -1,14 +1,61 @@
-export const STAGES = ['R0', 'R1', "Point d'étape", 'R2 Amaury', 'Démission', 'Point juridique', 'Recruté']
+export const STAGES = ['R0', 'R1', "Point d'étape", 'R2 Amaury', 'Point juridique', 'Démission reconversion', 'Recruté']
 export const MATURITIES = ['Froid', 'Tiède', 'Chaud', 'Très chaud']
-export const INTEG_OPTS = ['—', 'Avril 2026', 'Mai 2026', 'Juin 2026', 'Juillet 2026', 'Septembre 2026', 'Octobre 2026', 'Q4 2026']
+export const INTEG_OPTS = ['—', 'Janvier 2026', 'Avril 2026', 'Juin 2026', 'Juillet 2026', 'Septembre 2026', 'Novembre 2026', 'Janvier 2027', 'Avril 2027', 'Juin 2027', 'Septembre 2027', 'Novembre 2027', 'Intégré']
+export const INTEG_ADD_DATE = '+ Ajouter une date...'
+
+export const SOURCES = ['Chasse LinkedIn', 'Chasse Mail', 'Recommandation', 'Inbound', 'Ads', 'Chasse externe', 'Direct contact']
+
+export const REGIONS = [
+  'Paris / Île-de-France',
+  'Grand Est',
+  'Hauts-de-France',
+  'Bourgogne-Franche-Comté',
+  'Provence-Alpes-Côte d\'Azur',
+  'Occitanie',
+  'Nouvelle-Aquitaine',
+  'Auvergne-Rhône-Alpes',
+  'Centre-Val de Loire',
+  'Pays de la Loire',
+  'Bretagne',
+  'Normandie',
+  'Corse',
+]
+
+export const NOTE_TEMPLATES = {
+  'Récapitulatif R0': `Date : 
+Échange : 
+Intérêt exprimé : 
+Prochaine étape : `,
+  'Récapitulatif R1': `Date : 
+Présentation Evolve : 
+Questions posées : 
+Objections : 
+Suite donnée : `,
+  'Récapitulatif Point d\'étape': `Date : 
+Avancement : 
+Blocages : 
+Prochaine étape : `,
+  'Note libre': '',
+}
+
+export const EVENT_TYPES = ['RDV planifié', 'Relance', 'Point d\'étape', 'Démission reconversion', 'Autre']
+
+// Maturité : Froid (bleu) / Tiède (orange) / Chaud (rouge clair) / Très chaud (rouge)
+export const MATURITY_COLORS = {
+  'Froid': { bg: '#DBE8F5', text: '#1E5FA0' },
+  'Tiède': { bg: '#FDEBC8', text: '#B86B0F' },
+  'Chaud': { bg: '#FADBD8', text: '#C0392B' },
+  'Très chaud': { bg: '#FDDEDE', text: '#A52A2A' },
+}
 
 export const STAGE_COLORS = {
   'R0': { bg: '#F3F1EE', text: '#6B6158' },
   'R1': { bg: '#DBE8F5', text: '#1E5FA0' },
   "Point d'étape": { bg: '#E0F2F7', text: '#0E7490' },
   'R2 Amaury': { bg: '#EDE0FA', text: '#7B3FC4' },
-  'Démission': { bg: '#FEF0DC', text: '#B86B0F' },
   'Point juridique': { bg: '#FDDEDE', text: '#C0392B' },
+  'Démission reconversion': { bg: '#FEF0DC', text: '#B86B0F' },
+  'Démission': { bg: '#FEF0DC', text: '#B86B0F' },
   'Recruté': { bg: '#D4EDE1', text: '#1A7A4A' },
 }
 

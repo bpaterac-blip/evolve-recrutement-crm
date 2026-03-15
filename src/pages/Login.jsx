@@ -62,6 +62,7 @@ export default function Login() {
           >
             Mot de passe oublié ?
           </Link>
+          <p className="text-white/50 text-[12px] text-center">Inscription sur invitation uniquement.</p>
           {error && (
             <p className="text-red-300 text-[13px] text-center">{error}</p>
           )}

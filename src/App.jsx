@@ -3,8 +3,8 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { CRMProvider } from './context/CRMContext'
 import Layout from './components/Layout'
-import ProfileModal from './components/ProfileModal'
 import NewProfileModal from './components/NewProfileModal'
+import ProfilePage from './pages/ProfilePage'
 import Notification from './components/Notification'
 import Login from './pages/Login'
 import ForgotPassword from './pages/ForgotPassword'
@@ -12,9 +12,13 @@ import ResetPassword from './pages/ResetPassword'
 import Dashboard from './pages/Dashboard'
 import Pipeline from './pages/Pipeline'
 import Profiles from './pages/Profiles'
+import EventPage from './pages/EventPage'
 import Analytics from './pages/Analytics'
 import Import from './pages/Import'
 import ChatIA from './pages/ChatIA'
+import Tickets from './pages/Tickets'
+import AdminConsole from './pages/AdminConsole'
+import AdminTickets from './pages/AdminTickets'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -29,19 +33,27 @@ function ProtectedRoute({ children }) {
   return children
 }
 
+function AdminProtectedRoute({ children }) {
+  const { user, role, loading } = useAuth()
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[var(--bg)]">
+        <div className="text-[var(--t3)]">Chargement…</div>
+      </div>
+    )
+  }
+  if (!user) return <Navigate to="/login" replace />
+  if (role !== 'admin') return <Navigate to="/" replace />;
+  return children
+}
+
 function AppContent() {
-  const [profileModal, setProfileModal] = useState(null)
   const [newProfileOpen, setNewProfileOpen] = useState(false)
 
   useEffect(() => {
-    const onOpen = (e) => setProfileModal(e.detail)
     const onOpenNew = () => setNewProfileOpen(true)
-    window.addEventListener('open-profile', onOpen)
     window.addEventListener('open-new-profile', onOpenNew)
-    return () => {
-      window.removeEventListener('open-profile', onOpen)
-      window.removeEventListener('open-new-profile', onOpenNew)
-    }
+    return () => window.removeEventListener('open-new-profile', onOpenNew)
   }, [])
 
   return (
@@ -61,13 +73,17 @@ function AppContent() {
           <Route index element={<Dashboard />} />
           <Route path="pipeline" element={<Pipeline />} />
           <Route path="profiles" element={<Profiles />} />
+          <Route path="profiles/:id" element={<ProfilePage />} />
+          <Route path="events/:eventId" element={<EventPage />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="import" element={<Import />} />
           <Route path="chat" element={<ChatIA />} />
+          <Route path="tickets" element={<Tickets />} />
+          <Route path="admin/console" element={<AdminProtectedRoute><AdminConsole /></AdminProtectedRoute>} />
+          <Route path="admin/tickets" element={<AdminProtectedRoute><AdminTickets /></AdminProtectedRoute>} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-      {profileModal && <ProfileModal profile={profileModal} onClose={() => setProfileModal(null)} />}
       {newProfileOpen && <NewProfileModal onClose={() => setNewProfileOpen(false)} />}
       <Notification />
     </>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { supabase } from '../lib/supabase'
 
 const fieldClass = 'w-full py-3 px-4 rounded-lg bg-white border border-white/20 text-[var(--text)] font-[inherit] text-[15px] outline-none focus:border-white/40 focus:ring-2 focus:ring-white/20 transition-all placeholder:text-[var(--t3)]'
 
@@ -19,7 +20,7 @@ function validatePassword(pwd) {
 }
 
 export default function ResetPassword() {
-  const { user, loading, updatePassword } = useAuth()
+  const { user, loading } = useAuth()
   const navigate = useNavigate()
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -49,16 +50,22 @@ export default function ResetPassword() {
     }
 
     setSubmitting(true)
-    const { error: err } = await updatePassword(password)
-    setSubmitting(false)
-    if (err) {
-      setError(err.message || 'Erreur lors de la mise à jour')
-      return
+    try {
+      const { error: err } = await supabase.auth.updateUser({ password })
+      if (err) {
+        setError(err.message || 'Erreur lors de la mise à jour')
+        return
+      }
+      await supabase.auth.signOut()
+      navigate('/login', { replace: true })
+    } catch (e) {
+      setError(e?.message || 'Erreur lors de la mise à jour')
+    } finally {
+      setSubmitting(false)
     }
-    navigate('/login', { replace: true })
   }
 
-  if (loading) {
+  if (loading && !user) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: '#173731' }}>
         <div className="text-white/70">Chargement…</div>
@@ -66,7 +73,9 @@ export default function ResetPassword() {
     )
   }
 
-  if (!user) return null
+  if (!user) {
+    return null
+  }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4" style={{ background: '#173731' }}>
@@ -82,6 +91,7 @@ export default function ResetPassword() {
             value={password}
             onChange={(e) => { setPassword(e.target.value); setValidationErrors([]); }}
             required
+            disabled={submitting}
             className={fieldClass}
           />
           <input
@@ -90,6 +100,7 @@ export default function ResetPassword() {
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
             required
+            disabled={submitting}
             className={fieldClass}
           />
           {validationErrors.length > 0 && (

@@ -118,7 +118,7 @@ export default function Analytics() {
               <span className="text-xs font-semibold text-[var(--accent)]">{p.integ}</span>
             </div>
           ))}
-          {integs.length === 0 && <div className="text-xs text-[var(--t3)]">Aucune intégration prévue</div>}
+          {integs.length === 0 && <div className="text-xs text-[var(--t3)]">Aucune intégration potentielle</div>}
         </div>
       </div>
     </div>

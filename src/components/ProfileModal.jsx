@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useCRM } from '../context/CRMContext'
-import { STAGES, MATURITIES, INTEG_OPTS, STAGE_COLORS } from '../lib/data'
+import { STAGES, MATURITIES, INTEG_OPTS, INTEG_ADD_DATE, STAGE_COLORS, REGIONS } from '../lib/data'
 
 const SRC_TAG = { 'Chasse LinkedIn': 'tb', 'Chasse Mail': 'tt', 'Recommandation': 'tp', 'Inbound': 'tg', 'Ads': 'ta', 'Direct contact': 'tx' }
 
@@ -10,6 +10,7 @@ export default function ProfileModal({ profile: initialProfile, onClose }) {
     changeStage,
     changeMaturity,
     changeInteg,
+    changeRegion,
     saveNote,
     addEvent,
     updateProfileScore,
@@ -25,6 +26,10 @@ export default function ProfileModal({ profile: initialProfile, onClose }) {
   const [evNote, setEvNote] = useState('')
   const [ddStage, setDdStage] = useState(false)
   const [ddMat, setDdMat] = useState(false)
+  const [ddInteg, setDdInteg] = useState(false)
+  const [ddRegion, setDdRegion] = useState(false)
+  const [integCustomMode, setIntegCustomMode] = useState(false)
+  const [integCustomValue, setIntegCustomValue] = useState('')
   const [scoreEdit, setScoreEdit] = useState(false)
   const [newScore, setNewScore] = useState('')
   const [loadingDetail, setLoadingDetail] = useState(false)
@@ -71,6 +76,18 @@ export default function ProfileModal({ profile: initialProfile, onClose }) {
           <div className="mstl text-[11px] uppercase tracking-wider text-[var(--t3)] mb-2.5 font-medium">Informations</div>
           <div className="dr flex items-start gap-2.5 mb-2 text-[13.5px]"><span className="dk text-[var(--t3)] w-[120px] shrink-0 pt-0.5">Email</span><span className="text-[var(--accent)]">{profile.mail}</span></div>
           <div className="dr flex items-start gap-2.5 mb-2 text-[13.5px]"><span className="dk text-[var(--t3)] w-[120px] shrink-0 pt-0.5">LinkedIn</span><span className="text-[var(--accent)] text-xs">{profile.li}</span></div>
+          <div className="dr flex items-start gap-2.5 mb-2 relative">
+            <span className="dk text-[var(--t3)] w-[120px] shrink-0 pt-0.5">Région</span>
+            <div className="relative">
+              <button type="button" className="tag tag-btn px-2 py-0.5 rounded-md text-[13px] bg-[var(--s2)] text-[var(--t2)] border border-[var(--border)]" onClick={() => { setDdRegion(!ddRegion); setDdStage(false); setDdMat(false); setDdInteg(false); }}>{(profile.region || '—')} ▾</button>
+              {ddRegion && (
+                <div className="ddrop absolute top-full left-0 mt-1 bg-[var(--surface)] border border-[var(--border)] rounded-lg shadow-lg z-[100] min-w-[220px] max-h-[260px] overflow-y-auto p-1">
+                  <div className="ddi py-1.5 px-2.5 rounded-md text-[13px] cursor-pointer hover:bg-[var(--s2)]" onClick={() => { changeRegion(profile.id, ''); setDdRegion(false); }}>—</div>
+                  {REGIONS.map((r) => <div key={r} className={`ddi py-1.5 px-2.5 rounded-md text-[13px] cursor-pointer hover:bg-[var(--s2)] ${(profile.region || '') === r ? 'font-semibold' : ''}`} onClick={() => { changeRegion(profile.id, r); setDdRegion(false); }}>{r}</div>)}
+                </div>
+              )}
+            </div>
+          </div>
           <div className="dr flex items-start gap-2.5 mb-2"><span className="dk text-[var(--t3)] w-[120px] shrink-0 pt-0.5">Source</span><span className={`tag ${srctag(profile.src)}`}>{profile.src}</span></div>
           <div className="dr flex items-start gap-2.5 mb-2">
             <span className="dk text-[var(--t3)] w-[120px] shrink-0 pt-0.5">Score</span>
@@ -105,12 +122,29 @@ export default function ProfileModal({ profile: initialProfile, onClose }) {
               </div>}
             </div>
           </div>
-          <div className="dr flex items-start gap-2.5 mb-2">
-            <span className="dk text-[var(--t3)] w-[120px] shrink-0 pt-0.5">Intégration prév.</span>
-            <select className="inlin-sel w-auto text-[13px] py-1 px-2" value={profile.integ} onChange={(e) => changeInteg(profile.id, e.target.value)}>
-              {INTEG_OPTS.map((o) => <option key={o} value={o}>{o}</option>)}
-              <option value="Intégré">Intégré</option>
-            </select>
+          <div className="dr flex items-start gap-2.5 mb-2 relative">
+            <span className="dk text-[var(--t3)] w-[120px] shrink-0 pt-0.5">Intégration pot.</span>
+            <div className="relative">
+              <button type="button" className="tag tag-btn" style={{ background: '#D4EDE1', color: '#1A7A4A' }} onClick={() => { setDdInteg(!ddInteg); setDdStage(false); setDdMat(false); setIntegCustomMode(false); setIntegCustomValue(''); }}>{(profile.integ || '—')} ▾</button>
+              {ddInteg && (
+                <div className="ddrop absolute top-full left-0 mt-1 bg-[var(--surface)] border border-[var(--border)] rounded-lg shadow-lg z-[100] min-w-[200px] p-1">
+                  {integCustomMode ? (
+                    <div className="p-2 space-y-2">
+                      <input type="text" className="inlin-input w-full py-1.5 px-2 text-[13px]" placeholder="ex: Mars 2027" value={integCustomValue} onChange={(e) => setIntegCustomValue(e.target.value)} autoFocus />
+                      <div className="flex gap-1.5">
+                        <button type="button" className="btn bp bsm flex-1" onClick={() => { if (integCustomValue.trim()) { changeInteg(profile.id, integCustomValue.trim()); setDdInteg(false); setIntegCustomMode(false); setIntegCustomValue(''); } }}>Valider</button>
+                        <button type="button" className="btn bo bsm" onClick={() => { setIntegCustomMode(false); setIntegCustomValue(''); }}>Annuler</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {INTEG_OPTS.map((o) => <div key={o} className={`ddi py-1.5 px-2.5 rounded-md text-[13px] cursor-pointer hover:bg-[var(--s2)] ${(profile.integ || '—') === o ? 'font-semibold' : ''}`} onClick={() => { changeInteg(profile.id, o); setDdInteg(false); }}>{o}</div>)}
+                      <div className="ddi py-1.5 px-2.5 rounded-md text-[13px] cursor-pointer hover:bg-[var(--s2)] text-[var(--accent)]" onClick={() => setIntegCustomMode(true)}>{INTEG_ADD_DATE}</div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
           {profile.dur && (
             <div className="dr flex items-start gap-2.5 mb-2 text-[13.5px]">

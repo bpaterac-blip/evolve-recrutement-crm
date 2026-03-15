@@ -46,6 +46,9 @@ html, body {
 
 /* Component classes from mockup */
 .tag { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 6px; font-size: 11.5px; font-weight: 500; }
+.tag-btn { cursor: pointer; border: none; font: inherit; }
+.ddrop { }
+.ddi { }
 .tg { background: var(--gbg); color: var(--green); }
 .ta { background: var(--abg); color: var(--amber); }
 .tb { background: var(--bbg); color: var(--blue); }

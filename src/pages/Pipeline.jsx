@@ -1,4 +1,5 @@
 import { DndContext, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from '@dnd-kit/core'
+import { useNavigate } from 'react-router-dom'
 import { useCRM } from '../context/CRMContext'
 import { STAGES, STAGE_COLORS } from '../lib/data'
 
@@ -50,6 +51,7 @@ function DroppableColumn({ stage, cards, onCardClick }) {
 }
 
 export default function Pipeline() {
+  const navigate = useNavigate()
   const { filteredProfiles, changeStage } = useCRM()
   const pipeline = filteredProfiles.filter((p) => p.stg !== 'Recruté')
   const all = filteredProfiles
@@ -81,7 +83,7 @@ export default function Pipeline() {
                 key={st}
                 stage={st}
                 cards={cards}
-                onCardClick={(p) => window.dispatchEvent(new CustomEvent('open-profile', { detail: p }))}
+                onCardClick={(p) => navigate(`/profiles/${p.id}`)}
               />
             )
           })}

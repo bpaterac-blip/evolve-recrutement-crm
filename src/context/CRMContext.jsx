@@ -28,6 +28,7 @@ function mapRowToProfile(row) {
     co: row.company ?? '—',
     ti: row.title ?? '—',
     city: row.city ?? '—',
+    region: row.region ?? '',
     src: row.source ?? 'Chasse LinkedIn',
     sc: row.score ?? 0,
     stg: row.stage ?? 'R0',
@@ -52,6 +53,7 @@ function mapProfileToRow(profile) {
     company: profile.co ?? '—',
     title: profile.ti ?? '—',
     city: profile.city ?? '—',
+    region: profile.region ?? '',
     email: profile.mail ?? '—',
     linkedin_url: profile.li ?? '—',
     source: profile.src ?? 'Chasse LinkedIn',
@@ -115,14 +117,31 @@ export function CRMProvider({ children }) {
   const fetchActivities = useCallback(async (profileId) => {
     if (!useSupabase || !profileId) return []
     const { data } = await supabase.from(ACTIVITIES_TABLE).select('*').eq('profile_id', profileId).order('created_at', { ascending: false })
-    return (data || []).map((a) => ({
-      d: new Date(a.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }),
-      t: a.activity_type === 'stage_change' ? `Stade → ${a.new_value}` : a.activity_type === 'maturity_change' ? `Maturité → ${a.new_value}` : a.activity_type,
-      n: a.old_value ? `Depuis ${a.old_value}` : a.new_value,
-      ico: a.activity_type === 'stage_change' ? '↗' : '🌡',
-      type: a.activity_type === 'stage_change' ? 'stg' : 'mat',
-      _ts: new Date(a.created_at).getTime(),
-    }))
+    return (data || []).map((a) => {
+      let t = a.activity_type
+      let ico = '•'
+      if (a.activity_type === 'stage_change') { t = `Stade → ${a.new_value}`; ico = '↗' }
+      else if (a.activity_type === 'maturity_change') { t = `Maturité → ${a.new_value}`; ico = '🌡' }
+      else if (a.activity_type === 'source_change') { t = `Source → ${a.new_value}`; ico = '📌' }
+      else if (a.activity_type === 'integration_change') { t = `Intégration → ${a.new_value}`; ico = '📅' }
+      else if (a.activity_type === 'field_edit') { t = a.new_value || 'Champ modifié'; ico = '✎' }
+      else if (a.activity_type === 'region_change') { t = `Région → ${a.new_value || '—'}`; ico = '📍' }
+      else if (a.activity_type === 'note_added') { t = 'Note ajoutée'; ico = '📝'; }
+      else if (a.activity_type === 'note_edited') { t = 'Note modifiée'; ico = '📝'; }
+      else if (a.activity_type === 'note_deleted') { t = 'Note supprimée'; ico = '🗑'; }
+      else if (a.activity_type === 'event_added') { t = a.new_value || 'Événement ajouté'; ico = '📌' }
+      else if (a.activity_type === 'profile_added') { t = 'Profil ajouté'; ico = '➕' }
+      return {
+        id: a.id,
+        _source: 'activity',
+        d: new Date(a.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }),
+        t,
+        n: a.old_value ? `Depuis ${a.old_value}` : a.new_value,
+        ico,
+        type: a.activity_type === 'stage_change' ? 'stg' : a.activity_type === 'maturity_change' ? 'mat' : 'std',
+        _ts: new Date(a.created_at).getTime(),
+      }
+    })
   }, [useSupabase])
 
   const fetchEvents = useCallback(async (profileId) => {
@@ -130,6 +149,8 @@ export function CRMProvider({ children }) {
     const { data } = await supabase.from(EVENTS_TABLE).select('*').eq('profile_id', profileId).order('created_at', { ascending: false })
     const icos = { 'RDV planifié': '📅', 'RDV démission reconversion': '📅', 'Point téléphonique': '📞', 'Relance prévue': '📩', 'Point juridique': '⚖️', 'Signature contrat': '✍️', 'Note libre': '📝' }
     return (data || []).map((e) => ({
+      id: e.id,
+      _source: 'event',
       d: e.event_date || new Date(e.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }),
       t: e.event_type,
       n: e.description || e.event_type,
@@ -149,11 +170,33 @@ export function CRMProvider({ children }) {
     const acts = [...activities, ...events]
       .filter((a) => a._ts)
       .sort((a, b) => (b._ts || 0) - (a._ts || 0))
-      .map(({ _ts, ...rest }) => rest)
+      .map(({ _ts, ...rest }) => ({ ...rest, ts: _ts }))
     setProfileNotes((prev) => ({ ...prev, [profileId]: latestNote }))
     setProfileActivities((prev) => ({ ...prev, [profileId]: acts }))
     return { notes: latestNote, acts }
   }, [fetchNotes, fetchActivities, fetchEvents])
+
+  const deleteActivity = useCallback(async (profileId, activityId) => {
+    if (!useSupabase) return
+    await supabase.from(ACTIVITIES_TABLE).delete().eq('id', activityId)
+    const [activities, events] = await Promise.all([fetchActivities(profileId), fetchEvents(profileId)])
+    const acts = [...activities, ...events]
+      .filter((a) => a._ts)
+      .sort((a, b) => (b._ts || 0) - (a._ts || 0))
+      .map(({ _ts, ...rest }) => ({ ...rest, ts: _ts }))
+    setProfileActivities((prev) => ({ ...prev, [profileId]: acts }))
+  }, [useSupabase, fetchActivities, fetchEvents])
+
+  const deleteEvent = useCallback(async (profileId, eventId) => {
+    if (!useSupabase) return
+    await supabase.from(EVENTS_TABLE).delete().eq('id', eventId)
+    const [activities, events] = await Promise.all([fetchActivities(profileId), fetchEvents(profileId)])
+    const acts = [...activities, ...events]
+      .filter((a) => a._ts)
+      .sort((a, b) => (b._ts || 0) - (a._ts || 0))
+      .map(({ _ts, ...rest }) => ({ ...rest, ts: _ts }))
+    setProfileActivities((prev) => ({ ...prev, [profileId]: acts }))
+  }, [useSupabase, fetchActivities, fetchEvents])
 
   useEffect(() => {
     fetchProfiles()
@@ -233,23 +276,99 @@ export function CRMProvider({ children }) {
   const changeInteg = useCallback((id, val) => {
     const p = profiles.find((x) => x.id === id)
     if (!p) return
+    const oldInteg = p.integ
     const updated = { ...p, integ: val }
     updateProfile(id, { integ: val })
     persistProfileUpdate(id, updated)
+    if (useSupabase && (oldInteg !== val)) insertActivity(id, 'integration_change', oldInteg || '', val)
     showNotif(`Date d'intégration → ${val} ✓`)
-  }, [profiles, updateProfile, persistProfileUpdate, showNotif])
+  }, [profiles, updateProfile, persistProfileUpdate, showNotif, useSupabase, insertActivity])
+
+  const changeSource = useCallback((id, newSrc) => {
+    const p = profiles.find((x) => x.id === id)
+    if (!p || p.src === newSrc) return
+    const oldSrc = p.src
+    const updated = { ...p, src: newSrc }
+    setProfiles((prev) => prev.map((x) => (x.id === id ? updated : x)))
+    persistProfileUpdate(id, updated)
+    insertActivity(id, 'source_change', oldSrc, newSrc)
+    showNotif(`Source ${p.fn} ${p.ln} → ${newSrc} ✓`)
+    setProfileActivities((prev) => {
+      const acts = prev[id] || []
+      return { ...prev, [id]: [{ d: today(), t: `Source → ${newSrc}`, n: `Depuis ${oldSrc}`, ico: '📌', type: 'std' }, ...acts] }
+    })
+  }, [profiles, showNotif, persistProfileUpdate, insertActivity, today])
+
+  const changeRegion = useCallback((id, newRegion) => {
+    const p = profiles.find((x) => x.id === id)
+    if (!p || p.region === newRegion) return
+    const oldRegion = p.region || ''
+    const updated = { ...p, region: newRegion }
+    setProfiles((prev) => prev.map((x) => (x.id === id ? updated : x)))
+    persistProfileUpdate(id, updated)
+    insertActivity(id, 'region_change', oldRegion, newRegion || '—')
+    showNotif(`Région ${p.fn} ${p.ln} → ${newRegion || '—'} ✓`)
+  }, [profiles, showNotif, persistProfileUpdate, insertActivity])
+
+  const FIELD_LABELS = { fn: 'Prénom', ln: 'Nom', mail: 'Email', li: 'LinkedIn', co: 'Employeur', ti: 'Intitulé de poste', city: 'Ville' }
+  const updateProfileField = useCallback((id, field, newValue) => {
+    const p = profiles.find((x) => x.id === id)
+    if (!p) return
+    const oldVal = p[field] ?? ''
+    if (oldVal === newValue) return
+    const updated = { ...p, [field]: newValue }
+    setProfiles((prev) => prev.map((x) => (x.id === id ? updated : x)))
+    persistProfileUpdate(id, updated)
+    const label = FIELD_LABELS[field] || field
+    insertActivity(id, 'field_edit', `${label}: ${oldVal}`, `${label}: ${newValue}`)
+    setProfileActivities((prev) => {
+      const acts = prev[id] || []
+      return { ...prev, [id]: [{ d: today(), t: `${label} → ${newValue}`, n: `Depuis ${oldVal}`, ico: '✎', type: 'std' }, ...acts] }
+    })
+    showNotif(`${label} mis à jour ✓`)
+  }, [profiles, showNotif, persistProfileUpdate, insertActivity, today])
 
   const saveNote = useCallback(async (id, note) => {
     if (useSupabase) {
       await supabase.from(NOTES_TABLE).insert({ profile_id: id, content: note })
+      insertActivity(id, 'note_added', '', note.slice(0, 200))
     }
     setProfileNotes((prev) => ({ ...prev, [id]: note }))
     setProfileActivities((prev) => {
       const acts = prev[id] || []
-      return { ...prev, [id]: [{ d: today(), t: 'Note mise à jour', n: note.slice(0, 60) + (note.length > 60 ? '…' : ''), ico: '📝', type: 'std' }, ...acts] }
+      return { ...prev, [id]: [{ d: today(), t: 'Note ajoutée', n: note.slice(0, 60) + (note.length > 60 ? '…' : ''), ico: '📝', type: 'std' }, ...acts] }
     })
     showNotif('💾 Note enregistrée ✓')
-  }, [showNotif, today, useSupabase])
+  }, [showNotif, today, useSupabase, insertActivity])
+
+  const updateNote = useCallback(async (profileId, noteId, newContent, oldContent) => {
+    if (!useSupabase) return
+    await supabase.from(NOTES_TABLE).update({ content: newContent, updated_at: new Date().toISOString() }).eq('id', noteId)
+    insertActivity(profileId, 'note_edited', (oldContent || '').slice(0, 200), (newContent || '').slice(0, 200))
+    const list = await fetchNotes(profileId)
+    setProfileNotes((prev) => ({ ...prev, [profileId]: list?.[0]?.content ?? '' }))
+    setProfileActivities((prev) => {
+      const acts = prev[profileId] || []
+      return { ...prev, [profileId]: [{ d: today(), t: 'Note modifiée', n: (newContent || '').slice(0, 60) + ((newContent || '').length > 60 ? '…' : ''), ico: '📝', type: 'std' }, ...acts] }
+    })
+    showNotif('Note mise à jour ✓')
+  }, [useSupabase, fetchNotes, showNotif, insertActivity, today])
+
+  const deleteNote = useCallback(async (profileId, noteId, contentSnapshot) => {
+    if (!useSupabase) return
+    await supabase.from(NOTES_TABLE).delete().eq('id', noteId)
+    insertActivity(profileId, 'note_deleted', (contentSnapshot || '').slice(0, 200), '')
+    const list = await fetchNotes(profileId)
+    setProfileNotes((prev) => ({ ...prev, [profileId]: list?.[0]?.content ?? '' }))
+    showNotif('Note supprimée')
+  }, [useSupabase, fetchNotes, showNotif, insertActivity])
+
+  const deleteProfile = useCallback(async (profileId) => {
+    if (!useSupabase) return
+    await supabase.from(PROFILES_TABLE).delete().eq('id', profileId)
+    setProfiles((prev) => prev.filter((p) => p.id !== profileId))
+    showNotif('Profil supprimé')
+  }, [useSupabase, showNotif])
 
   const addEvent = useCallback(async (id, { type, date, note }) => {
     if (useSupabase) {
@@ -262,7 +381,7 @@ export function CRMProvider({ children }) {
     }
     setProfileActivities((prev) => {
       const acts = prev[id] || []
-      const ico = { 'RDV planifié': '📅', 'RDV démission reconversion': '📅', 'Point téléphonique': '📞', 'Relance prévue': '📩', 'Point juridique': '⚖️', 'Signature contrat': '✍️', 'Note libre': '📝' }[type] || '📌'
+      const ico = { 'RDV planifié': '📅', 'Relance': '📩', "Point d'étape": '📌', 'Démission reconversion': '📅', 'Autre': '📌' }[type] || '📌'
       return { ...prev, [id]: [{ d: date || today(), t: type, n: note || type, ico, type: 'event' }, ...acts] }
     })
     showNotif(`Événement ajouté : ${type} ✓`)
@@ -292,6 +411,7 @@ export function CRMProvider({ children }) {
       co: data.co || '—',
       ti: data.ti || '—',
       city: data.city || '—',
+      region: data.region || '',
       src: data.src || 'Chasse LinkedIn',
       stg: 'R0',
       mat: 'Froid',
@@ -309,9 +429,17 @@ export function CRMProvider({ children }) {
     const newP = { ...base, sc }
     if (useSupabase) {
       try {
-        const { data: inserted, error } = await supabase.from(PROFILES_TABLE).insert(mapProfileToRow(newP)).select('id').single()
+        let row = mapProfileToRow(newP)
+        let { data: inserted, error } = await supabase.from(PROFILES_TABLE).insert(row).select('id').single()
+        if (error && error.message && error.message.includes('region')) {
+          const { region: _r, ...rowWithoutRegion } = row
+          const res = await supabase.from(PROFILES_TABLE).insert(rowWithoutRegion).select('id').single()
+          error = res.error
+          inserted = res.data
+        }
         if (error) throw error
         setProfiles((prev) => [{ ...newP, id: inserted.id }, ...prev])
+        insertActivity(inserted.id, 'profile_added', '', 'Profil ajouté')
       } catch (err) {
         console.error('[Supabase] Erreur add profile:', err)
         showNotif(`Erreur: ${err?.message}`)
@@ -322,16 +450,22 @@ export function CRMProvider({ children }) {
     }
     showNotif(`${newP.fn} ${newP.ln} ajouté au pipeline en R0 ✓ (score: ${sc})`)
     return true
-  }, [today, showNotif, useSupabase])
+  }, [today, showNotif, useSupabase, insertActivity])
 
   const addProfilesBatch = useCallback(async (profilesData) => {
     const rows = profilesData.map((p) => {
-      const base = { fn: p.fn || '', ln: p.ln || '', co: p.co || '—', ti: p.ti || '—', city: p.city || '—', src: p.src || 'Chasse LinkedIn', mail: p.mail || '—', li: p.li || '—', stg: 'R0', mat: 'Froid', integ: '—', dur: p.dur || '', experiences: Array.isArray(p.experiences) ? p.experiences : [], formation: p.formation || '' }
+      const base = { fn: p.fn || '', ln: p.ln || '', co: p.co || '—', ti: p.ti || '—', city: p.city || '—', region: p.region || '', src: p.src || 'Chasse LinkedIn', mail: p.mail || '—', li: p.li || '—', stg: 'R0', mat: 'Froid', integ: '—', dur: p.dur || '', experiences: Array.isArray(p.experiences) ? p.experiences : [], formation: p.formation || '' }
       const sc = p.sc != null ? p.sc : calculateScore(base)
       return mapProfileToRow({ ...base, sc })
     })
     if (useSupabase && rows.length) {
-      const { data, error } = await supabase.from(PROFILES_TABLE).insert(rows).select('id, first_name, last_name, company, title, city, email, linkedin_url, source, score, stage, maturity, integration_date, created_at, experiences, duration')
+      let { data, error } = await supabase.from(PROFILES_TABLE).insert(rows).select('id, first_name, last_name, company, title, city, region, email, linkedin_url, source, score, stage, maturity, integration_date, created_at, experiences, duration')
+      if (error && error.message && error.message.includes('region')) {
+        const rowsWithoutRegion = rows.map((r) => { const { region: _r, ...rest } = r; return rest })
+        const res = await supabase.from(PROFILES_TABLE).insert(rowsWithoutRegion).select('id, first_name, last_name, company, title, city, email, linkedin_url, source, score, stage, maturity, integration_date, created_at, experiences, duration')
+        error = res.error
+        data = res.data
+      }
       if (error) throw error
       const newProfiles = (data || []).map(mapRowToProfile)
       setProfiles((prev) => [...newProfiles, ...prev])
@@ -340,8 +474,9 @@ export function CRMProvider({ children }) {
     return 0
   }, [useSupabase])
 
-  const filteredProfiles = searchQuery
-    ? profiles.filter((p) => `${p.fn} ${p.ln} ${p.co} ${p.city}`.toLowerCase().includes(searchQuery.toLowerCase()))
+  const searchTrimmed = (searchQuery || '').trim()
+  const filteredProfiles = searchTrimmed
+    ? profiles.filter((p) => `${p.fn} ${p.ln} ${p.co} ${p.city} ${p.region || ''}`.toLowerCase().includes(searchTrimmed.toLowerCase()))
     : profiles
 
   return (
@@ -360,13 +495,23 @@ export function CRMProvider({ children }) {
         changeStage,
         changeMaturity,
         changeInteg,
+        changeSource,
+        changeRegion,
+        updateProfileField,
         saveNote,
+        updateNote,
+        deleteNote,
+        deleteProfile,
         addEvent,
         addProfile,
         addProfilesBatch,
         updateProfileScore,
         fetchProfiles,
         loadProfileDetail,
+        fetchNotes,
+        fetchActivities,
+        deleteActivity,
+        deleteEvent,
         profileNotes,
         profileActivities,
       }}

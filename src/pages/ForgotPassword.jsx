@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { supabase } from '../lib/supabase'
 
 const fieldClass = 'w-full py-3 px-4 rounded-lg bg-white border border-white/20 text-[var(--text)] font-[inherit] text-[15px] outline-none focus:border-white/40 focus:ring-2 focus:ring-white/20 transition-all placeholder:text-[var(--t3)]'
 
@@ -16,13 +17,21 @@ export default function ForgotPassword() {
     if (!email.trim()) return
     setError('')
     setSubmitting(true)
-    const { error: err } = await resetPasswordForEmail(email.trim())
-    setSubmitting(false)
-    if (err) {
-      setError(err.message || 'Erreur lors de l\'envoi')
-      return
+    try {
+      const { data: hasAccess } = await supabase.rpc('email_has_access', { check_email: email.trim() })
+      if (!hasAccess) {
+        setError('Accès non autorisé')
+        return
+      }
+      const { error: err } = await resetPasswordForEmail(email.trim())
+      if (err) {
+        setError(err.message || 'Erreur lors de l\'envoi')
+        return
+      }
+      setSent(true)
+    } finally {
+      setSubmitting(false)
     }
-    setSent(true)
   }
 
   return (
@@ -66,6 +75,7 @@ export default function ForgotPassword() {
             >
               {submitting ? 'Envoi en cours…' : 'Recevoir un lien de réinitialisation'}
             </button>
+            <p className="text-white/50 text-[12px] text-center">Seuls les comptes autorisés peuvent réinitialiser leur mot de passe.</p>
             <Link
               to="/login"
               className="text-white/80 text-[13px] text-center hover:text-white transition-colors"
