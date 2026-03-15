@@ -14,6 +14,43 @@ const BANQUES_CAPTIVES = [
   'banque de savoie', 'banque palatine', 'tarneaud',
   'laydernier', 'nuger', 'kolb', 'rhône alpes',
   'sgpb', 'société générale private banking',
+  'credit du nord', 'crédit du nord', 'groupe credit du nord',
+  'louvre banque', 'louvre banque privee', 'louvre banque privée',
+  'societe generale', 'sg privee', 'banque privee by ca', 'banque privée by ca',
+  'ca31', 'credit agricole du nord', 'crédit agricole du nord',
+  'credit agricole normandie', 'credit agricole bretagne',
+  'credit agricole centre', 'credit agricole sud',
+  'credit agricole toulouse', 'credit agricole occitanie',
+  'credit agricole paca', 'credit agricole alpes',
+  'credit agricole rhone', 'credit agricole loire',
+  'credit agricole atlantique', 'credit agricole charente',
+  'credit agricole berry', 'credit agricole brie',
+  'credit agricole champagne', 'credit agricole alsace',
+  'credit agricole lorraine', 'credit agricole franche',
+  'banque privee', 'banque privée',
+  'banque de gestion privee', 'banque de gestion privée',
+  'bgpi', 'oddo bhf', 'rothschild', 'lazard',
+  'neuflize', 'pictet', 'lombard odier', 'ubs',
+  'jp morgan', 'goldman sachs', 'merrill lynch',
+  'credit suisse', 'deutsche bank', 'barclays',
+  'banque transatlantique', 'banque martin maurel',
+  'banque richelieu', 'banque leonard de vinci',
+  'banque sba', 'banque cic', 'banque tarneaud',
+  'banque laydernier', 'banque nuger', 'banque kolb',
+  'banque rhone alpes', 'banque populaire aura',
+  'banque populaire occitanie', 'banque populaire aquitaine',
+  'banque populaire bourgogne', 'banque populaire alsace',
+  'banque populaire nord', 'banque populaire atlantic',
+  'banque populaire val de france', 'banque populaire grand ouest',
+  'banque populaire mediterranee', 'banque populaire rives',
+  'caisse epargne', "caisse d'epargne", 'cepac',
+  'caisse epargne paca', 'caisse epargne rhone alpes',
+  'caisse epargne occitanie', 'caisse epargne bretagne',
+  'caisse epargne normandie', 'caisse epargne hauts',
+  'caisse epargne ile de france', 'caisse epargne bourgogne',
+  'caisse epargne grand est', 'caisse epargne loire',
+  'caisse epargne midi', 'caisse epargne languedoc',
+  'caisse epargne aquitaine', 'caisse epargne poitou',
 ]
 
 const ASSURANCES_CAPTIVES = [
@@ -99,10 +136,18 @@ const TITRES_CGP_RAW = [
   'chargé de clientèle patrimoniale',
   'conseiller clientele privee',
   'conseiller clientèle privée',
+  'conseillere clientele privee',
+  'conseillère clientèle privée',
   'conseiller de clientele privee',
   'conseiller de clientèle privée',
+  'conseillere relation clientele privee',
+  'conseillère relation clientèle privée',
+  'conseiller relation clientele privee',
+  'conseiller relation clientèle privée',
   'conseiller prive',
   'conseiller privé',
+  'conseillere privee',
+  'conseillère privée',
   'responsable clientele privee',
   'responsable clientèle privée',
   'responsable gestion de patrimoine',
@@ -187,6 +232,24 @@ const TITRES_MOYENS_RAW = [
 const TITRES_CGP = TITRES_CGP_RAW.map(normalize)
 const TITRES_MOYENS = TITRES_MOYENS_RAW.map(normalize)
 
+const CGP_TITLE_KEYWORDS = ['prive', 'privee', 'patrimoine', 'wealth', 'cgp', 'banquier prive', 'private bank', 'family office', 'gestion de fortune']
+const ADVISOR_TITLE_KEYWORDS = ['conseiller', 'gestionnaire', 'responsable', 'advisor', 'manager', 'banker', 'chargé', 'charge', 'directeur']
+const BANK_COMPANY_KEYWORDS = ['banque', 'credit', 'caisse']
+const INSURANCE_COMPANY_KEYWORDS = ['assurance', 'prevoyance', 'mutuelle']
+
+function hasCGPTitleKeyword(titleNorm) {
+  return CGP_TITLE_KEYWORDS.some((k) => titleNorm.includes(normalize(k)))
+}
+function hasAdvisorTitleKeyword(titleNorm) {
+  return ADVISOR_TITLE_KEYWORDS.some((k) => titleNorm.includes(normalize(k)))
+}
+function hasBankCompanyKeyword(companyNorm) {
+  return BANK_COMPANY_KEYWORDS.some((k) => companyNorm.includes(k))
+}
+function hasInsuranceCompanyKeyword(companyNorm) {
+  return INSURANCE_COMPANY_KEYWORDS.some((k) => companyNorm.includes(k))
+}
+
 const MOTS_CABINET_INDEPENDANT = [
   'cabinet', 'indépendant', 'courtier', 'broker',
   'patrimoine conseil', 'conseil en patrimoine',
@@ -207,6 +270,7 @@ export function scoreProfile(profile, experiences = []) {
   const signals = []
 
   const company = (profile.company || profile.co || profile.companyName || '').toLowerCase()
+  const companyNorm = normalize(company)
   const titleNorm = normalize(profile.title || profile.ti || profile.jobTitle || '')
 
   console.log('Scoring profil:', {
@@ -225,9 +289,11 @@ export function scoreProfile(profile, experiences = []) {
   const thPriority = cfg.threshold_priority ?? 70
   const thTowork = cfg.threshold_towork ?? 50
 
-  // 1. EMPLOYEUR ACTUEL
-  const isBanque = BANQUES_CAPTIVES.some((b) => company.includes(b))
-  const isAssurance = ASSURANCES_CAPTIVES.some((a) => company.includes(a))
+  // 1. EMPLOYEUR ACTUEL (listes explicites + fallback mots-clés)
+  const isBanqueList = BANQUES_CAPTIVES.some((b) => companyNorm.includes(normalize(b)))
+  const isAssuranceList = ASSURANCES_CAPTIVES.some((a) => companyNorm.includes(normalize(a)))
+  const isBanque = isBanqueList || (!isAssuranceList && hasBankCompanyKeyword(companyNorm))
+  const isAssurance = isAssuranceList || (!isBanqueList && hasInsuranceCompanyKeyword(companyNorm))
 
   if (isBanque) {
     score += wEmployer
@@ -235,16 +301,19 @@ export function scoreProfile(profile, experiences = []) {
   } else if (isAssurance) {
     score += wEmployer
     signals.push('Assurance captive')
-  } else if (MOTS_CABINET_INDEPENDANT.some((c) => company.includes(c))) {
+  } else if (MOTS_CABINET_INDEPENDANT.some((c) => companyNorm.includes(normalize(c)))) {
     score += Math.round(wEmployer * 0.2)
     signals.push('Cabinet indépendant')
   }
 
-  // 2. INTITULÉ ACTUEL
-  if (TITRES_CGP.some((t) => titleNorm.includes(t))) {
+  // 2. INTITULÉ ACTUEL (détection par mots-clés)
+  const hasCGPKeyword = hasCGPTitleKeyword(titleNorm) || TITRES_CGP.some((t) => titleNorm.includes(t))
+  const hasAdvisorKeyword = hasAdvisorTitleKeyword(titleNorm) || TITRES_MOYENS.some((t) => titleNorm.includes(t))
+
+  if (hasCGPKeyword) {
     score += wTitle
     signals.push('Titre CGP / Banquier privé')
-  } else if (TITRES_MOYENS.some((t) => titleNorm.includes(t))) {
+  } else if (hasAdvisorKeyword) {
     score += Math.round(wTitle * 0.5)
     signals.push('Titre conseiller')
   }
@@ -282,11 +351,12 @@ export function scoreProfile(profile, experiences = []) {
     const pastExperiences = exps.filter((e) => !e.isCurrent)
 
     const hadCGP = pastExperiences.some((exp) => {
-      const t = (exp.title || '').toLowerCase()
-      const c = (exp.company || '').toLowerCase()
+      const tNorm = normalize(exp.title || '')
+      const cNorm = normalize(exp.company || '')
       return (
-        TITRES_CGP.some((x) => t.includes(x)) ||
-        MOTS_CABINET_INDEPENDANT.some((x) => c.includes(x))
+        hasCGPTitleKeyword(tNorm) ||
+        TITRES_CGP.some((x) => tNorm.includes(x)) ||
+        MOTS_CABINET_INDEPENDANT.some((x) => cNorm.includes(normalize(x)))
       )
     })
     if (hadCGP) {
@@ -295,10 +365,12 @@ export function scoreProfile(profile, experiences = []) {
     }
 
     const hadBanque = pastExperiences.some((exp) => {
-      const c = (exp.company || '').toLowerCase()
+      const cNorm = normalize(exp.company || '')
       return (
-        BANQUES_CAPTIVES.some((b) => c.includes(b)) ||
-        ASSURANCES_CAPTIVES.some((a) => c.includes(a))
+        BANQUES_CAPTIVES.some((b) => cNorm.includes(normalize(b))) ||
+        ASSURANCES_CAPTIVES.some((a) => cNorm.includes(normalize(a))) ||
+        hasBankCompanyKeyword(cNorm) ||
+        hasInsuranceCompanyKeyword(cNorm)
       )
     })
     if (hadBanque && !isBanque && !isAssurance) {
@@ -322,14 +394,17 @@ export function calculateScore(profile) {
 
 /** Badge pour la timeline : 'cabinet' | 'captif' | null */
 export function getExperienceBadge(exp) {
-  const c = (exp.company || '').toLowerCase()
-  const t = normalize(exp.title || '')
+  const cNorm = normalize(exp.company || '')
+  const tNorm = normalize(exp.title || '')
   const isCabinet =
-    TITRES_CGP.some((x) => t.includes(x)) ||
-    MOTS_CABINET_INDEPENDANT.some((x) => c.includes(x))
+    hasCGPTitleKeyword(tNorm) ||
+    TITRES_CGP.some((x) => tNorm.includes(x)) ||
+    MOTS_CABINET_INDEPENDANT.some((x) => cNorm.includes(normalize(x)))
   const isCaptif =
-    BANQUES_CAPTIVES.some((b) => c.includes(b)) ||
-    ASSURANCES_CAPTIVES.some((a) => c.includes(a))
+    BANQUES_CAPTIVES.some((b) => cNorm.includes(normalize(b))) ||
+    ASSURANCES_CAPTIVES.some((a) => cNorm.includes(normalize(a))) ||
+    hasBankCompanyKeyword(cNorm) ||
+    hasInsuranceCompanyKeyword(cNorm)
   if (isCabinet) return 'cabinet'
   if (isCaptif) return 'captif'
   return null

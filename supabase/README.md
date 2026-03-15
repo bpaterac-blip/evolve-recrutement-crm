@@ -49,3 +49,10 @@ Remplissez `.env.local` avec vos clés Supabase :
 VITE_SUPABASE_URL=https://xxxx.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJ...
 ```
+
+## 4. Edge Function Netrows (enrichissement LinkedIn)
+
+Pour l'enrichissement via Netrows (évite CORS) :
+
+1. Déployer la fonction : `supabase functions deploy netrows-enrich`
+2. Configurer le secret : `supabase secrets set NETROWS_API_KEY=votre_cle_netrows`

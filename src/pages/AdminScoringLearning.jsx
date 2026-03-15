@@ -27,7 +27,7 @@ export default function AdminScoringLearning() {
     setLoading(true)
     const { data: fb } = await supabase.from('scoring_feedback').select('*').order('created_at', { ascending: false })
     setFeedback(fb || [])
-    const ids = [...new Set((fb || []).map((f) => f.profile_id))]
+    const ids = [...new Set((fb || []).map((f) => f.profile_id).filter(Boolean))]
     if (ids.length) {
       const { data: profs } = await supabase.from('profiles').select('id, first_name, last_name, company').in('id', ids)
       setProfiles(Object.fromEntries((profs || []).map((p) => [p.id, p])))
@@ -64,7 +64,10 @@ export default function AdminScoringLearning() {
     }
     const correctionsText = feedback.slice(0, 50).map((f) => {
       const p = profiles[f.profile_id]
-      return `- ${p?.first_name || ''} ${p?.last_name || ''} (${p?.company || '—'}): ${f.previous_score} → ${f.new_score} — ${(f.feedback_note || f.reason || '').slice(0, 150)}`
+      const pd = f.profile_data || {}
+      const name = p ? `${p.first_name || ''} ${p.last_name || ''}`.trim() : (pd.name || '—')
+      const company = p?.company || pd.company || '—'
+      return `- ${name} (${company}): ${f.previous_score} → ${f.new_score} — ${(f.feedback_note || f.reason || '').slice(0, 150)}`
     }).join('\n')
 
     const systemPrompt = `Tu es un expert en scoring de prospects CGP. Voici les corrections manuelles apportées au scoring :
@@ -208,10 +211,13 @@ Analyse ces corrections et réponds UNIQUEMENT en JSON valide (pas de markdown, 
               <tbody>
                 {feedback.map((f) => {
                   const p = profiles[f.profile_id]
+                  const pd = f.profile_data || {}
+                  const name = p ? `${p.first_name || ''} ${p.last_name || ''}`.trim() : (pd.name || '—')
+                  const company = p?.company || pd.company || '—'
                   return (
                     <tr key={f.id} className="border-b hover:bg-[#F8F5F1]" style={{ borderColor: 'var(--border)' }}>
-                      <td className="py-2.5 px-4 text-[13.5px]">{p ? `${p.first_name || ''} ${p.last_name || ''}` : '—'}</td>
-                      <td className="py-2.5 px-4 text-[13px]">{p?.company || '—'}</td>
+                      <td className="py-2.5 px-4 text-[13.5px]">{name || '—'}</td>
+                      <td className="py-2.5 px-4 text-[13px]">{company || '—'}</td>
                       <td className="py-2.5 px-4">{f.previous_score ?? '—'}</td>
                       <td className="py-2.5 px-4 font-medium" style={{ color: ACCENT }}>{f.new_score}</td>
                       <td className="py-2.5 px-4 text-[12px] max-w-[200px] truncate" title={f.feedback_note || f.reason}>{(f.feedback_note || f.reason || '—').slice(0, 60)}…</td>

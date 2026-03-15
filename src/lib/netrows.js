@@ -1,51 +1,39 @@
 /**
- * API Netrows pour enrichir les profils avec les expériences LinkedIn
+ * Enrichissement Netrows via Supabase Edge Function (évite CORS)
  */
 
+import { supabase } from './supabase'
+
 export async function enrichProfileWithNetrows(linkedinUrl) {
-  const apiKey = import.meta.env.VITE_NETROWS_API_KEY
-  if (!apiKey) throw new Error('Clé API Netrows manquante')
   if (!linkedinUrl) throw new Error('URL LinkedIn manquante')
 
-  const url = linkedinUrl.startsWith('http') ? linkedinUrl : `https://${linkedinUrl}`
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+  const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+  // Récupérer le token de session actuel
+  const { data: { session } } = await supabase.auth.getSession()
+  const authToken = session?.access_token || supabaseKey
+
   const response = await fetch(
-    `https://api.netrows.com/linkedin/profile?url=${encodeURIComponent(url)}`,
+    `${supabaseUrl}/functions/v1/netrows-enrich`,
     {
+      method: 'POST',
       headers: {
-        Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+        'apikey': supabaseKey,
       },
+      body: JSON.stringify({ linkedinUrl }),
     }
   )
 
-  if (!response.ok) throw new Error(`Netrows erreur: ${response.status}`)
+  if (!response.ok) {
+    const err = await response.text()
+    throw new Error(`Erreur Edge Function: ${response.status} - ${err}`)
+  }
 
   const data = await response.json()
+  if (!data.success) throw new Error(data.error || 'Erreur Netrows')
 
-  const experiences = (data.position || []).map((p) => ({
-    company: p.companyName || '',
-    title: p.title || '',
-    startYear: p.start?.year || null,
-    startMonth: p.start?.month || null,
-    endYear: p.end?.year || null,
-    endMonth: p.end?.month || null,
-    isCurrent: !p.end?.year || p.end?.year === 0,
-    location: p.location || '',
-    description: p.description || '',
-  }))
-
-  return {
-    experiences,
-    headline: data.headline || '',
-    summary: data.summary || '',
-    city: data.geo?.city || '',
-    skills: (data.skills || []).map((s) => s.name),
-    educations: (data.educations || []).map((e) => ({
-      school: e.schoolName,
-      degree: e.degree,
-      field: e.fieldOfStudy,
-      startYear: e.start?.year,
-      endYear: e.end?.year,
-    })),
-  }
+  return data
 }
