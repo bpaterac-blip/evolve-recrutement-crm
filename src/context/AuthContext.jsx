@@ -17,10 +17,22 @@ async function fetchUserRoleAndStatus(userId) {
   return { role, status }
 }
 
+async function fetchUserProfile(userId) {
+  if (!userId) return null
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .select('first_name, last_name, full_name')
+    .eq('id', userId)
+    .maybeSingle()
+  if (error) console.warn('AuthContext fetchUserProfile:', { userId, error: error.message })
+  return data
+}
+
 const SAFETY_TIMEOUT_MS = 2000
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
+  const [userProfile, setUserProfile] = useState(null)
   const [role, setRole] = useState(null)
   const [loading, setLoading] = useState(false)
 
@@ -30,33 +42,41 @@ export function AuthProvider({ children }) {
       if (!cancelled) setLoading(false)
     }, SAFETY_TIMEOUT_MS)
 
-    const applySession = (session) => {
+    const applySession = async (session) => {
       if (!session?.user) {
         setUser(null)
+        setUserProfile(null)
         setRole('user')
         setLoading(false)
         return
       }
-      fetchUserRoleAndStatus(session.user.id).then(({ role: r, status }) => {
+      try {
+        const [{ role: r, status }, profile] = await Promise.all([
+          fetchUserRoleAndStatus(session.user.id),
+          fetchUserProfile(session.user.id),
+        ])
         if (cancelled) return
         console.log('Role chargé (applySession):', r)
         if (status === 'suspended') {
           supabase.auth.signOut()
           setUser(null)
+          setUserProfile(null)
           setRole('user')
         } else {
           setUser(session.user)
+          setUserProfile(profile)
           setRole(r ?? 'user')
         }
-      }).catch((err) => {
-        console.warn('AuthContext applySession fetch role failed:', err)
+      } catch (err) {
+        console.warn('AuthContext applySession fetch failed:', err)
         if (!cancelled) {
           setUser(session.user)
+          setUserProfile(null)
           setRole('user')
         }
-      }).finally(() => {
+      } finally {
         if (!cancelled) setLoading(false)
-      })
+      }
     }
 
     const sessionPromise = supabase.auth.getSession()
@@ -96,25 +116,32 @@ export function AuthProvider({ children }) {
         }
         if (!session?.user) {
           setUser(null)
+          setUserProfile(null)
           setRole('user')
           setLoading(false)
           return
         }
-        fetchUserRoleAndStatus(session.user.id).then(({ role: r, status }) => {
+        Promise.all([
+          fetchUserRoleAndStatus(session.user.id),
+          fetchUserProfile(session.user.id),
+        ]).then(([{ role: r, status }, profile]) => {
           if (cancelled) return
           console.log('Role chargé (onAuthStateChange):', r)
           if (status === 'suspended') {
             supabase.auth.signOut()
             setUser(null)
+            setUserProfile(null)
             setRole('user')
           } else {
             setUser(session.user)
+            setUserProfile(profile)
             setRole(r ?? 'user')
           }
         }).catch((err) => {
-          console.warn('AuthContext onAuthStateChange fetch role failed:', err)
+          console.warn('AuthContext onAuthStateChange fetch failed:', err)
           if (!cancelled) {
             setUser(session.user)
+            setUserProfile(null)
             setRole('user')
           }
         }).finally(() => {
@@ -153,11 +180,19 @@ export function AuthProvider({ children }) {
     await supabase.auth.signOut()
   }
 
+  const refreshUserProfile = async () => {
+    if (!user?.id) return
+    const profile = await fetchUserProfile(user.id)
+    setUserProfile(profile)
+  }
+
   const roleValue = role ?? 'user'
   return (
     <AuthContext.Provider
       value={{
         user,
+        userProfile,
+        refreshUserProfile,
         role: roleValue,
         loading,
         signInWithPassword,

@@ -1,5 +1,5 @@
 /**
- * Scoring CGP Evolve : employeur captif, intitulé, ancienneté, expériences passées
+ * Scoring CGP Evolve : employeur banque/assurance, intitulé, ancienneté, expériences passées
  * Poids configurables via scoring_config (Supabase) - chargés au démarrage
  */
 
@@ -297,10 +297,10 @@ export function scoreProfile(profile, experiences = []) {
 
   if (isBanque) {
     score += wEmployer
-    signals.push('Banque captive')
+    signals.push('Employeur Banque')
   } else if (isAssurance) {
     score += wEmployer
-    signals.push('Assurance captive')
+    signals.push('Employeur Assurance')
   } else if (MOTS_CABINET_INDEPENDANT.some((c) => companyNorm.includes(normalize(c)))) {
     score += Math.round(wEmployer * 0.2)
     signals.push('Cabinet indépendant')
@@ -392,7 +392,7 @@ export function calculateScore(profile) {
   return scoreProfile(profile || {}, exps).score
 }
 
-/** Badge pour la timeline : 'cabinet' | 'captif' | null */
+/** Badge pour la timeline : 'cabinet' | 'banque' | 'assurance' | null */
 export function getExperienceBadge(exp) {
   const cNorm = normalize(exp.company || '')
   const tNorm = normalize(exp.title || '')
@@ -400,12 +400,14 @@ export function getExperienceBadge(exp) {
     hasCGPTitleKeyword(tNorm) ||
     TITRES_CGP.some((x) => tNorm.includes(x)) ||
     MOTS_CABINET_INDEPENDANT.some((x) => cNorm.includes(normalize(x)))
-  const isCaptif =
+  const isBanque =
     BANQUES_CAPTIVES.some((b) => cNorm.includes(normalize(b))) ||
+    hasBankCompanyKeyword(cNorm)
+  const isAssurance =
     ASSURANCES_CAPTIVES.some((a) => cNorm.includes(normalize(a))) ||
-    hasBankCompanyKeyword(cNorm) ||
     hasInsuranceCompanyKeyword(cNorm)
   if (isCabinet) return 'cabinet'
-  if (isCaptif) return 'captif'
+  if (isBanque) return 'banque'
+  if (isAssurance) return 'assurance'
   return null
 }

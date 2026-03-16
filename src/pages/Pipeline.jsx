@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useCRM } from '../context/CRMContext'
+import { useAuth } from '../context/AuthContext'
+import { useViewMode } from '../context/ViewModeContext'
 import { enrichProfileWithNetrows } from '../lib/netrows'
 import { scoreProfile, getExperienceBadge } from '../lib/scoring'
 import {
@@ -55,7 +57,16 @@ function capFirst(str) {
 
 const ICON_SM = { width: 13, height: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#1A1A1A' }
 
-function KanbanCard({ profile, stage, onClick, isSelected }) {
+function hashToColor(str) {
+  if (!str) return { bg: '#E5E7EB', text: '#6B7280' }
+  let h = 0
+  for (let i = 0; i < str.length; i++) h = ((h << 5) - h) + str.charCodeAt(i) | 0
+  const hues = ['#173731', '#1E5FA0', '#B86B0F', '#7B3FC4', '#0E7490', '#C2410C']
+  const idx = Math.abs(h) % hues.length
+  return { bg: hues[idx] + '20', text: hues[idx] }
+}
+
+function KanbanCard({ profile, stage, onClick, isSelected, ownerBadge }) {
   const matColor = MATURITY_COLORS[profile.mat] || { bg: '#F3F4F6', text: '#6B7280' }
 
   const handleClick = () => onClick(profile)
@@ -97,7 +108,10 @@ function KanbanCard({ profile, stage, onClick, isSelected }) {
         >
           {(profile.fn?.[0] || '') + (profile.ln?.[0] || '')}
         </div>
-        <div style={{ fontWeight: 600, fontSize: 14, minWidth: 0, color: '#1A1A1A' }}>{profile.fn} {profile.ln}</div>
+        <div style={{ fontWeight: 600, fontSize: 14, minWidth: 0, color: '#1A1A1A', flex: 1 }}>{profile.fn} {profile.ln}</div>
+        {ownerBadge && (
+          <span style={{ fontSize: 10, fontWeight: 600, width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, backgroundColor: ownerBadge.bg, color: ownerBadge.text }} title={profile.owner_full_name || profile.owner_email || ''}>{ownerBadge.initial}</span>
+        )}
       </div>
 
       {/* LIGNE 2 - Employeur */}
@@ -173,7 +187,7 @@ function KanbanCard({ profile, stage, onClick, isSelected }) {
   )
 }
 
-function DroppableColumn({ stage, cards, onCardClick, selectedCardId, onDrop }) {
+function DroppableColumn({ stage, cards, onCardClick, selectedCardId, onDrop, showOwnerBadge }) {
   const c = STAGE_COLORS[stage] || {}
 
   return (
@@ -191,9 +205,13 @@ function DroppableColumn({ stage, cards, onCardClick, selectedCardId, onDrop }) 
         <span className="bg-white/60 py-0.5 px-1.5 rounded-[10px] text-[11px]">{cards.length}</span>
       </div>
       <div className="flex flex-col gap-1.5 min-h-[80px]">
-        {cards.map((p) => (
-          <KanbanCard key={p.id} profile={p} stage={stage} onClick={onCardClick} isSelected={p.id === selectedCardId} />
-        ))}
+        {cards.map((p) => {
+          const ownerBadge = showOwnerBadge && (p.owner_email || p.owner_id) ? {
+            initial: (p.owner_full_name?.trim()?.[0] || (p.owner_email || '').split('@')[0]?.[0] || '?').toUpperCase(),
+            ...hashToColor(p.owner_email || String(p.owner_id)),
+          } : null
+          return <KanbanCard key={p.id} profile={p} stage={stage} onClick={onCardClick} isSelected={p.id === selectedCardId} ownerBadge={ownerBadge} />
+        })}
       </div>
     </div>
   )
@@ -203,7 +221,10 @@ const NOTE_TEMPLATE_OPTS = ['Note libre', 'Récapitulatif R0', 'Récapitulatif R
 
 export default function Pipeline() {
   const navigate = useNavigate()
+  const { user, userProfile, role } = useAuth()
+  const { viewMode } = useViewMode()
   const { filteredProfiles, changeStage, changeMaturity, changeInteg, changeSource, changeRegion, updateProfileField, updateProfile, showNotif, useSupabase } = useCRM()
+  const isGlobalView = role === 'admin' && viewMode === 'global'
   const pipeline = filteredProfiles.filter((p) => p.stg && p.stg !== 'Recruté' && p.mat !== 'Archivé')
   const all = filteredProfiles.filter((p) => p.stg && p.mat !== 'Archivé')
   const [modalProfile, setModalProfile] = useState(null)
@@ -328,7 +349,7 @@ export default function Pipeline() {
       profile_id: modalProfile.id,
       content: noteContent.trim(),
       template: noteTemplate,
-      author: 'Baptiste',
+      author: userProfile?.full_name?.trim() || user?.email || null,
     })
     await supabase.from('activities').insert({
       profile_id: modalProfile.id,
@@ -527,12 +548,12 @@ export default function Pipeline() {
                 stage={st}
                 cards={cards}
                 onCardClick={(p) => {
-                  console.log('Clic carte', p.id)
                   setModalProfile(p)
                   setSelectedCardId(p.id)
                 }}
                 selectedCardId={selectedCardId}
                 onDrop={handleDrop}
+                showOwnerBadge={isGlobalView}
               />
             )
           })}
@@ -773,7 +794,8 @@ export default function Pipeline() {
                           <div style={{ fontSize: 11, color: '#6B6B6B', marginTop: 2 }}>{formatExperiencePeriod(exp)}</div>
                           <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
                             {badge === 'cabinet' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#D4EDE1', color: '#1A7A4A', fontWeight: 500 }}>Cabinet CGP</span>}
-                            {badge === 'captif' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#FDE8E8', color: '#c0392b', fontWeight: 500 }}>Captif</span>}
+                            {badge === 'banque' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#EFF6FF', color: '#1D4ED8', fontWeight: 500 }}>Banque</span>}
+                            {badge === 'assurance' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#ECFDF5', color: '#065F46', fontWeight: 500 }}>Assurance</span>}
                           </div>
                         </div>
                       )

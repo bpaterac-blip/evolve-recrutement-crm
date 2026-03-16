@@ -5,7 +5,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
 
 /**
  * Extrait le texte d'un PDF en préservant la structure par lignes.
- * Groupement par position Y pour détecter les retours à la ligne.
  */
 export async function extractTextFromPDF(file) {
   const buffer = await file.arrayBuffer()
@@ -49,176 +48,288 @@ export async function extractTextFromPDF(file) {
   return lines.join('\n')
 }
 
-// Mois FR/EN pour détection des dates
-const FRENCH_MONTHS = /janv\.?|févr\.?|mars|avr\.?|mai|juin|juil\.?|août|sept\.?|oct\.?|nov\.?|déc\.?|janvier|février|avril|juillet|septembre|octobre|novembre|décembre|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec/i
-// Durée : (X ans Y mois) ou (X mois)
-const DURATION_RE = /\((\d+\s*ans?\s*(\d+\s*mois?)?|\d+\s*mois?)\)/i
-const FRENCH_REGION = /(Paris|Lyon|Marseille|Toulouse|Bordeaux|Nantes|Nice|Montpellier|France|Île-de-France|Rhône|Occitanie|PACA|Provence|Hauts-de-France)/i
-
-function parseDuration(str) {
-  if (!str) return ''
-  const m = String(str).match(DURATION_RE)
-  return m ? m[1].trim() : ''
-}
-
 /**
- * Parse le texte PDF LinkedIn selon la structure standard.
- * STRUCTURE: Nom (après Languages ou avant titre) → Titre court → Ville → Résumé → Expérience → Formation
+ * Parse le texte PDF LinkedIn selon la structure standard :
+ * Coordonnées → Compétences/Langues → Nom → Titre → Ville → Résumé → Expérience → Formation
  */
-export function parseLinkedInPDFText(text) {
-  const lines = text.split(/\n/).map((s) => s.trim()).filter(Boolean)
-  let fn = ''
-  let ln = ''
-  let shortTitle = ''
+export function parsePDFLinkedIn(rawText) {
+  const allLines = rawText
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0)
+
+  console.log('=== TEXTE BRUT PDF (lignes) ===')
+  allLines.forEach((l, i) => console.log(`${i}: "${l}"`))
+  console.log('=== FIN TEXTE BRUT ===')
+
+  const isSection = (l) =>
+    [
+      'Expérience', 'Experience', 'Formation', 'Education',
+      'Résumé', 'Summary', 'Compétences', 'Skills',
+      'Certifications', 'Langues', 'Languages',
+      'Principales compétences', 'Coordonnées', 'Contact',
+      'Honors-Awards', 'Projets', 'Bénévolat', 'Publications',
+    ].includes(l)
+
+  const isDate = (l) =>
+    /\d{4}\s*[-–]\s*(Present|Présent|\d{4})/i.test(l) ||
+    /(janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)\s+\d{4}/i.test(l)
+
+  const isDuration = (l) => /^\d+\s*(an|ans|mois)(\s+\d+\s*(an|ans|mois))?$/.test(l)
+
+  const isPageMarker = (l) => /^Page \d+ (of|sur) \d+$/i.test(l)
+
+  const isLocation = (l) =>
+    l.length < 80 &&
+    !isDate(l) &&
+    !isDuration(l) &&
+    /(France|Paris|Lyon|Marseille|Toulouse|Bordeaux|Nantes|,\s*(France|Occitanie|PACA|Île-de-France|Auvergne|Bretagne|Normandie|Aquitaine|Provence|Rhône|Hauts-de|Grand Est|Pays de|Nouvelle-Aquitaine|Bourgogne|Centre-Val))/i.test(l)
+
+  const isDescription = (l) =>
+    l.startsWith('-') ||
+    l.startsWith('•') ||
+    l.startsWith('–') ||
+    l.startsWith('(') ||
+    l.length > 100 ||
+    isPageMarker(l)
+
+  const extractEmail = (lines) => {
+    for (const l of lines) {
+      const m = l.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/)
+      if (m) return m[0]
+    }
+    return ''
+  }
+
+  const extractLinkedIn = (lines) => {
+    for (const l of lines) {
+      if (l.includes('linkedin.com/in/')) {
+        const url = l.replace(/\s*\(LinkedIn\)\s*/i, '').trim()
+        return url.startsWith('http') ? url : 'https://' + url
+      }
+    }
+    return ''
+  }
+
+  const extractYears = (dateStr) => {
+    const MONTHS = {
+      janvier: 1, février: 2, mars: 3, avril: 4, mai: 5, juin: 6,
+      juillet: 7, août: 8, septembre: 9, octobre: 10,
+      novembre: 11, décembre: 12,
+    }
+    const years = (dateStr.match(/\d{4}/g) || []).map(Number)
+    const isCurrent = /Present|Présent/i.test(dateStr)
+    const monthList =
+      (dateStr.toLowerCase().match(
+        /(janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)/g
+      ) || [])
+    return {
+      startYear: years[0] || null,
+      startMonth: MONTHS[monthList[0]] || null,
+      endYear: isCurrent ? null : (years[1] || null),
+      isCurrent,
+    }
+  }
+
+  const email = extractEmail(allLines)
+  const linkedinUrl = extractLinkedIn(allLines)
+
+  const expIdx = allLines.findIndex((l) => l === 'Expérience' || l === 'Experience')
+  const formIdx = allLines.findIndex((l) => l === 'Formation' || l === 'Education')
+
+  const LANG_RE = /(Native or Bilingual|Professional Working|Limited Working|Elementary)/i
+  let name = ''
+  let nameIdx = -1
+  const searchEnd = expIdx > 0 ? expIdx : 50
+
+  for (let i = 0; i < searchEnd; i++) {
+    const l = allLines[i]
+    if (isSection(l) || isDate(l) || isDuration(l) || LANG_RE.test(l)) continue
+    if (l.includes('@') || l.includes('linkedin') || l.includes('http')) continue
+    if (l.includes('facebook') || l.includes('www.')) continue
+    if (l.length >= 4 && l.length <= 60 && !l.match(/^\d/)) {
+      const prevSection = allLines
+        .slice(Math.max(0, i - 5), i)
+        .some((pl) =>
+          ['Languages', 'Langues', 'Certifications', 'Honors-Awards', 'Principales compétences'].includes(pl)
+        )
+      if (prevSection || i > 10) {
+        name = l
+        nameIdx = i
+        break
+      }
+    }
+  }
+
+  let profileTitle = ''
   let city = ''
-  let summary = ''
-  let li = ''
+  let region = ''
+  if (nameIdx > -1) {
+    for (let i = nameIdx + 1; i < Math.min(nameIdx + 5, allLines.length); i++) {
+      const l = allLines[i]
+      if (isSection(l)) break
+      if (!profileTitle && !isDate(l) && !isDuration(l) && !isLocation(l)) {
+        profileTitle = l
+      }
+      if (isLocation(l) && !city) {
+        const parts = l.split(',').map((s) => s.trim())
+        city = parts[0]
+        region = parts[1] || ''
+      }
+    }
+  }
+
   const experiences = []
-  let formation = ''
+  if (expIdx > -1) {
+    const expStart = expIdx + 1
+    const expEnd = formIdx > expIdx ? formIdx : allLines.length
+    const expLines = allLines.slice(expStart, expEnd)
 
-  const linkedinMatch = text.match(/linkedin\.com\/in\/([a-zA-Z0-9-]+)/i)
-  if (linkedinMatch) li = `https://linkedin.com/in/${linkedinMatch[1]}`
+    // Pré-filtrer : garder uniquement les lignes utiles
+    // en utilisant un flag "après une date = description"
+    const cleanExpLines = []
+    let afterDate = false
+    let afterDescription = false
 
-  const langIdx = lines.findIndex((l) => /^langues?$/i.test(l) || /^languages?$/i.test(l))
-  const expIdx = lines.findIndex((l) => /^expérience$/i.test(l) || /^experience$/i.test(l))
-  const formIdx = lines.findIndex((l) => /^formation$/i.test(l) || /^education$/i.test(l))
-  const resIdx = lines.findIndex((l) => /^résumé$/i.test(l) || /^summary$/i.test(l))
+    for (const line of expLines) {
+      if (/^Page\s+\d+\s+(of|sur)\s+\d+/i.test(line)) continue
 
-  // 1. NOM : ligne après "Languages" OU première ligne avant titre (prénom + nom)
-  if (langIdx >= 0 && lines[langIdx + 1]) {
-    const nameLine = lines[langIdx + 1]
-    const parts = nameLine.split(/\s+/).filter(Boolean)
-    if (parts.length >= 2 && /^[A-Za-zÀ-ÿ\-']+$/.test(parts[0])) {
-      fn = parts[0]
-      ln = parts.slice(1).join(' ')
-    } else if (parts.length === 1) {
-      fn = parts[0]
-    }
-  }
+      if (/^\d+\s*(an|ans|mois)(\s+\d+\s*(an|ans|mois))?$/.test(line)) continue
 
-  // 2. TITRE COURT : ligne sous le nom (ex: "Cadre bancaire")
-  // 3. VILLE : ligne suivante avec région France
-  const searchStart = langIdx >= 0 ? langIdx + 2 : 0
-  const searchEnd = Math.min(expIdx >= 0 ? expIdx : resIdx >= 0 ? resIdx : lines.length, searchStart + 15)
+      if (/(Native or Bilingual|Professional Working|Limited Working|Elementary)/i.test(line)) continue
 
-  for (let i = searchStart; i < searchEnd; i++) {
-    const line = lines[i]
-    if (!line || line.length > 100) continue
-    if (/^(expérience|formation|langues|résumé|summary|contact)/i.test(line)) break
+      const isDateLine =
+        /\d{4}\s*[-–]\s*(Present|Présent|\d{4})/i.test(line) ||
+        /(janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)\s+\d{4}/i.test(line)
 
-    if (!fn && line.length > 2 && line.length < 60) {
-      const parts = line.split(/\s+/).filter(Boolean)
-      if (parts.length >= 2 && /^[A-Za-zÀ-ÿ\-']+$/.test(parts[0])) {
-        fn = parts[0]
-        ln = parts.slice(1).join(' ')
+      if (isDateLine) {
+        afterDate = true
+        afterDescription = false
+        cleanExpLines.push(line)
         continue
       }
-      if (parts.length === 1 && /^[A-Za-zÀ-ÿ\-']+$/.test(line)) fn = line
-      continue
+
+      if (line.startsWith('-') || line.startsWith('•') || line.startsWith('–')) {
+        afterDescription = true
+        continue
+      }
+
+      if (afterDate && afterDescription) {
+        const couldBeCompany =
+          line.length < 80 &&
+          !line.startsWith('(') &&
+          !line.match(/^[a-z]/) &&
+          !line.includes('contreparties') &&
+          !line.includes('clientèle') &&
+          !/^[a-zà-ü]/.test(line)
+
+        if (!couldBeCompany) continue
+        afterDate = false
+        afterDescription = false
+      }
+
+      if (
+        /(France|Région|région|Paris|Lyon|Marseille|Toulouse|Bordeaux|Nantes|Montpellier|Île-de-France|Auvergne|Normandie|Bretagne|Occitanie|Provence|Rhône|Hauts-de|Grand Est|Pays de|Domont|Chambéry|Nanterre)/i.test(
+          line
+        ) &&
+        line.length < 80 &&
+        !isDateLine
+      )
+        continue
+
+      cleanExpLines.push(line)
     }
 
-    if (fn && !shortTitle && line.length > 2 && line.length < 100 && !FRENCH_REGION.test(line)) {
-      shortTitle = line
-      continue
+    const MONTHS = {
+      janvier: 1, février: 2, mars: 3, avril: 4, mai: 5, juin: 6,
+      juillet: 7, août: 8, septembre: 9, octobre: 10, novembre: 11, décembre: 12,
     }
 
-    if ((fn || shortTitle) && !city && FRENCH_REGION.test(line) && line.length < 70) {
-      city = line
-    }
-  }
-
-  if (!fn && lines[0]) {
-    const parts = lines[0].split(/\s+/).filter(Boolean)
-    fn = parts[0] || 'Inconnu'
-    ln = parts.slice(1).join(' ') || ''
-  }
-
-  // 4. RÉSUMÉ : section après "Résumé"
-  if (resIdx >= 0) {
-    const end = expIdx >= 0 ? expIdx : formIdx >= 0 ? formIdx : lines.length
-    summary = lines
-      .slice(resIdx + 1, end)
-      .filter((l) => !/^(expérience|formation|langues|compétences)/i.test(l))
-      .join(' ')
-  }
-
-  // 5. EXPÉRIENCES : section "Expérience" — entreprise (ligne seule) → poste → dates (mois année - mois année (X ans X mois)) → ville optionnelle
-  if (expIdx >= 0) {
-    const expLines = lines.slice(expIdx + 1)
-    const endForm = formIdx >= 0 ? formIdx - expIdx - 1 : expLines.length
-    const block = expLines.slice(0, Math.max(0, endForm))
-
+    let currentCompany = ''
     let i = 0
-    while (i < block.length) {
-      const line = block[i]
-      if (!line || line.length < 2) { i++; continue }
 
-      const isSectionHeader = /^(formation|langues|compétences|intérêts)/i.test(line)
-      if (isSectionHeader) break
+    while (i < cleanExpLines.length) {
+      const line = cleanExpLines[i]
+      const isDateLine =
+        /\d{4}\s*[-–]\s*(Present|Présent|\d{4})/i.test(line) ||
+        /(janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)\s+\d{4}/i.test(line)
 
-      const isDateLine = FRENCH_MONTHS.test(line) || /^\d{4}\s*[-–—]\s*\d{4}/.test(line)
-      const isDurationOnly = /^\(\d+\s*(ans?|mois?)/i.test(line.trim())
-      const looksLikeCompany = line.length >= 2 && line.length <= 90 && !isDateLine && !isDurationOnly
-
-      const nextLine = block[i + 1]
-      if (looksLikeCompany && nextLine && !/^(formation|langues|compétences)/i.test(nextLine)) {
-        const company = line.trim()
-        const title = nextLine.trim()
-        let duration = ''
-        let cityOpt = ''
-        let skip = 2
-
-        for (let j = i + 2; j < Math.min(i + 7, block.length); j++) {
-          const bline = block[j]
-          if (/^(formation|langues|compétences|expérience)/i.test(bline)) break
-
-          const d = parseDuration(bline)
-          if (d) {
-            duration = d
-            skip = Math.max(skip, j - i + 1)
-          }
-          if (FRENCH_REGION.test(bline) && bline.length < 60) cityOpt = bline.trim()
-        }
-
-        experiences.push({
-          company,
-          title,
-          duration: duration || '',
-          city: cityOpt || '',
-        })
-
-        i += skip
+      if (isDateLine) {
+        i++
         continue
       }
-      i++
+
+      let dateIdx = -1
+      for (let j = i + 1; j < Math.min(i + 4, cleanExpLines.length); j++) {
+        const l = cleanExpLines[j]
+        if (
+          /\d{4}\s*[-–]\s*(Present|Présent|\d{4})/i.test(l) ||
+          /(janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)\s+\d{4}/i.test(l)
+        ) {
+          dateIdx = j
+          break
+        }
+      }
+
+      if (dateIdx === -1) {
+        currentCompany = line
+        i++
+        continue
+      }
+
+      const between = cleanExpLines
+        .slice(i + 1, dateIdx)
+        .filter((l) => !/\d{4}\s*[-–]/i.test(l))
+
+      const dateStr = cleanExpLines[dateIdx]
+      const years = (dateStr.match(/\d{4}/g) || []).map(Number)
+      const isCurrent = /Present|Présent/i.test(dateStr)
+      const monthMatches =
+        dateStr
+          .toLowerCase()
+          .match(
+            /(janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)/g
+          ) || []
+
+      if (between.length > 0) {
+        currentCompany = line
+        experiences.push({
+          company: line,
+          title: between[0],
+          startYear: years[0] || null,
+          startMonth: MONTHS[monthMatches[0]] || null,
+          endYear: isCurrent ? null : (years[1] || null),
+          isCurrent,
+        })
+      } else {
+        experiences.push({
+          company: currentCompany,
+          title: line,
+          startYear: years[0] || null,
+          startMonth: MONTHS[monthMatches[0]] || null,
+          endYear: isCurrent ? null : (years[1] || null),
+          isCurrent,
+        })
+      }
+
+      i = dateIdx + 1
     }
   }
-
-  // 6. FORMATION : section "Formation" — diplôme + école + dates
-  if (formIdx >= 0) {
-    const formEnd = lines.findIndex((l, idx) => idx > formIdx && /^(langues|compétences|expérience|intérêts)/i.test(l))
-    const formBlock = formEnd >= 0 ? lines.slice(formIdx + 1, formEnd) : lines.slice(formIdx + 1, formIdx + 10)
-    formation = formBlock.filter((l) => !/^(formation|education|langues)/i.test(l)).join(' ')
-  }
-
-  // Règles de parsing finales
-  const firstExp = experiences[0]
-  const co = firstExp?.company || '—'
-  const ti = firstExp?.title || shortTitle || '—'
-  const dur = firstExp?.duration || ''
-  const pastExperiences = experiences.slice(1)
 
   return {
-    fn,
-    ln,
-    co,
-    ti,
-    city: city || '—',
-    dur,
-    summary,
-    experiences: pastExperiences,
-    formation,
-    li: li || '',
-    src: 'Chasse LinkedIn',
+    firstName: name.split(' ')[0] || '',
+    lastName: name.split(' ').slice(1).join(' ') || '',
+    fullName: name,
+    email,
+    linkedinUrl,
+    title: profileTitle,
+    city,
+    region,
+    experiences,
+    currentCompany: experiences[0]?.company || '',
+    currentTitle: experiences[0]?.title || profileTitle,
   }
 }
+
+/** Alias pour compatibilité */
+export const parseLinkedInPDFText = parsePDFLinkedIn

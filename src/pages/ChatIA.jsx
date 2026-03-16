@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useCRM } from '../context/CRMContext'
 import { IconStar } from '../components/Icons'
+import { fetchScoringInstructions } from '../lib/scoringInstructions'
 
 function buildPipelineContext(profiles) {
   const byStage = {}
@@ -40,10 +41,14 @@ export default function ChatIA() {
 
     const stripHtml = (s) => (typeof s === 'string' ? s.replace(/<[^>]+>/g, '') : s)
     const context = buildPipelineContext(filteredProfiles)
-    const systemContent = `Tu es l'assistant CRM Evolve Recruiter. Tu aides au recrutement de CGP/conseillers patrimoine. Réponds en français, de façon concise et actionnable. Utilise le contexte pipeline fourni pour répondre précisément.
+    const scoringInstructions = await fetchScoringInstructions()
+    let systemContent = `Tu es l'assistant CRM Evolve Recruiter. Tu aides au recrutement de CGP/conseillers patrimoine. Réponds en français, de façon concise et actionnable. Utilise le contexte pipeline fourni pour répondre précisément.
 
-Contexte actuel:
+Contexte pipeline actuel:
 ${context}`
+    if (scoringInstructions) {
+      systemContent += `\n\nPour les questions liées au scoring CGP, utilise ces règles métier :\n${scoringInstructions}`
+    }
 
     try {
       const res = await fetch('https://api.anthropic.com/v1/messages', {

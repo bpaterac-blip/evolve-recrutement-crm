@@ -776,7 +776,8 @@ export default function ProfilePage() {
                       <div style={{ fontSize: 12, color: PAGE_STYLE.textSecondary, marginTop: 4 }}>{formatExperiencePeriod(exp)}</div>
                       <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
                         {badge === 'cabinet' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#D4EDE1', color: '#1A7A4A', fontWeight: 500 }}>Cabinet CGP</span>}
-                        {badge === 'captif' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#FDE8E8', color: '#c0392b', fontWeight: 500 }}>Captif</span>}
+                        {badge === 'banque' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#EFF6FF', color: '#1D4ED8', fontWeight: 500 }}>Banque</span>}
+                        {badge === 'assurance' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#ECFDF5', color: '#065F46', fontWeight: 500 }}>Assurance</span>}
                       </div>
                     </div>
                   )

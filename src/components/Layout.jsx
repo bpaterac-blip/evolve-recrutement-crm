@@ -1,6 +1,7 @@
 import { Outlet, NavLink, Link, useLocation, useNavigate } from 'react-router-dom'
 import { useCRM } from '../context/CRMContext'
 import { useAuth } from '../context/AuthContext'
+import { useViewMode } from '../context/ViewModeContext'
 import { IconArrowUp, IconStar } from './Icons'
 
 const TITLES = {
@@ -16,9 +17,12 @@ const TITLES = {
   '/admin/scoring-learning': 'Apprentissage Scoring',
 }
 
+const ACCENT = '#173731'
+
 export default function Layout() {
   const { searchQuery, setSearchQuery } = useCRM()
-  const { user, role, signOut } = useAuth()
+  const { user, userProfile, role, signOut } = useAuth()
+  const { viewMode, setViewMode } = useViewMode()
   const location = useLocation()
   const navigate = useNavigate()
   const title = TITLES[location.pathname] || 'Evolve Recruiter'
@@ -76,10 +80,10 @@ export default function Layout() {
         <div className="mt-auto pt-3 px-3 border-t border-white/10 pb-3 space-y-2">
           <div className="uchip flex items-center gap-2.5 py-2 px-2.5">
             <div className="uav w-[30px] h-[30px] rounded-full bg-[var(--gold)] text-[var(--accent)] text-xs font-semibold flex items-center justify-center shrink-0">
-              {(user?.email?.[0] || 'U').toUpperCase()}
+              {(userProfile?.first_name?.[0] || user?.email?.[0] || 'U').toUpperCase()}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-[13px] text-white/80 truncate">{user?.email || 'Utilisateur'}</div>
+              <div className="text-[13px] text-white/80 truncate">{userProfile?.full_name?.trim() || user?.email || 'Utilisateur'}</div>
               <div className="text-[11px] text-white/40">Connecté</div>
             </div>
           </div>
@@ -99,6 +103,12 @@ export default function Layout() {
         {/* Topbar */}
         <div className="topbar bg-[var(--surface)] border-b border-[var(--border)] px-[22px] h-[54px] flex items-center gap-3.5 shrink-0">
           <div className="tbar-ttl font-serif text-lg">{title}</div>
+          {role === 'admin' && (
+            <div className="flex items-center gap-0 rounded-md border" style={{ borderColor: ACCENT }}>
+              <button type="button" onClick={() => setViewMode('personal')} className="py-1 px-3 text-[12px] font-medium rounded-l-md transition-colors" style={{ backgroundColor: viewMode === 'personal' ? ACCENT : 'transparent', color: viewMode === 'personal' ? 'white' : ACCENT }}>Ma vue</button>
+              <button type="button" onClick={() => setViewMode('global')} className="py-1 px-3 text-[12px] font-medium rounded-r-md transition-colors" style={{ backgroundColor: viewMode === 'global' ? ACCENT : 'transparent', color: viewMode === 'global' ? 'white' : ACCENT }}>Vue globale</button>
+            </div>
+          )}
           <div className="srch flex items-center gap-1.5 bg-[var(--s2)] border border-[var(--border)] rounded-lg py-1.5 px-2.5 w-[250px] transition-all">
             <span className="text-[var(--t3)] text-sm">⌕</span>
             <input type="text" placeholder="Rechercher un profil…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="border-none bg-transparent font-[inherit] text-[13px] text-[var(--text)] outline-none w-full placeholder:text-[var(--t3)]" />

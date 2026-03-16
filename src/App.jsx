@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import { ViewModeProvider } from './context/ViewModeContext'
 import { CRMProvider } from './context/CRMContext'
 import Layout from './components/Layout'
 import NewProfileModal from './components/NewProfileModal'
@@ -20,9 +21,10 @@ import Tickets from './pages/Tickets'
 import AdminConsole from './pages/AdminConsole'
 import AdminTickets from './pages/AdminTickets'
 import AdminScoringLearning from './pages/AdminScoringLearning'
+import CompleteProfile from './pages/CompleteProfile'
 
 function ProtectedRoute({ children }) {
-  const { user, loading } = useAuth()
+  const { user, userProfile, loading } = useAuth()
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[var(--bg)]">
@@ -31,6 +33,7 @@ function ProtectedRoute({ children }) {
     )
   }
   if (!user) return <Navigate to="/login" replace />
+  if (!userProfile || !userProfile.first_name) return <Navigate to="/complete-profile" replace />
   return children
 }
 
@@ -113,12 +116,28 @@ function LoginRoute() {
   )
 }
 
+function CompleteProfileRoute() {
+  const { user, userProfile, loading } = useAuth()
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#173731' }}>
+        <div className="text-white/70">Chargement…</div>
+      </div>
+    )
+  }
+  if (!user) return <Navigate to="/login" replace />
+  if (userProfile?.first_name) return <Navigate to="/" replace />
+  return <CompleteProfile />
+}
+
 function App() {
   return (
     <AuthProvider>
-      <CRMProvider>
-        <AppContent />
-      </CRMProvider>
+      <ViewModeProvider>
+        <CRMProvider>
+          <AppContent />
+        </CRMProvider>
+      </ViewModeProvider>
     </AuthProvider>
   )
 }

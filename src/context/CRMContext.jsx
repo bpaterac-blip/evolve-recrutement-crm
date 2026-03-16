@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { useAuth } from './AuthContext'
+import { useViewMode } from './ViewModeContext'
 import { calculateScore } from '../lib/scoring'
 import { loadScoringConfig } from '../lib/scoringConfig'
 import { INITIAL_PROFILES } from '../lib/data'
@@ -24,6 +26,7 @@ function mapRowToProfile(row) {
   return {
     id: row.id,
     created_at: row.created_at,
+    updated_at: row.updated_at,
     fn: row.first_name ?? '',
     ln: row.last_name ?? '',
     co: row.company ?? '—',
@@ -39,11 +42,15 @@ function mapRowToProfile(row) {
     mail: row.email ?? '—',
     li: row.linkedin_url ?? '—',
     experiences,
-    dur: row.duration ?? '',
+    dur: '',
     notes: '',
     acts: [],
     sequence_lemlist: row.sequence_lemlist ?? '',
     lead_status: row.lead_status ?? '',
+    session_formation_id: row.session_formation_id ?? null,
+    owner_id: row.owner_id ?? null,
+    owner_email: row.owner_email ?? null,
+    owner_full_name: row.owner_full_name ?? null,
   }
 }
 
@@ -68,11 +75,12 @@ function mapProfileToRow(profile) {
     lead_status: profile.lead_status ?? '',
   }
   if (experiences.length) row.experiences = experiences
-  if (profile.dur) row.duration = profile.dur
   return row
 }
 
 export function CRMProvider({ children }) {
+  const { user, userProfile, role } = useAuth()
+  const { viewMode } = useViewMode()
   const [profiles, setProfiles] = useState([])
   const [profileNotes, setProfileNotes] = useState({})
   const [profileActivities, setProfileActivities] = useState({})
@@ -98,10 +106,11 @@ export function CRMProvider({ children }) {
       return
     }
     try {
-      const { data, error } = await supabase
-        .from(PROFILES_TABLE)
-        .select('*')
-        .order('id', { ascending: false })
+      let query = supabase.from(PROFILES_TABLE).select('*').order('created_at', { ascending: false })
+      if (role === 'admin' && viewMode === 'personal' && user?.id) {
+        query = query.eq('owner_id', user.id)
+      }
+      const { data, error } = await query
       if (error) throw error
       setProfiles((data || []).map(mapRowToProfile))
     } catch (err) {
@@ -110,7 +119,7 @@ export function CRMProvider({ children }) {
     } finally {
       setLoading(false)
     }
-  }, [useSupabase])
+  }, [useSupabase, role, viewMode, user?.id])
 
   const fetchNotes = useCallback(async (profileId) => {
     if (!useSupabase || !profileId) return []
@@ -237,17 +246,18 @@ export function CRMProvider({ children }) {
 
   const persistProfileUpdate = useCallback(async (id, updates) => {
     if (!useSupabase) return
-    const row = mapProfileToRow(updates)
+    const row = { ...mapProfileToRow(updates), updated_at: new Date().toISOString() }
     await supabase.from(PROFILES_TABLE).update(row).eq('id', id)
   }, [useSupabase])
 
   const changeStage = useCallback((id, newStg) => {
     let oldStg = ''
+    const now = new Date().toISOString()
     setProfiles((prev) => {
       const p = prev.find((x) => x.id === id)
       if (!p || p.stg === newStg) return prev
       oldStg = p.stg
-      const updated = { ...p, stg: newStg }
+      const updated = { ...p, stg: newStg, updated_at: now }
       persistProfileUpdate(id, updated)
       insertActivity(id, 'stage_change', oldStg, newStg)
       return prev.map((x) => (x.id === id ? updated : x))
@@ -264,11 +274,12 @@ export function CRMProvider({ children }) {
 
   const changeMaturity = useCallback((id, newMat) => {
     let oldMat = ''
+    const now = new Date().toISOString()
     setProfiles((prev) => {
       const p = prev.find((x) => x.id === id)
       if (!p || p.mat === newMat) return prev
       oldMat = p.mat
-      const updated = { ...p, mat: newMat }
+      const updated = { ...p, mat: newMat, updated_at: now }
       persistProfileUpdate(id, updated)
       insertActivity(id, 'maturity_change', oldMat, newMat)
       return prev.map((x) => (x.id === id ? updated : x))
@@ -287,7 +298,7 @@ export function CRMProvider({ children }) {
     const p = profiles.find((x) => x.id === id)
     if (!p) return
     const oldInteg = p.integ
-    const updated = { ...p, integ: val }
+    const updated = { ...p, integ: val, updated_at: new Date().toISOString() }
     updateProfile(id, { integ: val })
     persistProfileUpdate(id, updated)
     if (useSupabase && (oldInteg !== val)) insertActivity(id, 'integration_change', oldInteg || '', val)
@@ -298,7 +309,7 @@ export function CRMProvider({ children }) {
     const p = profiles.find((x) => x.id === id)
     if (!p || p.src === newSrc) return
     const oldSrc = p.src
-    const updated = { ...p, src: newSrc }
+    const updated = { ...p, src: newSrc, updated_at: new Date().toISOString() }
     setProfiles((prev) => prev.map((x) => (x.id === id ? updated : x)))
     persistProfileUpdate(id, updated)
     insertActivity(id, 'source_change', oldSrc, newSrc)
@@ -313,7 +324,7 @@ export function CRMProvider({ children }) {
     const p = profiles.find((x) => x.id === id)
     if (!p || p.region === newRegion) return
     const oldRegion = p.region || ''
-    const updated = { ...p, region: newRegion }
+    const updated = { ...p, region: newRegion, updated_at: new Date().toISOString() }
     setProfiles((prev) => prev.map((x) => (x.id === id ? updated : x)))
     persistProfileUpdate(id, updated)
     insertActivity(id, 'region_change', oldRegion, newRegion || '—')
@@ -326,7 +337,7 @@ export function CRMProvider({ children }) {
     if (!p) return
     const oldVal = p[field] ?? ''
     if (oldVal === newValue) return
-    const updated = { ...p, [field]: newValue }
+    const updated = { ...p, [field]: newValue, updated_at: new Date().toISOString() }
     setProfiles((prev) => prev.map((x) => (x.id === id ? updated : x)))
     persistProfileUpdate(id, updated)
     const label = FIELD_LABELS[field] || field
@@ -438,8 +449,13 @@ export function CRMProvider({ children }) {
     const sc = data.sc != null ? data.sc : calculateScore(base)
     const newP = { ...base, sc }
     if (useSupabase) {
+      if (!user?.id) {
+        showNotif('Session expirée — reconnectez-vous pour ajouter un profil')
+        return false
+      }
       try {
-        let row = mapProfileToRow(newP)
+        const ownerFullName = userProfile?.full_name?.trim() || user.email || null
+        const row = { ...mapProfileToRow(newP), owner_id: user.id, owner_email: user.email || null, owner_full_name: ownerFullName }
         let { data: inserted, error } = await supabase.from(PROFILES_TABLE).insert(row).select('id').single()
         if (error && error.message && error.message.includes('region')) {
           const { region: _r, ...rowWithoutRegion } = row
@@ -460,7 +476,7 @@ export function CRMProvider({ children }) {
     }
     showNotif(`${newP.fn} ${newP.ln} ajouté ✓ (score: ${sc})`)
     return true
-  }, [today, showNotif, useSupabase, insertActivity])
+  }, [today, showNotif, useSupabase, insertActivity, user?.id, user?.email, userProfile?.full_name])
 
   const addProfilesBatch = useCallback(async (profilesData) => {
     const rows = profilesData.map((p) => {
@@ -487,10 +503,14 @@ export function CRMProvider({ children }) {
       return mapProfileToRow({ ...base, sc })
     })
     if (useSupabase && rows.length) {
-      let { data, error } = await supabase.from(PROFILES_TABLE).insert(rows).select('id, first_name, last_name, company, title, city, region, email, linkedin_url, source, score, stage, maturity, integration_date, created_at, experiences, duration, sequence_lemlist, lead_status')
+      if (!user?.id) return 0
+      const ownerFullName = userProfile?.full_name?.trim() || user.email || null
+      const ownerPayload = { owner_id: user.id, owner_email: user.email || null, owner_full_name: ownerFullName }
+      const rowsWithOwner = rows.map((r) => ({ ...r, ...ownerPayload }))
+      let { data, error } = await supabase.from(PROFILES_TABLE).insert(rowsWithOwner).select('id, first_name, last_name, company, title, city, region, email, linkedin_url, source, score, stage, maturity, integration_date, created_at, experiences, sequence_lemlist, lead_status, owner_id, owner_email, owner_full_name')
       if (error && error.message && error.message.includes('region')) {
-        const rowsWithoutRegion = rows.map((r) => { const { region: _r, ...rest } = r; return rest })
-        const res = await supabase.from(PROFILES_TABLE).insert(rowsWithoutRegion).select('id, first_name, last_name, company, title, city, email, linkedin_url, source, score, stage, maturity, integration_date, created_at, experiences, duration, sequence_lemlist, lead_status')
+        const rowsWithoutRegion = rowsWithOwner.map((r) => { const { region: _r, ...rest } = r; return rest })
+        const res = await supabase.from(PROFILES_TABLE).insert(rowsWithoutRegion).select('id, first_name, last_name, company, title, city, email, linkedin_url, source, score, stage, maturity, integration_date, created_at, experiences, sequence_lemlist, lead_status, owner_id, owner_email, owner_full_name')
         error = res.error
         data = res.data
       }
@@ -511,7 +531,7 @@ export function CRMProvider({ children }) {
       return newProfiles.length
     }
     return 0
-  }, [useSupabase])
+  }, [useSupabase, user?.id, user?.email, userProfile?.full_name])
 
   const searchTrimmed = (searchQuery || '').trim()
   const filteredProfiles = profiles.filter((p) => {

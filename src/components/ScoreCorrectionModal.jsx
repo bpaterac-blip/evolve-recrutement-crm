@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../context/AuthContext'
 
 const PRIORITY_OPTS = ['Contact immédiat', 'Prioritaire', 'À travailler', 'À écarter']
 const SUGGESTIONS = [
@@ -34,7 +35,7 @@ export default function ScoreCorrectionModal({ profile, onClose, onSaved, useSup
           feedback_note: reason.trim(),
           reason: reason.trim(),
           priority_label: priorityLabel || null,
-          author: 'Baptiste',
+          author: userProfile?.full_name?.trim() || user?.email || null,
         })
         await supabase.from('profiles').update({ score: correctedScore }).eq('id', profile.id)
         await supabase.from('activities').insert({

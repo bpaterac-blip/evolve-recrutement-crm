@@ -1,11 +1,82 @@
-import { useState, useRef, Fragment, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useCRM } from '../context/CRMContext'
+import { useAuth } from '../context/AuthContext'
 import { parseCSV } from '../lib/csvParser'
-import { extractTextFromPDF, parseLinkedInPDFText } from '../lib/pdfExtractor'
+import { extractTextFromPDF } from '../lib/pdfExtractor'
+
+const parseWithClaude = async (rawText) => {
+  let instructions = ''
+  try {
+    const mod = await import('../lib/scoringInstructions')
+    instructions = ((await mod.fetchScoringInstructions()) || '').trim()
+  } catch (_) {}
+
+  const instructionsPrefix = instructions
+    ? `Instructions importantes pour l'extraction (règles métier à appliquer) :\n${instructions}\n\n`
+    : ''
+
+  const content = `${instructionsPrefix}Extrais les informations de ce profil LinkedIn exporté en PDF.
+Réponds UNIQUEMENT avec un JSON valide, sans texte avant ou après.
+
+Format attendu :
+{
+  "firstName": "prénom",
+  "lastName": "nom",
+  "email": "email ou null",
+  "linkedinUrl": "url linkedin ou null",
+  "title": "intitulé du poste actuel",
+  "city": "ville",
+  "region": "région",
+  "experiences": [
+    {
+      "company": "nom entreprise",
+      "title": "intitulé poste",
+      "startYear": 2020,
+      "startMonth": 6,
+      "endYear": 2023,
+      "endMonth": 12,
+      "isCurrent": false
+    }
+  ]
+}
+
+Règles :
+- experiences[0] = poste actuel (le plus récent)
+- isCurrent = true si encore en poste (Present/Présent)
+- endYear = null si isCurrent = true
+- Ignorer les stages de moins de 3 mois
+- Ignorer les postes "Auxiliaire été"
+- Ne PAS inclure les compétences, langues ou formations dans les expériences
+
+Texte du PDF :
+${rawText}`
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': import.meta.env.VITE_ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1000,
+      messages: [{ role: 'user', content }],
+    }),
+  })
+
+  const data = await response.json()
+  if (!response.ok) throw new Error(data.error?.message || `API ${response.status}`)
+  const text = data.content?.[0]?.text || ''
+  const clean = text.replace(/```json|```/g, '').trim()
+  return JSON.parse(clean)
+}
 import { calculateScore, scoreProfile, getExperienceBadge } from '../lib/scoring'
 import { enrichProfileWithNetrows } from '../lib/netrows'
 import { supabase } from '../lib/supabase'
+import { notifyScoringFeedbackUpdated, fetchScoringInstructions } from '../lib/scoringInstructions'
 import { IconLink, IconDot, IconUpload } from '../components/Icons'
 
 const IMPORT_STORAGE_KEYS = {
@@ -59,10 +130,10 @@ const ScoreImprovementBadge = ({ p }) => {
   return null
 }
 
-const SYSTEM_PROMPT = `Tu es un expert en recrutement CGP pour Evolve Investissement. Tu analyses des profils de Conseillers en Gestion de Patrimoine captifs (banque/assurance) pour identifier les meilleurs candidats à rejoindre un réseau indépendant.
+const SYSTEM_PROMPT = `Tu es un expert en recrutement CGP pour Evolve Investissement. Tu analyses des profils de Conseillers en Gestion de Patrimoine en banque ou assurance pour identifier les meilleurs candidats à rejoindre un réseau indépendant.
 
 Critères de scoring :
-- Employeur captif (banque/assurance) = jusqu'à 50pts
+- Employeur banque ou assurance = jusqu'à 50pts
 - Intitulé de poste CGP/patrimoine = jusqu'à 30pts
 - Ancienneté idéale 3-7 ans = jusqu'à 20pts
 - Bonus expérience passée cabinet CGP = +20pts
@@ -124,7 +195,23 @@ const generateConversationSummary = async (messages, apiKey) => {
   return (data.content?.[0]?.text || '').trim().slice(0, 500)
 }
 
-const ScoringChat = ({ profile, rowKey, isExpanded, onClose, messages, onMessagesChange, showNotif, useSupabase, onProfileCorrection }) => {
+const CHAT_SUGGESTIONS = ['Pourquoi ce score ?', 'Quel séquence Lemlist recommandes-tu ?', 'Points forts et points faibles ?', 'Est-il vraiment prioritaire ?']
+const CORRECTION_SUGGESTIONS = ['Employeur non reconnu', 'A déjà travaillé en cabinet CGP', 'Titre mal interprété', 'Ancienneté incorrecte', 'Profil hors cible']
+
+const ProfileImportModal = ({
+  profile,
+  rowKey,
+  onClose,
+  chatHistory,
+  onMessagesChange,
+  onProfileCorrection,
+  showNotif,
+  useSupabase,
+  ini,
+  priotag,
+}) => {
+  const { user, userProfile } = useAuth()
+  const [activeTab, setActiveTab] = useState('chat')
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -134,49 +221,67 @@ const ScoringChat = ({ profile, rowKey, isExpanded, onClose, messages, onMessage
   const messagesEndRef = useRef(null)
   const initialCalledRef = useRef(false)
 
-  const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  const messages = chatHistory?.[rowKey] || []
+
+  useEffect(() => {
+    initialCalledRef.current = false
+  }, [profile, rowKey])
+
+  useEffect(() => {
+    if (!profile) return
+    if (initialCalledRef.current || (messages && messages.length > 0)) return
+    initialCalledRef.current = true
+    callAnthropic(buildInitialUserMessage(profile), true)
+  }, [profile, rowKey])
+
+  useEffect(() => {
+    if (messages?.length) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
 
   const callAnthropic = async (userMsg, isInitial = false) => {
     const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY
-    if (!apiKey) {
-      showNotif('Clé API Anthropic manquante')
-      return
-    }
+    if (!apiKey) { showNotif('Clé API Anthropic manquante'); return }
     setLoading(true)
     try {
-      let systemPrompt = SYSTEM_PROMPT
+      let instructions = ''
+      let feedbackContext = ''
       if (useSupabase) {
+        instructions = await fetchScoringInstructions()
         const feedbacks = await fetchLearningContext()
-        systemPrompt += buildLearningContextPrompt(feedbacks)
+        feedbackContext = feedbacks.length
+          ? feedbacks.map((f) => {
+              const pd = f.profile_data || {}
+              return `- Profil : ${pd.company || pd.name || '—'} - ${pd.title || '—'} | Score ${f.previous_score ?? '?'} → ${f.new_score ?? '?'} | Raison : ${(f.reason || f.feedback_note || '').slice(0, 200)}`
+            }).join('\n')
+          : 'Aucune'
       }
+      const systemPrompt = `Tu es un expert en recrutement CGP pour Evolve Investissement. Tu analyses des profils de Conseillers en Gestion de Patrimoine en banque ou assurance pour identifier les meilleurs candidats à rejoindre un réseau indépendant.
 
+Critères de scoring : employeur banque ou assurance = jusqu'à 50pts, intitulé CGP = jusqu'à 30pts, ancienneté 3-7 ans = jusqu'à 20pts, bonus expérience cabinet CGP = +20pts.
+
+${instructions ? `INSTRUCTIONS PERMANENTES DE BAPTISTE :\n${instructions}\n\n` : ''}APPRENTISSAGES DES CORRECTIONS PRÉCÉDENTES :\n${feedbackContext}
+
+Applique ces instructions en priorité dans ton analyse. Réponds toujours en français, de manière concise et professionnelle.`
       const history = (messages || []).filter((m) => m.role && m.content).map((m) => ({ role: m.role, content: m.content }))
       const allMessages = [...history, { role: 'user', content: userMsg }]
-
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
-        headers: {
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'content-type': 'application/json',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: isInitial ? 500 : 1024,
-          system: systemPrompt,
-          messages: allMessages.map((m) => ({ role: m.role, content: m.content })),
-        }),
+        headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json', 'anthropic-dangerous-direct-browser-access': 'true' },
+        body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: isInitial ? 500 : 1024, system: systemPrompt, messages: allMessages.map((m) => ({ role: m.role, content: m.content })) }),
       })
       if (!res.ok) throw new Error(`API ${res.status}`)
       const data = await res.json()
       const text = data.content?.[0]?.text || ''
       onMessagesChange(rowKey, [...(messages || []), { role: 'user', content: userMsg }, { role: 'assistant', content: text }])
-    } catch (err) {
-      showNotif(`Erreur : ${err?.message}`)
-    } finally {
-      setLoading(false)
-    }
+    } catch (err) { showNotif(`Erreur : ${err?.message}`) }
+    finally { setLoading(false) }
   }
 
   const handleSend = () => {
@@ -186,23 +291,24 @@ const ScoringChat = ({ profile, rowKey, isExpanded, onClose, messages, onMessage
     callAnthropic(trimmed, false)
   }
 
+  const handleSuggestion = (s) => {
+    callAnthropic(s, false)
+  }
+
+  const addCorrectionSuggestion = (s) => {
+    setCorrectionReason((prev) => (prev ? `${prev}\n${s}` : s))
+  }
+
   const handleSaveCorrection = async () => {
-    if (!useSupabase) {
-      showNotif('Supabase requis pour enregistrer')
-      return
-    }
+    if (!useSupabase) { showNotif('Supabase requis pour enregistrer'); return }
     const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY
     setSaving(true)
     try {
       let reason = correctionReason.trim()
-      if (apiKey && (messages || []).length > 0) {
-        reason = await generateConversationSummary(messages, apiKey) || reason
-      }
+      if (apiKey && (messages || []).length > 0) reason = await generateConversationSummary(messages, apiKey) || reason
       if (!reason) reason = 'Correction manuelle'
-
       const priority = priorityLabel || getPriorityLabel(profile?.sc ?? 0)
       const profileData = !profile?.id ? { name: `${profile?.fn || ''} ${profile?.ln || ''}`.trim(), company: profile?.co, title: profile?.ti, score: profile?.sc, priority } : null
-
       await supabase.from('scoring_feedback').insert({
         profile_id: profile?.id || null,
         profile_data: profileData,
@@ -211,122 +317,151 @@ const ScoringChat = ({ profile, rowKey, isExpanded, onClose, messages, onMessage
         feedback_note: reason,
         reason,
         priority_label: priority,
-        author: 'Baptiste',
+        author: userProfile?.full_name?.trim() || user?.email || null,
       })
-
       onProfileCorrection?.(profile, { sc: correctedScore, _correctedByUser: true, _correctedAt: Date.now() })
+      notifyScoringFeedbackUpdated()
       showNotif('✓ Correction enregistrée')
-      setCorrectionReason('')
-    } catch (err) {
-      showNotif(`Erreur : ${err?.message}`)
-    } finally {
-      setSaving(false)
-    }
+      onClose()
+    } catch (err) { showNotif(`Erreur : ${err?.message}`) }
+    finally { setSaving(false) }
   }
 
-  useEffect(() => {
-    if (!isExpanded) {
-      initialCalledRef.current = false
-      return
-    }
-    if (initialCalledRef.current || (messages && messages.length > 0)) return
-    initialCalledRef.current = true
-    callAnthropic(buildInitialUserMessage(profile), true)
-  }, [isExpanded, rowKey])
-
-  useEffect(() => {
-    if (messages?.length) scrollToBottom()
-  }, [messages])
-
-  useEffect(() => {
-    const lastAssistant = [...(messages || [])].reverse().find((m) => m.role === 'assistant')
-    if (lastAssistant?.content && !correctionReason) {
-      setCorrectionReason(lastAssistant.content.slice(0, 300))
-    }
-  }, [messages])
-
-  if (!isExpanded) return null
+  const exps = Array.isArray(profile?.experiences) ? profile.experiences : []
+  const signals = useMemo(() => {
+    if (profile?.signals?.length) return profile.signals
+    const { signals: s } = scoreProfile(profile || {}, exps)
+    return s || []
+  }, [profile, exps])
 
   return (
-    <div style={{ background: '#F8F5F1', borderRadius: 8, padding: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <span style={{ fontWeight: 600, fontSize: 13, color: '#173731' }}>💬 Explication du scoring</span>
-        <button type="button" onClick={onClose} style={{ fontSize: 12, color: '#6B7280', background: 'none', border: 'none', cursor: 'pointer' }}>Fermer</button>
-      </div>
-      <div style={{ maxHeight: 280, overflowY: 'auto', marginBottom: 12 }}>
-        {loading && (!messages || messages.length === 0) && <div style={{ fontSize: 12, color: '#6B7280' }}>Analyse en cours…</div>}
-        {(messages || []).map((m, i) => (
-          <div key={i} style={{ marginBottom: 10 }}>
-            <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 4 }}>{m.role === 'user' ? 'Vous' : 'Claude'}</div>
-            <div style={{ fontSize: 13, color: '#1A1A1A', whiteSpace: 'pre-wrap' }}>{m.content}</div>
-          </div>
-        ))}
-        <div ref={messagesEndRef} />
-      </div>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
-          placeholder="Poser une question…"
-          disabled={loading}
-          style={{ flex: 1, minWidth: 120, padding: '8px 12px', borderRadius: 6, border: '1px solid #E5E0D8', fontSize: 12 }}
-        />
-        <button type="button" onClick={handleSend} disabled={loading || !input.trim()} style={{ padding: '8px 14px', borderRadius: 6, background: '#173731', color: 'white', fontSize: 12, cursor: loading ? 'not-allowed' : 'pointer' }}>Envoyer</button>
-      </div>
-
-      <div style={{ borderTop: '1px solid #E5E0D8', paddingTop: 12, marginTop: 12 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8, color: '#173731' }}>Corriger le scoring</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div>
-            <label style={{ fontSize: 11, color: '#6B7280' }}>Score que j'aurais donné (0-100)</label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <input type="range" min={0} max={100} value={correctedScore} onChange={(e) => setCorrectedScore(Number(e.target.value))} style={{ flex: 1 }} />
-              <input type="number" min={0} max={100} value={correctedScore} onChange={(e) => setCorrectedScore(Math.min(100, Math.max(0, Number(e.target.value) || 0)))} style={{ width: 50, padding: '4px 8px', borderRadius: 4, border: '1px solid #E5E0D8', fontSize: 12 }} />
-            </div>
-          </div>
-          <div>
-            <label style={{ fontSize: 11, color: '#6B7280' }}>Catégorie réelle</label>
-            <select value={priorityLabel} onChange={(e) => setPriorityLabel(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: 6, border: '1px solid #E5E0D8', fontSize: 12 }}>
-              <option value="">—</option>
-              {PRIORITY_OPTS.map((o) => (
-                <option key={o} value={o}>{o}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label style={{ fontSize: 11, color: '#6B7280' }}>Raison</label>
-            <textarea value={correctionReason} onChange={(e) => setCorrectionReason(e.target.value)} rows={3} placeholder="Pourquoi ce score est inexact…" style={{ width: '100%', padding: '8px', borderRadius: 6, border: '1px solid #E5E0D8', fontSize: 12, resize: 'vertical' }} />
-          </div>
-          <button type="button" onClick={handleSaveCorrection} disabled={saving} style={{ padding: '8px 16px', borderRadius: 6, background: '#D2AB76', color: '#173731', fontSize: 12, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', alignSelf: 'flex-start' }}>{saving ? '…' : 'Enregistrer ma correction'}</button>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, background: 'rgba(0,0,0,0.5)' }} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{ width: 900, maxWidth: '100%', height: '92vh', background: 'white', borderRadius: 16, overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ position: 'absolute', top: 16, right: 16, zIndex: 10 }}>
+          <button type="button" onClick={onClose} style={{ width: 32, height: 32, borderRadius: 8, border: 'none', background: 'var(--s2)', color: 'var(--t2)', fontSize: 16, cursor: 'pointer' }}>✕</button>
         </div>
-      </div>
-    </div>
-  )
-}
-
-const ExperienceExpandBlock = ({ experiences }) => {
-  const exps = Array.isArray(experiences) ? experiences : []
-  if (!exps.length) return <div style={{ padding: '12px 16px', color: '#6B7280', fontSize: 12 }}>Aucune expérience</div>
-  return (
-    <div style={{ background: '#F5F3EF', padding: '12px 16px', borderLeft: '3px solid #173731', transition: 'opacity 0.2s ease' }}>
-      <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 10, color: '#173731' }}>Parcours professionnel</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {exps.map((exp, i) => {
-          const badge = getExperienceBadge(exp)
-          return (
-            <div key={i} style={{ paddingBottom: 12, borderBottom: i < exps.length - 1 ? '1px solid #E5E0D8' : 'none' }}>
-              <div style={{ fontWeight: 600, fontSize: 13 }}>{exp.company || '—'}</div>
-              <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>{exp.title || '—'}</div>
-              <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4 }}>{formatExperiencePeriod(exp)}</div>
-              <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-                {badge === 'cabinet' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#D4EDE1', color: '#1A7A4A', fontWeight: 500 }}>Cabinet CGP</span>}
-                {badge === 'captif' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#DBEAFE', color: '#1D4ED8', fontWeight: 500 }}>Captif</span>}
+        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+          {/* Colonne gauche */}
+          <div style={{ width: 300, flexShrink: 0, background: '#F5F3EF', padding: 24, overflowY: 'auto', borderRight: '1px solid #E5E0D8' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 16 }}>
+              <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#173731', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 600 }}>{ini(profile?.fn, profile?.ln)}</div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 16, color: '#173731' }}>{profile?.fn} {profile?.ln}</div>
+                <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>{profile?.co || profile?.company || '—'} · {profile?.ti || profile?.title || '—'}</div>
+                <div style={{ marginTop: 8 }}>{priotag(profile?.sc)}</div>
               </div>
             </div>
-          )
-        })}
+            <div style={{ fontSize: 28, fontWeight: 700, color: '#173731', marginBottom: 8 }}>{profile?.sc ?? 0}/100</div>
+            <ScoreImprovementBadge p={profile} />
+            <div style={{ marginTop: 16, fontSize: 12, color: '#6B7280' }}>
+              <div>Email : {profile?.email || '—'}</div>
+              <div>LinkedIn : {profile?.li || profile?.linkedinUrl ? <a href={profile.li || profile.linkedinUrl} target="_blank" rel="noreferrer" style={{ color: '#173731' }}>Voir</a> : '—'}</div>
+              <div>Ville : {profile?.city || profile?.ville || '—'}</div>
+              <div>Région : {profile?.region || '—'}</div>
+              <div>Source : {profile?._source || 'Import'}</div>
+            </div>
+            {exps.length > 0 && (
+              <div style={{ marginTop: 20 }}>
+                <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 10, color: '#173731' }}>Parcours professionnel</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {exps.map((exp, i) => {
+                    const badge = getExperienceBadge(exp)
+                    return (
+                      <div key={i} style={{ paddingBottom: 12, borderBottom: i < exps.length - 1 ? '1px solid #E5E0D8' : 'none' }}>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>{exp.company || '—'}</div>
+                        <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>{exp.title || '—'}</div>
+                        <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4 }}>{formatExperiencePeriod(exp)}</div>
+                        <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+                          {badge === 'cabinet' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#D4EDE1', color: '#1A7A4A', fontWeight: 500 }}>Cabinet CGP</span>}
+                          {badge === 'banque' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#EFF6FF', color: '#1D4ED8', fontWeight: 500 }}>Banque</span>}
+                          {badge === 'assurance' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#ECFDF5', color: '#065F46', fontWeight: 500 }}>Assurance</span>}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+            {signals.length > 0 && (
+              <div style={{ marginTop: 20 }}>
+                <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 8, color: '#173731' }}>Signaux détectés</div>
+                <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: '#374151', lineHeight: 1.8 }}>
+                  {signals.map((s, i) => (
+                    <li key={i}>✓ {s}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+          {/* Colonne droite */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
+            <div style={{ display: 'flex', borderBottom: '1px solid #E5E0D8', flexShrink: 0 }}>
+              <button type="button" onClick={() => setActiveTab('chat')} style={{ padding: '12px 20px', fontSize: 13, fontWeight: 600, background: activeTab === 'chat' ? 'white' : 'transparent', border: 'none', borderBottom: activeTab === 'chat' ? '2px solid #173731' : '2px solid transparent', color: activeTab === 'chat' ? '#173731' : '#6B7280', cursor: 'pointer' }}>Chat IA</button>
+              <button type="button" onClick={() => setActiveTab('correction')} style={{ padding: '12px 20px', fontSize: 13, fontWeight: 600, background: activeTab === 'correction' ? 'white' : 'transparent', border: 'none', borderBottom: activeTab === 'correction' ? '2px solid #173731' : '2px solid transparent', color: activeTab === 'correction' ? '#173731' : '#6B7280', cursor: 'pointer' }}>Corriger le scoring</button>
+            </div>
+            {activeTab === 'chat' ? (
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
+                <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+                  {loading && (!messages || messages.length === 0) && <div style={{ fontSize: 12, color: '#6B7280' }}>Analyse en cours…</div>}
+                  {(messages || []).map((m, i) => (
+                    <div key={i} style={{ marginBottom: 14, display: 'flex', gap: 10, alignItems: 'flex-start', maxWidth: '90%', marginLeft: m.role === 'user' ? 'auto' : 0, marginRight: m.role === 'user' ? 0 : 'auto', flexDirection: m.role === 'user' ? 'row-reverse' : 'row' }}>
+                      <div style={{ width: 28, height: 28, borderRadius: '50%', background: m.role === 'user' ? '#173731' : '#F5F3EF', color: m.role === 'user' ? 'white' : '#173731', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600, flexShrink: 0 }}>{m.role === 'user' ? 'Vous' : 'IA'}</div>
+                      <div style={{ padding: '10px 14px', borderRadius: 12, background: m.role === 'user' ? '#173731' : '#F5F3EF', color: m.role === 'user' ? 'white' : '#1A1A1A', fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{m.content}</div>
+                    </div>
+                  ))}
+                  {loading && (messages || []).length > 0 && (
+                    <div style={{ marginBottom: 14, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                      <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#F5F3EF', color: '#173731', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600, flexShrink: 0 }}>IA</div>
+                      <div style={{ padding: '10px 14px', borderRadius: 12, background: '#F5F3EF', fontSize: 13, color: '#6B7280' }}>…</div>
+                    </div>
+                  )}
+                  <div ref={messagesEndRef} />
+                </div>
+                <div style={{ flexShrink: 0, padding: 12, borderTop: '1px solid #E5E0D8', background: '#FAFAF9' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+                    {CHAT_SUGGESTIONS.map((s) => (
+                      <button key={s} type="button" onClick={() => handleSuggestion(s)} disabled={loading} style={{ padding: '6px 12px', borderRadius: 6, background: 'white', border: '1px solid #E5E0D8', fontSize: 12, cursor: loading ? 'not-allowed' : 'pointer', color: '#173731' }}>{s}</button>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()} placeholder="Poser une question…" disabled={loading} style={{ flex: 1, minWidth: 0, padding: '10px 14px', borderRadius: 8, border: '1px solid #E5E0D8', fontSize: 13, background: 'white' }} />
+                    <button type="button" onClick={handleSend} disabled={loading || !input.trim()} style={{ padding: '10px 18px', borderRadius: 8, background: '#173731', color: 'white', fontSize: 13, fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer', flexShrink: 0 }}>Envoyer</button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <div style={{ fontSize: 14, color: '#6B7280' }}>Score actuel : <strong style={{ color: '#173731' }}>{profile?.sc ?? 0}/100</strong></div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: '#374151' }}>Score que j'aurais donné (0-100)</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <input type="range" min={0} max={100} value={correctedScore} onChange={(e) => setCorrectedScore(Number(e.target.value))} style={{ flex: 1 }} />
+                      <input type="number" min={0} max={100} value={correctedScore} onChange={(e) => setCorrectedScore(Math.min(100, Math.max(0, Number(e.target.value) || 0)))} style={{ width: 60, padding: '8px', borderRadius: 6, border: '1px solid #E5E0D8', fontSize: 13 }} />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: '#374151' }}>Catégorie réelle</label>
+                    <select value={priorityLabel} onChange={(e) => setPriorityLabel(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: 6, border: '1px solid #E5E0D8', fontSize: 13 }}>
+                      <option value="">—</option>
+                      {PRIORITY_OPTS.map((o) => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: '#374151' }}>Raison de la correction</label>
+                    <textarea value={correctionReason} onChange={(e) => setCorrectionReason(e.target.value)} placeholder="Expliquez pourquoi vous corrigez ce score... Ex: L'employeur Banque Courtois n'est pas reconnu mais c'est une banque" style={{ width: '100%', minHeight: 300, padding: '10px', borderRadius: 6, border: '1px solid #E5E0D8', fontSize: 13, resize: 'vertical' }} />
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+                      {CORRECTION_SUGGESTIONS.map((s) => (
+                        <button key={s} type="button" onClick={() => addCorrectionSuggestion(s)} style={{ padding: '6px 12px', borderRadius: 6, background: '#FFF7ED', border: '1px solid #F97316', color: '#F97316', fontSize: 12, cursor: 'pointer' }}>{s}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <button type="button" onClick={handleSaveCorrection} disabled={saving} style={{ padding: '10px 20px', borderRadius: 8, background: '#D2AB76', color: '#173731', fontSize: 13, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', alignSelf: 'flex-start' }}>{saving ? 'Enregistrement…' : 'Enregistrer la correction'}</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -356,13 +491,14 @@ export default function Import() {
   const [enrichedCount, setEnrichedCount] = useState(0)
   const [enrichTotal, setEnrichTotal] = useState(0)
   const [enrichSummary, setEnrichSummary] = useState(null) // { enriched, failed, noLinkedIn }
-  const [expandedRowKey, setExpandedRowKey] = useState(null) // 'prior-0' | 'work-1' | 'ecarte-2'
-  const [expandedChatKey, setExpandedChatKey] = useState(null)
+  const [modalProfile, setModalProfile] = useState(null)
+  const [modalRowKey, setModalRowKey] = useState(null)
   const [chatHistory, setChatHistory] = useState({}) // { [rowKey]: [{ role, content }] }
   const [learningRefresh, setLearningRefresh] = useState(0)
   const [learningStats, setLearningStats] = useState(null) // { total, topCompanies, configUpdatedAt }
   const csvInputRef = useRef(null)
   const pdfInputRef = useRef(null)
+  const [pdfAnalyzing, setPdfAnalyzing] = useState(false)
 
   const scpill = (s) => s >= 70 ? 'sh' : s >= 50 ? 'sm2' : 'sl'
   const ini = (a, b) => (a?.[0] || '') + (b?.[0] || '')
@@ -423,8 +559,8 @@ export default function Import() {
     setImportFilename('')
     setEnrichSummary(null)
     setRestoredFromSession(false)
-    setExpandedRowKey(null)
-    setExpandedChatKey(null)
+    setModalProfile(null)
+    setModalRowKey(null)
     setChatHistory({})
     showNotif('Import effacé — vous pouvez recommencer')
   }
@@ -457,14 +593,43 @@ export default function Import() {
   const handlePDFFile = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
+    if (!import.meta.env.VITE_ANTHROPIC_API_KEY) {
+      showNotif('Clé API Anthropic manquante (VITE_ANTHROPIC_API_KEY)')
+      return
+    }
     setLoading(true)
+    setPdfAnalyzing(true)
     setRestoredFromSession(false)
     hasClearedAfterPushRef.current = false
     try {
       const text = await extractTextFromPDF(file)
-      const parsed = parseLinkedInPDFText(text)
-      const sc = calculateScore(parsed)
-      setParsedRows([{ ...parsed, sc }])
+      const parsed = await parseWithClaude(text)
+      const firstExp = parsed.experiences?.[0]
+      const profile = {
+        fn: parsed.firstName || '',
+        ln: parsed.lastName || '',
+        fullName: [parsed.firstName, parsed.lastName].filter(Boolean).join(' ') || '',
+        co: firstExp?.company || parsed.title || '—',
+        ti: firstExp?.title || parsed.title || '—',
+        city: parsed.city || '—',
+        region: parsed.region || '',
+        email: parsed.email || '',
+        mail: parsed.email || '',
+        li: parsed.linkedinUrl || '',
+        dur: firstExp?.isCurrent && firstExp?.startYear ? `Depuis ${firstExp.startYear}` : '',
+        experiences: (parsed.experiences || []).map((exp) => ({
+          company: exp.company,
+          title: exp.title,
+          startYear: exp.startYear ?? null,
+          startMonth: exp.startMonth ?? null,
+          endYear: exp.endYear ?? null,
+          endMonth: exp.endMonth ?? null,
+          isCurrent: exp.isCurrent ?? false,
+        })),
+        _source: 'Import PDF',
+      }
+      const { score, priority, signals } = scoreProfile(profile, profile.experiences)
+      setParsedRows([{ ...profile, sc: score, priority, signals }])
       setImportSource('pdf')
       setImportFilename(file.name || '')
       setTab('im')
@@ -473,6 +638,7 @@ export default function Import() {
       showNotif(`Erreur PDF : ${err?.message}`)
     } finally {
       setLoading(false)
+      setPdfAnalyzing(false)
       e.target.value = ''
     }
   }
@@ -538,15 +704,20 @@ export default function Import() {
       try {
         const data = await enrichProfileWithNetrows(li)
         const experiences = data.experiences || []
+        console.log('Expériences reçues:', experiences)
         const prevScore = p.sc ?? calculateScore(p)
-        const { score: newScore } = scoreProfile(updatedRows[i], experiences)
-        updatedRows[i] = {
+        const { score: newScore, priority, signals } = scoreProfile(updatedRows[i], experiences)
+        const enrichedProfile = {
           ...updatedRows[i],
           experiences,
           sc: newScore,
+          priority,
+          signals,
           _enrichStatus: 'enriched',
           _scoreBeforeEnrich: prevScore,
         }
+        console.log('Profil après enrichissement:', enrichedProfile)
+        updatedRows[i] = enrichedProfile
         enriched++
       } catch (err) {
         if (updatedRows[i]) updatedRows[i] = { ...updatedRows[i], _enrichStatus: 'Enrichissement échoué' }
@@ -583,10 +754,10 @@ export default function Import() {
       <div className="font-serif text-[22px] mb-1">Import & Scoring</div>
       <div className="text-[13px] text-[var(--t3)] mb-5">CSV Sales Navigator ou PDF LinkedIn — mappe les colonnes, lance le scoring automatique</div>
       <div className="itabs flex border-b border-[var(--border)] mb-5">
-        <div className={`itab py-2.5 px-4 text-[13px] font-medium cursor-pointer border-b-2 border-transparent transition-all ${tab === 'iu' ? 'active text-[var(--accent)] border-b-[var(--accent)]' : 'text-[var(--t3)]'}`} onClick={() => setTab('iu')}>① Source</div>
-        <div className={`itab py-2.5 px-4 text-[13px] font-medium cursor-pointer border-b-2 border-transparent transition-all ${tab === 'im' ? 'active text-[var(--accent)] border-b-[var(--accent)]' : 'text-[var(--t3)]'}`} onClick={() => setTab('im')}>② Résultat scoring</div>
-        <div className={`itab py-2.5 px-4 text-[13px] font-medium cursor-pointer border-b-2 border-transparent transition-all ${tab === 'is' ? 'active text-[var(--accent)] border-b-[var(--accent)]' : 'text-[var(--t3)]'}`} onClick={() => setTab('is')}>③ Profils intégrés au CRM</div>
-      </div>
+          <div className={`itab py-2.5 px-4 text-[13px] font-medium cursor-pointer border-b-2 border-transparent transition-all ${tab === 'iu' ? 'active text-[var(--accent)] border-b-[var(--accent)]' : 'text-[var(--t3)]'}`} onClick={() => setTab('iu')}>① Source</div>
+          <div className={`itab py-2.5 px-4 text-[13px] font-medium cursor-pointer border-b-2 border-transparent transition-all ${tab === 'im' ? 'active text-[var(--accent)] border-b-[var(--accent)]' : 'text-[var(--t3)]'}`} onClick={() => setTab('im')}>② Résultat scoring</div>
+          <div className={`itab py-2.5 px-4 text-[13px] font-medium cursor-pointer border-b-2 border-transparent transition-all ${tab === 'is' ? 'active text-[var(--accent)] border-b-[var(--accent)]' : 'text-[var(--t3)]'}`} onClick={() => setTab('is')}>③ Profils intégrés au CRM</div>
+        </div>
 
       {restoredFromSession && parsedRows.length > 0 && (
         <div style={{ background: '#E8F5E9', border: '1px solid #A5D6A7', borderRadius: 8, padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
@@ -629,11 +800,13 @@ export default function Import() {
                 onClick={() => pdfInputRef.current?.click()}
               >
                 {loading ? <div className="text-3xl mb-2">…</div> : <div className="text-3xl mb-2">📑</div>}
-                <div className="text-sm font-semibold mb-1">Cliquer ou glisser-déposer un .pdf</div>
+                <div className="text-sm font-semibold mb-1">
+                  {loading && pdfAnalyzing ? 'Analyse du PDF en cours...' : 'Cliquer ou glisser-déposer un .pdf'}
+                </div>
                 <div className="text-xs text-[var(--t3)]">Profil LinkedIn exporté en PDF</div>
               </div>
               <div className="bg-[#EEF4FD] rounded-lg py-2.5 px-3.5 text-xs text-[#4A6FA0] mt-2">
-                Extraction automatique : nom, employeur, poste, ville — puis scoring du profil.
+                Extraction automatique : nom, employeur, poste, ville, expériences — puis scoring du profil.
               </div>
             </div>
           </div>
@@ -656,7 +829,7 @@ export default function Import() {
                 <input type="checkbox" checked={includeATravailler} onChange={(e) => setIncludeATravailler(e.target.checked)} />
                 Inclure les À travailler (50-69 pts)
               </label>
-              {netrowsCount > 0 && (
+              {netrowsCount > 0 && importSource === 'csv' && (
                 <button
                   type="button"
                   onClick={handleEnrichWithNetrows}
@@ -712,62 +885,27 @@ export default function Import() {
               <tbody>
                 {priorRows.map((p, i) => {
                   const rowKey = `prior-${i}`
-                  const isExpanded = expandedRowKey === rowKey
-                  const isChatExpanded = expandedChatKey === rowKey
-                  const colSpan = importSource === 'pdf' ? 6 : 5
                   return (
-                    <Fragment key={rowKey}>
-                      <tr
-                        className="border-b border-[#A8D5BA] cursor-pointer hover:bg-[#C5E6D0]/50 transition-colors"
-                        onClick={() => setExpandedRowKey(isExpanded ? null : rowKey)}
-                      >
-                        <td className="py-2 px-3.5"><div className="pc flex items-center gap-2.5"><div className="av w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold shrink-0" style={{ backgroundColor: '#D4EDE1', color: '#1A7A4A' }}>{ini(p.fn, p.ln)}</div><div className="pn font-medium">{p.fn} {p.ln}</div></div></td>
-                        <td className="py-2 px-3.5 text-[12.5px]">{p.co || '—'}</td>
-                        <td className="py-2 px-3.5 text-[12.5px] text-[var(--t2)]">{p.ti || '—'}</td>
-                        {importSource === 'pdf' && <td className="py-2 px-3.5 text-[12.5px] text-[var(--t3)]">{p.dur || '—'}</td>}
-                        <td className="py-2 px-3.5">
-                          <div className="flex items-center gap-2">
-                            <span className={`sc inline-flex items-center justify-center w-9 h-6 rounded-md ${scpill(p.sc)}`}>{p.sc}</span>
-                            {p._correctedByUser && <CorrectedBadge />}
-                            <ScoreImprovementBadge p={p} />
-                            <button
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); setExpandedChatKey(isChatExpanded ? null : rowKey) }}
-                              style={{ padding: '4px 8px', borderRadius: 6, background: 'white', border: '1px solid #173731', color: '#173731', fontSize: 12, cursor: 'pointer' }}
-                            >
-                              💬 Expliquer
-                            </button>
-                          </div>
-                        </td>
-                        <td className="py-2 px-3.5 flex items-center gap-2">
-                          {priotag(p.sc)}
-                          <span style={{ transition: 'transform 0.2s', transform: isExpanded ? 'rotate(180deg)' : 'none', fontSize: 12 }}>▾</span>
-                        </td>
-                      </tr>
-                      {isExpanded && (
-                        <tr>
-                          <td colSpan={colSpan} className="p-0 align-top" style={{ borderBottom: '1px solid #A8D5BA', verticalAlign: 'top' }}>
-                            <ExperienceExpandBlock experiences={p.experiences} />
-                          </td>
-                        </tr>
-                      )}
-                      {isChatExpanded && (
-                        <tr>
-                          <td colSpan={colSpan} className="p-0 align-top" style={{ borderBottom: '1px solid #A8D5BA', verticalAlign: 'top' }}>
-                            <ScoringChat
-                              profile={p}
-                              rowKey={rowKey}
-                              isExpanded={isChatExpanded}
-                              onClose={() => setExpandedChatKey(null)}
-                              messages={chatHistory[rowKey]}
-                              onMessagesChange={handleChatMessagesChange}
-                              showNotif={showNotif}
-                              useSupabase={useSupabase}
-                            />
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
+                    <tr
+                      key={rowKey}
+                      className="border-b border-[#A8D5BA] cursor-pointer hover:bg-[#C5E6D0]/50 transition-colors"
+                      onClick={() => { setModalProfile(p); setModalRowKey(rowKey) }}
+                    >
+                      <td className="py-2 px-3.5"><div className="pc flex items-center gap-2.5"><div className="av w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold shrink-0" style={{ backgroundColor: '#D4EDE1', color: '#1A7A4A' }}>{ini(p.fn, p.ln)}</div><div className="pn font-medium">{p.fn} {p.ln}</div></div></td>
+                      <td className="py-2 px-3.5 text-[12.5px]">{p.co || '—'}</td>
+                      <td className="py-2 px-3.5 text-[12.5px] text-[var(--t2)]">{p.ti || '—'}</td>
+                      {importSource === 'pdf' && <td className="py-2 px-3.5 text-[12.5px] text-[var(--t3)]">{p.dur || '—'}</td>}
+                      <td className="py-2 px-3.5">
+                        <div className="flex items-center gap-2">
+                          <span className={`sc inline-flex items-center justify-center w-9 h-6 rounded-md ${scpill(p.sc)}`}>{p.sc}</span>
+                          {p._correctedByUser && <CorrectedBadge />}
+                          <ScoreImprovementBadge p={p} />
+                        </div>
+                      </td>
+                      <td className="py-2 px-3.5 flex items-center gap-2">
+                        {priotag(p.sc)}
+                      </td>
+                    </tr>
                   )
                 })}
                 {priorRows.length === 0 && <tr><td colSpan={importSource === 'pdf' ? 6 : 5} className="py-4 px-3.5 text-center text-[var(--t3)] text-[13px]">Aucun profil prioritaire</td></tr>}
@@ -789,47 +927,27 @@ export default function Import() {
               <tbody>
                 {workRows.map((p, i) => {
                   const rowKey = `work-${i}`
-                  const isExpanded = expandedRowKey === rowKey
-                  const isChatExpanded = expandedChatKey === rowKey
-                  const colSpan = importSource === 'pdf' ? 6 : 5
                   return (
-                    <Fragment key={rowKey}>
-                      <tr
-                        className="border-b border-[#FFE0B2] cursor-pointer hover:bg-[#FFECB3]/50 transition-colors"
-                        onClick={() => setExpandedRowKey(isExpanded ? null : rowKey)}
-                      >
-                        <td className="py-2 px-3.5"><div className="pc flex items-center gap-2.5"><div className="av w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold shrink-0" style={{ backgroundColor: '#FDEBC8', color: '#B86B0F' }}>{ini(p.fn, p.ln)}</div><div className="pn font-medium">{p.fn} {p.ln}</div></div></td>
-                        <td className="py-2 px-3.5 text-[12.5px]">{p.co || '—'}</td>
-                        <td className="py-2 px-3.5 text-[12.5px] text-[var(--t2)]">{p.ti || '—'}</td>
-                        {importSource === 'pdf' && <td className="py-2 px-3.5 text-[12.5px] text-[var(--t3)]">{p.dur || '—'}</td>}
-                        <td className="py-2 px-3.5">
-                          <div className="flex items-center gap-2">
-                            <span className={`sc inline-flex items-center justify-center w-9 h-6 rounded-md ${scpill(p.sc)}`}>{p.sc}</span>
-                            {p._correctedByUser && <CorrectedBadge />}
-                            <ScoreImprovementBadge p={p} />
-                            <button type="button" onClick={(e) => { e.stopPropagation(); setExpandedChatKey(isChatExpanded ? null : rowKey) }} style={{ padding: '4px 8px', borderRadius: 6, background: 'white', border: '1px solid #173731', color: '#173731', fontSize: 12, cursor: 'pointer' }}>💬 Expliquer</button>
-                          </div>
-                        </td>
-                        <td className="py-2 px-3.5 flex items-center gap-2">
-                          {priotag(p.sc)}
-                          <span style={{ transition: 'transform 0.2s', transform: isExpanded ? 'rotate(180deg)' : 'none', fontSize: 12 }}>▾</span>
-                        </td>
-                      </tr>
-                      {isExpanded && (
-                        <tr>
-                          <td colSpan={colSpan} className="p-0 align-top" style={{ borderBottom: '1px solid #FFE0B2', verticalAlign: 'top' }}>
-                            <ExperienceExpandBlock experiences={p.experiences} />
-                          </td>
-                        </tr>
-                      )}
-                      {isChatExpanded && (
-                        <tr>
-                          <td colSpan={colSpan} className="p-0 align-top" style={{ borderBottom: '1px solid #FFE0B2', verticalAlign: 'top' }}>
-                            <ScoringChat profile={p} rowKey={rowKey} isExpanded={isChatExpanded} onClose={() => setExpandedChatKey(null)} messages={chatHistory[rowKey]} onMessagesChange={handleChatMessagesChange} onProfileCorrection={handleProfileCorrection} showNotif={showNotif} useSupabase={useSupabase} />
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
+                    <tr
+                      key={rowKey}
+                      className="border-b border-[#FFE0B2] cursor-pointer hover:bg-[#FFECB3]/50 transition-colors"
+                      onClick={() => { setModalProfile(p); setModalRowKey(rowKey) }}
+                    >
+                      <td className="py-2 px-3.5"><div className="pc flex items-center gap-2.5"><div className="av w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold shrink-0" style={{ backgroundColor: '#FDEBC8', color: '#B86B0F' }}>{ini(p.fn, p.ln)}</div><div className="pn font-medium">{p.fn} {p.ln}</div></div></td>
+                      <td className="py-2 px-3.5 text-[12.5px]">{p.co || '—'}</td>
+                      <td className="py-2 px-3.5 text-[12.5px] text-[var(--t2)]">{p.ti || '—'}</td>
+                      {importSource === 'pdf' && <td className="py-2 px-3.5 text-[12.5px] text-[var(--t3)]">{p.dur || '—'}</td>}
+                      <td className="py-2 px-3.5">
+                        <div className="flex items-center gap-2">
+                          <span className={`sc inline-flex items-center justify-center w-9 h-6 rounded-md ${scpill(p.sc)}`}>{p.sc}</span>
+                          {p._correctedByUser && <CorrectedBadge />}
+                          <ScoreImprovementBadge p={p} />
+                        </div>
+                      </td>
+                      <td className="py-2 px-3.5 flex items-center gap-2">
+                        {priotag(p.sc)}
+                      </td>
+                    </tr>
                   )
                 })}
                 {workRows.length === 0 && <tr><td colSpan={importSource === 'pdf' ? 6 : 5} className="py-4 px-3.5 text-center text-[var(--t3)] text-[13px]">Aucun profil à travailler</td></tr>}
@@ -855,47 +973,27 @@ export default function Import() {
                 <tbody>
                   {ecarteRows.map((p, i) => {
                     const rowKey = `ecarte-${i}`
-                    const isExpanded = expandedRowKey === rowKey
-                    const isChatExpanded = expandedChatKey === rowKey
-                    const colSpan = importSource === 'pdf' ? 6 : 5
                     return (
-                      <Fragment key={rowKey}>
-                        <tr
-                          className="border-b border-[#FFCDD2] cursor-pointer hover:bg-[#FFCDD2]/30 transition-colors"
-                          onClick={() => setExpandedRowKey(isExpanded ? null : rowKey)}
-                        >
-                          <td className="py-2 px-3.5"><div className="pc flex items-center gap-2.5"><div className="av w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold shrink-0" style={{ backgroundColor: '#FDE8E8', color: '#c0392b' }}>{ini(p.fn, p.ln)}</div><div className="pn font-medium">{p.fn} {p.ln}</div></div></td>
-                          <td className="py-2 px-3.5 text-[12.5px]">{p.co || '—'}</td>
-                          <td className="py-2 px-3.5 text-[12.5px] text-[var(--t2)]">{p.ti || '—'}</td>
-                          {importSource === 'pdf' && <td className="py-2 px-3.5 text-[12.5px] text-[var(--t3)]">{p.dur || '—'}</td>}
-                          <td className="py-2 px-3.5">
-                            <div className="flex items-center gap-2">
-                              <span className={`sc inline-flex items-center justify-center w-9 h-6 rounded-md ${scpill(p.sc)}`}>{p.sc}</span>
-                              {p._correctedByUser && <CorrectedBadge />}
-                              <ScoreImprovementBadge p={p} />
-                              <button type="button" onClick={(e) => { e.stopPropagation(); setExpandedChatKey(isChatExpanded ? null : rowKey) }} style={{ padding: '4px 8px', borderRadius: 6, background: 'white', border: '1px solid #173731', color: '#173731', fontSize: 12, cursor: 'pointer' }}>💬 Expliquer</button>
-                            </div>
-                          </td>
-                          <td className="py-2 px-3.5 flex items-center gap-2">
-                            {priotag(p.sc)}
-                            <span style={{ transition: 'transform 0.2s', transform: isExpanded ? 'rotate(180deg)' : 'none', fontSize: 12 }}>▾</span>
-                          </td>
-                        </tr>
-                        {isExpanded && (
-                          <tr>
-                            <td colSpan={colSpan} className="p-0 align-top" style={{ borderBottom: '1px solid #FFCDD2', verticalAlign: 'top' }}>
-                              <ExperienceExpandBlock experiences={p.experiences} />
-                            </td>
-                          </tr>
-                        )}
-                        {isChatExpanded && (
-                          <tr>
-                            <td colSpan={colSpan} className="p-0 align-top" style={{ borderBottom: '1px solid #FFCDD2', verticalAlign: 'top' }}>
-                              <ScoringChat profile={p} rowKey={rowKey} isExpanded={isChatExpanded} onClose={() => setExpandedChatKey(null)} messages={chatHistory[rowKey]} onMessagesChange={handleChatMessagesChange} onProfileCorrection={handleProfileCorrection} showNotif={showNotif} useSupabase={useSupabase} />
-                            </td>
-                          </tr>
-                        )}
-                      </Fragment>
+                      <tr
+                        key={rowKey}
+                        className="border-b border-[#FFCDD2] cursor-pointer hover:bg-[#FFCDD2]/30 transition-colors"
+                        onClick={() => { setModalProfile(p); setModalRowKey(rowKey) }}
+                      >
+                        <td className="py-2 px-3.5"><div className="pc flex items-center gap-2.5"><div className="av w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold shrink-0" style={{ backgroundColor: '#FDE8E8', color: '#c0392b' }}>{ini(p.fn, p.ln)}</div><div className="pn font-medium">{p.fn} {p.ln}</div></div></td>
+                        <td className="py-2 px-3.5 text-[12.5px]">{p.co || '—'}</td>
+                        <td className="py-2 px-3.5 text-[12.5px] text-[var(--t2)]">{p.ti || '—'}</td>
+                        {importSource === 'pdf' && <td className="py-2 px-3.5 text-[12.5px] text-[var(--t3)]">{p.dur || '—'}</td>}
+                        <td className="py-2 px-3.5">
+                          <div className="flex items-center gap-2">
+                            <span className={`sc inline-flex items-center justify-center w-9 h-6 rounded-md ${scpill(p.sc)}`}>{p.sc}</span>
+                            {p._correctedByUser && <CorrectedBadge />}
+                            <ScoreImprovementBadge p={p} />
+                          </div>
+                        </td>
+                        <td className="py-2 px-3.5 flex items-center gap-2">
+                          {priotag(p.sc)}
+                        </td>
+                      </tr>
                     )
                   })}
                 </tbody>
@@ -968,6 +1066,21 @@ export default function Import() {
 
       {tab === 'is' && parsedRows.length === 0 && (
         <div className="text-[var(--t3)] py-8 text-center">Importez d'abord des profils depuis l'onglet Source.</div>
+      )}
+
+      {modalProfile && modalRowKey && (
+        <ProfileImportModal
+          profile={modalProfile}
+          rowKey={modalRowKey}
+          onClose={() => { setModalProfile(null); setModalRowKey(null) }}
+          chatHistory={chatHistory}
+          onMessagesChange={handleChatMessagesChange}
+          onProfileCorrection={handleProfileCorrection}
+          showNotif={showNotif}
+          useSupabase={useSupabase}
+          ini={ini}
+          priotag={priotag}
+        />
       )}
     </div>
   )
