@@ -75,6 +75,8 @@ function mapProfileToRow(profile) {
     sequence_lemlist: profile.sequence_lemlist ?? '',
     integration_date: profile.integ ?? '—',
     lead_status: profile.lead_status ?? '',
+    next_event_date: profile.next_event_date ?? null,
+    next_event_label: profile.next_event_label ?? null,
   }
   if (experiences.length) row.experiences = experiences
   return row
@@ -333,7 +335,7 @@ export function CRMProvider({ children }) {
     showNotif(`Région ${p.fn} ${p.ln} → ${newRegion || '—'} ✓`)
   }, [profiles, showNotif, persistProfileUpdate, insertActivity])
 
-  const FIELD_LABELS = { fn: 'Prénom', ln: 'Nom', mail: 'Email', li: 'LinkedIn', co: 'Employeur', ti: 'Intitulé de poste', city: 'Ville' }
+  const FIELD_LABELS = { fn: 'Prénom', ln: 'Nom', mail: 'Email', li: 'LinkedIn', co: 'Employeur', ti: 'Intitulé de poste', city: 'Ville', next_event_date: 'Prochain événement', next_event_label: 'Type d\'événement' }
   const updateProfileField = useCallback((id, field, newValue) => {
     const p = profiles.find((x) => x.id === id)
     if (!p) return

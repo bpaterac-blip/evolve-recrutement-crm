@@ -170,13 +170,28 @@ export default function Dashboard() {
     loadNextSession()
   }, [addSessionModal])
 
-  const cardStyle = { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: 16, marginBottom: 16 }
+  const cardStyle = {
+    background: '#ffffff',
+    borderRadius: 12,
+    border: '1px solid rgba(0,0,0,0.06)',
+    padding: '20px 24px',
+    boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
+  }
+  const sectionTitleStyle = {
+    fontSize: 11,
+    fontWeight: 600,
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase',
+    color: '#888',
+    marginBottom: 12,
+  }
+  const valueStyle = { fontSize: 28, fontWeight: 600, color: ACCENT }
 
   return (
     <div className="page h-full overflow-y-auto p-[22px]" style={{ background: '#F5F0E8' }}>
-      <div className="font-serif text-[22px] mb-1" style={{ color: ACCENT }}>Bonjour {userProfile?.first_name || (user?.email || '').split('@')[0] || 'Utilisateur'}</div>
+      <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 26, color: ACCENT, marginBottom: 4 }}>Bonjour {userProfile?.first_name || (user?.email || '').split('@')[0] || 'Utilisateur'}</div>
       <div className="flex items-center gap-3 mb-5 flex-wrap">
-        <span className="text-[13px] text-[var(--t3)]">Pipeline au {pipelineDate}</span>
+        <span className="text-[13px]" style={{ color: '#999' }}>Pipeline au {pipelineDate}</span>
         {isGlobalView && ownerEmails.length > 0 && (
           <select value={ownerFilter} onChange={(e) => setOwnerFilter(e.target.value)} className="text-[12px] py-1.5 px-2.5 rounded-md border" style={{ borderColor: 'var(--border)' }}>
             <option value="all">Tous les utilisateurs</option>
@@ -187,46 +202,46 @@ export default function Dashboard() {
         )}
       </div>
 
-      <div className="stats-row grid grid-cols-4 gap-3 mb-5">
-        <div className="scard rounded-[10px] p-4" style={cardStyle}>
-          <div className="slbl text-[11.5px] text-[var(--t3)] uppercase tracking-wider mb-1">Contactés (mois en cours)</div>
-          <div className="sval text-[26px] font-semibold leading-none">34</div>
-          <div className="ssub text-xs text-[var(--t3)] mt-1">+12 vs février</div>
+      <div className="stats-row grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+        <div style={cardStyle}>
+          <div style={sectionTitleStyle}>Contactés (mois en cours)</div>
+          <div style={valueStyle}>34</div>
+          <div className="text-xs mt-1" style={{ color: '#888' }}>+12 vs février</div>
         </div>
-        <div className="scard rounded-[10px] p-4" style={cardStyle}>
-          <div className="slbl text-[11.5px] text-[var(--t3)] uppercase tracking-wider mb-1">En pipeline actif</div>
-          <div className="sval text-[26px] font-semibold leading-none">{pipeline.length}</div>
-          <div className="ssub text-xs text-[var(--t3)] mt-1">Tous stades</div>
+        <div style={cardStyle}>
+          <div style={sectionTitleStyle}>En pipeline actif</div>
+          <div style={valueStyle}>{pipeline.length}</div>
+          <div className="text-xs mt-1" style={{ color: '#888' }}>Tous stades</div>
         </div>
-        <div className="scard rounded-[10px] p-4" style={cardStyle}>
-          <div className="slbl text-[11.5px] text-[var(--t3)] uppercase tracking-wider mb-1">Recrutés 2026</div>
-          <div className="sval text-[26px] font-semibold leading-none">{recruited.length}</div>
-          <div className="ssub text-xs mt-1" style={{ color: 'var(--green)' }}>+1 ce mois</div>
+        <div style={cardStyle}>
+          <div style={sectionTitleStyle}>Recrutés 2026</div>
+          <div style={valueStyle}>{recruited.length}</div>
+          <div className="text-xs mt-1" style={{ color: '#16a34a' }}>+1 ce mois</div>
         </div>
-        <div className="scard rounded-[10px] p-4" style={cardStyle}>
-          <div className="slbl text-[11.5px] text-[var(--t3)] uppercase tracking-wider mb-1">Taux conversion</div>
-          <div className="sval text-[26px] font-semibold leading-none">{conversionRate}%</div>
-          <div className="ssub text-xs text-[var(--t3)] mt-1">R1 → Recruté</div>
+        <div style={cardStyle}>
+          <div style={sectionTitleStyle}>Taux conversion</div>
+          <div style={valueStyle}>{conversionRate}%</div>
+          <div className="text-xs mt-1" style={{ color: '#888' }}>R1 → Recruté</div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[60%_40%] gap-5">
-        <div>
-          <div className="tw overflow-hidden mb-5" style={{ ...cardStyle, padding: 0 }}>
-            <div className="thd py-3 px-4 border-b flex items-center gap-2" style={{ borderColor: 'var(--border)' }}>
-              <div className="ttl font-semibold text-sm">Profils à relancer</div>
-              <span className="bdg bg-[var(--s2)] text-[var(--t2)] text-xs py-0.5 px-2 rounded-full font-medium">{profilsARelancer.length} profils</span>
-              <button type="button" className="btn bo bsm py-1.5 px-2.5 text-xs ml-auto" onClick={() => navigate('/profiles')} style={{ color: ACCENT }}>Voir tous →</button>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mb-4">
+        <div className="lg:col-span-5">
+          <div className="tw overflow-hidden" style={{ ...cardStyle, padding: 0 }}>
+            <div className="thd py-3 px-5 border-b flex items-center gap-2" style={{ borderColor: 'rgba(0,0,0,0.06)' }}>
+              <div style={{ ...sectionTitleStyle, marginBottom: 0 }}>Profils à relancer</div>
+              <span className="text-xs py-0.5 px-2 rounded-full font-medium ml-auto" style={{ background: 'rgba(0,0,0,0.06)', color: '#666' }}>{profilsARelancer.length} profils</span>
+              <button type="button" className="py-1.5 px-2.5 text-xs rounded-md border ml-auto" onClick={() => navigate('/profiles')} style={{ borderColor: ACCENT, color: ACCENT, background: 'none' }}>Voir tous</button>
             </div>
             <table className="w-full border-collapse">
               <thead>
-                <tr style={{ backgroundColor: 'var(--s2)' }}>
-                  <th className="text-left text-[11px] font-medium uppercase tracking-wider text-[var(--t3)] py-2 px-4 border-b" style={{ borderColor: 'var(--border)' }}>Profil</th>
-                  {isGlobalView && <th className="text-left text-[11px] font-medium uppercase tracking-wider text-[var(--t3)] py-2 px-4 border-b" style={{ borderColor: 'var(--border)' }}>Responsable</th>}
-                  <th className="text-left text-[11px] font-medium uppercase tracking-wider text-[var(--t3)] py-2 px-4 border-b" style={{ borderColor: 'var(--border)' }}>Stade actuel</th>
-                  <th className="text-left text-[11px] font-medium uppercase tracking-wider text-[var(--t3)] py-2 px-4 border-b" style={{ borderColor: 'var(--border)' }}>Dernière action</th>
-                  <th className="text-left text-[11px] font-medium uppercase tracking-wider text-[var(--t3)] py-2 px-4 border-b" style={{ borderColor: 'var(--border)' }}>Jours sans action</th>
-                  <th className="text-left text-[11px] font-medium uppercase tracking-wider text-[var(--t3)] py-2 px-4 border-b" style={{ borderColor: 'var(--border)' }}>Intégration pot.</th>
+                <tr style={{ backgroundColor: 'rgba(0,0,0,0.03)' }}>
+                  <th className="text-left text-[11px] font-medium uppercase tracking-wider py-2 px-4 border-b" style={{ borderColor: 'rgba(0,0,0,0.06)', color: '#888' }}>Profil</th>
+                  {isGlobalView && <th className="text-left text-[11px] font-medium uppercase tracking-wider py-2 px-4 border-b" style={{ borderColor: 'rgba(0,0,0,0.06)', color: '#888' }}>Responsable</th>}
+                  <th className="text-left text-[11px] font-medium uppercase tracking-wider py-2 px-4 border-b" style={{ borderColor: 'rgba(0,0,0,0.06)', color: '#888' }}>Stade actuel</th>
+                  <th className="text-left text-[11px] font-medium uppercase tracking-wider py-2 px-4 border-b" style={{ borderColor: 'rgba(0,0,0,0.06)', color: '#888' }}>Dernière action</th>
+                  <th className="text-left text-[11px] font-medium uppercase tracking-wider py-2 px-4 border-b" style={{ borderColor: 'rgba(0,0,0,0.06)', color: '#888' }}>Jours sans action</th>
+                  <th className="text-left text-[11px] font-medium uppercase tracking-wider py-2 px-4 border-b" style={{ borderColor: 'rgba(0,0,0,0.06)', color: '#888' }}>Intégration pot.</th>
                 </tr>
               </thead>
               <tbody>
@@ -234,7 +249,7 @@ export default function Dashboard() {
                   <tr><td colSpan={isGlobalView ? 6 : 5} className="py-8 text-center text-[var(--t3)] text-[13px]">Aucun profil à relancer</td></tr>
                 ) : (
                   profilsARelancer.map((p, i) => (
-                    <tr key={p.id} className="border-b hover:bg-[#F8F5F1] cursor-pointer last:border-b-0" style={{ borderColor: 'var(--border)' }} onClick={() => { setEditingCell(null); navigate(`/profiles/${p.id}`); }}>
+                    <tr key={p.id} className="border-b hover:bg-[rgba(0,0,0,0.02)] cursor-pointer last:border-b-0" style={{ borderColor: 'rgba(0,0,0,0.06)' }} onClick={() => { setEditingCell(null); navigate(`/profiles/${p.id}`); }}>
                       <td className="py-2.5 px-4">
                         <div className="pc flex items-center gap-2.5">
                           <div className="av w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold shrink-0" style={{ backgroundColor: ['#D4EDE1', '#D3E4F8', '#FDEBC8'][i % 3], color: ['#1A7A4A', '#1E5FA0', '#B86B0F'][i % 3] }}>{ini(p.fn, p.ln)}</div>
@@ -254,70 +269,63 @@ export default function Dashboard() {
               </tbody>
             </table>
           </div>
-
-          <div className="tw overflow-hidden" style={{ ...cardStyle, padding: 0 }}>
-            <div className="thd py-2.5 px-5 border-b flex items-center gap-2" style={{ borderColor: 'var(--border)' }}>
-              <div className="ttl font-semibold text-sm">Prochaine session de formation</div>
-            </div>
-            <div style={{ padding: '16px 20px' }}>
-              {sessionsLoading ? (
-                <div className="text-[13px] text-[var(--t3)]">Chargement…</div>
-              ) : !nextSession ? (
-                <div className="flex flex-col items-center gap-3 py-4">
-                  <span className="text-[13px] text-[var(--t3)]">Aucune session planifiée</span>
-                  <button type="button" onClick={() => setAddSessionModal(true)} className="py-2 px-4 rounded-lg text-[13px] font-medium" style={{ backgroundColor: ACCENT, color: 'white' }}>+ Ajouter une session</button>
-                </div>
-              ) : (
-                <div>
-                  <div className="flex items-center justify-between gap-3 flex-wrap">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-medium" style={{ color: ACCENT, fontSize: 18 }}>{formatDateFr(nextSession.date_session)}</span>
-                      <span className="text-[var(--t3)]">·</span>
-                      <span className="text-[13px] text-[var(--t2)]">{nextSession.lieu || '—'}</span>
-                      <span className="inline-flex px-2 py-0.5 rounded-md text-[11px] font-semibold" style={{ backgroundColor: nextSession.statut === 'confirmée' ? '#D4EDE1' : 'rgba(210,171,118,0.2)', color: nextSession.statut === 'confirmée' ? '#1A7A4A' : GOLD }}>{nextSession.statut}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <button type="button" onClick={() => setAssignModal(nextSession)} className="p-2 rounded-md hover:bg-[var(--s2)] transition-colors" title="Assigner un profil">
-                        <IconAssigner />
-                      </button>
-                      <button type="button" onClick={() => setAddSessionModal(true)} className="p-2 rounded-md hover:bg-[var(--s2)] transition-colors" title="Ajouter une session">
-                        <IconAddSession />
-                      </button>
-                    </div>
-                  </div>
-                  <SessionProfilsList key={sessionProfilsRefresh} sessionId={nextSession.id} />
-                </div>
-              )}
-            </div>
-          </div>
         </div>
 
-        <div className="space-y-5">
+        <div className="lg:col-span-4 flex flex-col gap-4">
           <div style={cardStyle}>
-            <div className="font-semibold text-sm mb-3" style={{ color: ACCENT }}>R1 planifiés ce mois</div>
-            <div className="text-[24px] font-semibold mb-2">{r1CeMois.length} profils en R1 ce mois</div>
+            <div style={sectionTitleStyle}>Objectif {new Date().getFullYear()}</div>
+            <div className="text-[12px] mb-2" style={{ color: '#888' }}>15 recrutés par conseiller</div>
+            {(() => {
+              const currentYear = new Date().getFullYear()
+              const myProfiles = isGlobalView ? allProfiles.filter((p) => p.owner_id === user?.id || p.owner_email === user?.email) : P
+              const recruitedThisYear = myProfiles.filter((p) => p.stg === 'Recruté' && p.created_at && new Date(p.created_at).getFullYear() === currentYear)
+              const count = recruitedThisYear.length
+              const pct = Math.min(100, Math.round((count / 15) * 100))
+              const barColor = pct >= 100 ? '#16a34a' : pct >= 67 ? '#3b82f6' : pct >= 34 ? '#f59e0b' : '#dc2626'
+              return (
+                <>
+                  <div style={valueStyle} className="mb-2">{count} / 15</div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div style={{ flex: 1, height: 8, background: 'rgba(0,0,0,0.08)', borderRadius: 4, overflow: 'hidden' }}>
+                      <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: 4, transition: 'width 0.3s' }} />
+                    </div>
+                    <span className="text-[11px] shrink-0" style={{ color: '#888' }}>{pct}%</span>
+                  </div>
+                  <div className="text-[12px]" style={{ color: '#666' }}>
+                    {pct >= 100 ? <span style={{ color: '#16a34a', fontWeight: 600 }}>Objectif atteint !</span> : `${pct}% de l'objectif atteint`}
+                  </div>
+                </>
+              )
+            })()}
+          </div>
+          <div style={cardStyle}>
+            <div style={sectionTitleStyle}>R1 planifiés ce mois</div>
+            <div style={valueStyle}>{r1CeMois.length}</div>
+            <div className="text-[12px] mt-1" style={{ color: '#888' }}>profils en R1 ce mois</div>
             {r1CeMois.length === 0 ? (
-              <div className="text-[13px] text-[var(--t3)]">Aucun</div>
+              <div className="text-[13px] mt-2" style={{ color: '#888' }}>Aucun</div>
             ) : (
-              <ul className="space-y-2">
+              <ul className="space-y-2 mt-2">
                 {r1CeMois.map((p) => (
                   <li key={p.id} className="flex justify-between items-center cursor-pointer hover:opacity-80" onClick={() => navigate(`/profiles/${p.id}`)}>
                     <span className="text-[13px]">{p.fn} {p.ln} · {p.co}</span>
-                    <span className="text-[12px] text-[var(--t3)]">{p.updated_at || p.created_at ? new Date(p.updated_at || p.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) : ''}</span>
+                    <span className="text-[12px]" style={{ color: '#888' }}>{p.updated_at || p.created_at ? new Date(p.updated_at || p.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) : ''}</span>
                   </li>
                 ))}
               </ul>
             )}
           </div>
+        </div>
 
+        <div className="lg:col-span-3 flex flex-col gap-4">
           <div style={cardStyle}>
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center gap-2" style={{ ...sectionTitleStyle, marginBottom: 8 }}>
               <span style={{ color: '#dc2626' }}><IconWarning /></span>
-              <span className="font-semibold text-sm" style={{ color: ACCENT }}>Profils bloqués +30 jours</span>
+              <span>Profils bloqués +30 jours</span>
               {bloques30.length > 0 && <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold" style={{ backgroundColor: '#dc2626', color: 'white' }}>{bloques30.length}</span>}
             </div>
             {bloques30.length === 0 ? (
-              <div className="text-[13px] text-[var(--t3)]">Aucun</div>
+              <div className="text-[13px]" style={{ color: '#888' }}>Aucun</div>
             ) : (
               <ul className="space-y-2">
                 {bloques30.slice(0, 6).map((p) => (
@@ -331,28 +339,43 @@ export default function Dashboard() {
           </div>
 
           <div style={cardStyle}>
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center gap-2" style={{ ...sectionTitleStyle, marginBottom: 12 }}>
               <span style={{ color: ACCENT }}><IconCalendar /></span>
-              <span className="font-semibold text-sm" style={{ color: ACCENT }}>Objectif {new Date().getFullYear()}</span>
+              <span>Événements à venir</span>
             </div>
-            <div className="text-[12px] text-[var(--t3)] mb-2">15 recrutés par conseiller</div>
             {(() => {
-              const currentYear = new Date().getFullYear()
-              const myProfiles = isGlobalView ? allProfiles.filter((p) => p.owner_id === user?.id || p.owner_email === user?.email) : P
-              const recruitedThisYear = myProfiles.filter((p) => p.stg === 'Recruté' && p.created_at && new Date(p.created_at).getFullYear() === currentYear)
-              const count = recruitedThisYear.length
-              const pct = Math.min(100, Math.round((count / 15) * 100))
-              const barColor = pct >= 100 ? '#16a34a' : pct >= 67 ? '#3b82f6' : pct >= 34 ? '#f59e0b' : '#dc2626'
+              const today = new Date().toISOString().slice(0, 10)
+              const events = P.filter((p) => p.next_event_date && p.next_event_date >= today)
+                .sort((a, b) => (a.next_event_date || '').localeCompare(b.next_event_date || ''))
+                .slice(0, 5)
+              if (events.length === 0) {
+                return (
+                  <div className="flex flex-col items-center justify-center py-6 text-center">
+                    <span className="mb-2" style={{ color: '#888' }}>
+                      <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                        <line x1="16" y1="2" x2="16" y2="6" />
+                        <line x1="8" y1="2" x2="8" y2="6" />
+                        <line x1="3" y1="10" x2="21" y2="10" />
+                      </svg>
+                    </span>
+                    <span className="text-[13px]" style={{ color: '#888' }}>Aucun événement à venir</span>
+                  </div>
+                )
+              }
               return (
-                <>
-                  <div className="text-[28px] font-semibold mb-2" style={{ color: ACCENT }}>{count} / 15</div>
-                  <div style={{ height: 8, background: 'var(--s2)', borderRadius: 4, overflow: 'hidden', marginBottom: 8 }}>
-                    <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: 4, transition: 'width 0.3s' }} />
-                  </div>
-                  <div className="text-[12px] text-[var(--t2)]">
-                    {pct >= 100 ? <span style={{ color: '#16a34a', fontWeight: 600 }}>Objectif atteint !</span> : `${pct}% de l'objectif atteint`}
-                  </div>
-                </>
+                <ul className="space-y-2">
+                  {events.map((p) => (
+                    <li key={p.id} className="flex items-center gap-2 cursor-pointer hover:opacity-80" onClick={() => navigate(`/profiles/${p.id}`)}>
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold shrink-0" style={{ backgroundColor: ['#D4EDE1', '#D3E4F8', '#FDEBC8'][events.indexOf(p) % 3], color: ['#1A7A4A', '#1E5FA0', '#B86B0F'][events.indexOf(p) % 3] }}>{(p.fn?.[0] || '') + (p.ln?.[0] || '') || '?'}</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[13px] font-medium">{p.fn} {p.ln}</div>
+                        <div className="text-[12px]" style={{ color: '#888' }}>{p.next_event_label || 'Événement'} · {formatDateShort(p.next_event_date)}</div>
+                      </div>
+                      <span className="tag px-1.5 py-0.5 rounded text-[11px]" style={stag(p.stg)}>{p.stg || '—'}</span>
+                    </li>
+                  ))}
+                </ul>
               )
             })()}
           </div>
@@ -369,7 +392,7 @@ export default function Dashboard() {
             if (owners.length === 0) return null
             return (
               <div style={cardStyle}>
-                <div className="font-semibold text-sm mb-3" style={{ color: ACCENT }}>Objectif par conseiller</div>
+                <div style={sectionTitleStyle}>Objectif par conseiller</div>
                 <div className="space-y-3">
                   {owners.map((o) => {
                     const pct = Math.min(100, Math.round((o.count / 15) * 100))
@@ -381,7 +404,7 @@ export default function Dashboard() {
                           <span className="text-[13px] font-medium">{name}</span>
                           <span className="text-[12px] text-[var(--t2)]">{o.count} / 15</span>
                         </div>
-                        <div style={{ height: 6, background: 'var(--s2)', borderRadius: 4, overflow: 'hidden' }}>
+                        <div style={{ height: 6, background: 'rgba(0,0,0,0.08)', borderRadius: 4, overflow: 'hidden' }}>
                           <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: 4, transition: 'width 0.3s' }} />
                         </div>
                       </div>
@@ -391,49 +414,39 @@ export default function Dashboard() {
               </div>
             )
           })()}
-
-          <div style={cardStyle}>
-            <div className="flex items-center gap-2 mb-3">
-              <span style={{ color: ACCENT }}><IconCalendar /></span>
-              <span className="font-semibold text-sm" style={{ color: ACCENT }}>Événements à venir</span>
-            </div>
-            {(() => {
-              const today = new Date().toISOString().slice(0, 10)
-              const events = P.filter((p) => p.next_event_date && p.next_event_date >= today)
-                .sort((a, b) => (a.next_event_date || '').localeCompare(b.next_event_date || ''))
-                .slice(0, 5)
-              if (events.length === 0) {
-                return (
-                  <div className="flex flex-col items-center justify-center py-6 text-center">
-                    <span className="mb-2" style={{ color: 'var(--t3)' }}>
-                      <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                        <line x1="16" y1="2" x2="16" y2="6" />
-                        <line x1="8" y1="2" x2="8" y2="6" />
-                        <line x1="3" y1="10" x2="21" y2="10" />
-                      </svg>
-                    </span>
-                    <span className="text-[13px] text-[var(--t3)]">Aucun événement à venir</span>
-                  </div>
-                )
-              }
-              return (
-                <ul className="space-y-2">
-                  {events.map((p) => (
-                    <li key={p.id} className="flex items-center gap-2 cursor-pointer hover:opacity-80" onClick={() => navigate(`/profiles/${p.id}`)}>
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold shrink-0" style={{ backgroundColor: ['#D4EDE1', '#D3E4F8', '#FDEBC8'][events.indexOf(p) % 3], color: ['#1A7A4A', '#1E5FA0', '#B86B0F'][events.indexOf(p) % 3] }}>{(p.fn?.[0] || '') + (p.ln?.[0] || '') || '?'}</div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-[13px] font-medium">{p.fn} {p.ln}</div>
-                        <div className="text-[12px] text-[var(--t2)]">{p.next_event_label || 'Événement'} · {formatDateShort(p.next_event_date)}</div>
-                      </div>
-                      <span className="tag px-1.5 py-0.5 rounded text-[11px]" style={stag(p.stg)}>{p.stg || '—'}</span>
-                    </li>
-                  ))}
-                </ul>
-              )
-            })()}
-          </div>
         </div>
+      </div>
+
+      <div style={{ ...cardStyle, marginTop: 0 }}>
+        <div style={sectionTitleStyle}>Prochaine session de formation</div>
+        {sessionsLoading ? (
+          <div className="text-[13px]" style={{ color: '#888' }}>Chargement…</div>
+        ) : !nextSession ? (
+          <div className="flex flex-col items-center gap-3 py-6">
+            <span className="text-[13px]" style={{ color: '#888' }}>Aucune session planifiée</span>
+            <button type="button" onClick={() => setAddSessionModal(true)} className="py-2 px-4 rounded-lg text-[13px] font-medium" style={{ backgroundColor: ACCENT, color: 'white' }}>+ Ajouter une session</button>
+          </div>
+        ) : (
+          <div className="flex flex-col lg:flex-row lg:items-center gap-4 lg:gap-6">
+            <div className="flex items-center gap-3 flex-wrap shrink-0">
+              <span className="font-medium" style={{ color: ACCENT, fontSize: 18 }}>{formatDateFr(nextSession.date_session)}</span>
+              <span style={{ color: '#888' }}>·</span>
+              <span className="text-[13px]" style={{ color: '#666' }}>{nextSession.lieu || '—'}</span>
+              <span className="inline-flex px-2 py-0.5 rounded-md text-[11px] font-semibold" style={{ backgroundColor: nextSession.statut === 'confirmée' ? '#D4EDE1' : 'rgba(210,171,118,0.2)', color: nextSession.statut === 'confirmée' ? '#1A7A4A' : GOLD }}>{nextSession.statut}</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <SessionProfilsList key={sessionProfilsRefresh} sessionId={nextSession.id} horizontal />
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              <button type="button" onClick={() => setAssignModal(nextSession)} className="p-2 rounded-md hover:bg-[rgba(0,0,0,0.06)] transition-colors" title="Assigner un profil">
+                <IconAssigner />
+              </button>
+              <button type="button" onClick={() => setAddSessionModal(true)} className="p-2 rounded-md hover:bg-[rgba(0,0,0,0.06)] transition-colors" title="Ajouter une session">
+                <IconAddSession />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {editingCell?.rect && currentProfile && (editingCell.field === 'integ' || editingCell.integCustomMode) && (
@@ -472,7 +485,7 @@ function getProfileRegion(p) {
   return p.region || '—'
 }
 
-function SessionProfilsList({ sessionId }) {
+function SessionProfilsList({ sessionId, horizontal }) {
   const [profils, setProfils] = useState([])
   useEffect(() => {
     const load = async () => {
@@ -482,9 +495,32 @@ function SessionProfilsList({ sessionId }) {
     load()
   }, [sessionId])
   const count = profils.length
+  if (horizontal) {
+    return (
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[12px]" style={{ color: '#888' }}>{count} inscrit(s)</span>
+        {count > 0 && (
+          <div className="flex items-center gap-2 flex-wrap">
+            {profils.map((p) => {
+              const fn = p.first_name || ''
+              const ln = p.last_name || ''
+              const initials = (fn[0] || '') + (ln[0] || '') || '?'
+              const fullName = [fn, ln].filter(Boolean).join(' ')
+              return (
+                <div key={p.id} className="flex items-center gap-1.5" style={{ fontSize: 12 }}>
+                  <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-[10px] font-semibold" style={{ backgroundColor: 'rgba(23,55,49,0.1)', color: ACCENT }}>{initials}</div>
+                  <span style={{ color: '#444' }}>{fullName || '—'}</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    )
+  }
   return (
-    <div className="mt-3 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
-      <div className="text-[12px] text-[var(--t3)] mb-2">{count} profil(s) inscrit(s)</div>
+    <div className="mt-3 pt-3 border-t" style={{ borderColor: 'rgba(0,0,0,0.06)' }}>
+      <div className="text-[12px] mb-2" style={{ color: '#888' }}>{count} profil(s) inscrit(s)</div>
       {count > 0 && (
         <ul>
           {profils.map((p, i) => {

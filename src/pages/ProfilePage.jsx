@@ -16,6 +16,7 @@ import {
   INTEG_ADD_DATE,
   NOTE_TEMPLATES,
   EVENT_TYPES,
+  NEXT_EVENT_LABELS,
 } from '../lib/data'
 import InlineDropdown from '../components/InlineDropdown'
 import ScoreCorrectionModal from '../components/ScoreCorrectionModal'
@@ -722,6 +723,30 @@ export default function ProfilePage() {
                   <button type="button" onClick={() => { setDdIntegCustom(false); setIntegCustomVal(''); }} style={{ padding: '6px 12px', background: 'none', border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>Annuler</button>
                 </div>
               )}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: `1px solid ${PAGE_STYLE.border}` }}>
+              <span style={iconStyle}><IconCalendar /></span>
+              <span style={{ color: PAGE_STYLE.textSecondary, fontSize: 13, width: 100 }}>Prochain événement</span>
+              <input
+                type="date"
+                value={profile.next_event_date || ''}
+                onChange={(e) => updateProfileField(profile.id, 'next_event_date', e.target.value || null)}
+                style={{ flex: 1, padding: '6px 10px', fontSize: 13, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6 }}
+              />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: `1px solid ${PAGE_STYLE.border}` }}>
+              <span style={iconStyle}><IconTag /></span>
+              <span style={{ color: PAGE_STYLE.textSecondary, fontSize: 13, width: 100 }}>Type d'événement</span>
+              <select
+                value={profile.next_event_label || ''}
+                onChange={(e) => updateProfileField(profile.id, 'next_event_label', e.target.value || null)}
+                style={{ flex: 1, padding: '6px 10px', fontSize: 13, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6 }}
+              >
+                <option value="">—</option>
+                {NEXT_EVENT_LABELS.map((opt) => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
             </div>
             {profile.li && (
               <div style={{ marginTop: 16 }}>
