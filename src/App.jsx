@@ -16,7 +16,6 @@ import Profiles from './pages/Profiles'
 import EventPage from './pages/EventPage'
 import Analytics from './pages/Analytics'
 import Import from './pages/Import'
-import ChatIA from './pages/ChatIA'
 import Tickets from './pages/Tickets'
 import AdminConsole from './pages/AdminConsole'
 import AdminTickets from './pages/AdminTickets'
@@ -81,7 +80,7 @@ function AppContent() {
           <Route path="events/:eventId" element={<EventPage />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="import" element={<Import />} />
-          <Route path="chat" element={<ChatIA />} />
+          <Route path="chat" element={<Navigate to="/" replace />} />
           <Route path="tickets" element={<Tickets />} />
           <Route path="admin/console" element={<AdminProtectedRoute><AdminConsole /></AdminProtectedRoute>} />
           <Route path="admin/tickets" element={<AdminProtectedRoute><AdminTickets /></AdminProtectedRoute>} />

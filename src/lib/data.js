@@ -40,6 +40,8 @@ Prochaine étape : `,
 
 export const EVENT_TYPES = ['R0', 'R1', "Point d'étape", 'R2 Amaury', 'Démission reconversion', 'Point juridique', 'Intégration', 'Autre']
 
+export const EVENT_FORM_TYPES = ['R1', 'R2 Amaury', 'R2 Baptiste', "Point d'étape téléphonique", 'Point juridique', 'Présentation Evolve', 'Formation', 'Démission reconversion', 'Autre']
+
 export const NEXT_EVENT_LABELS = ['R1', 'R2', 'Présentation Evolve', 'Point téléphonique', 'Formation', 'Autre']
 
 export { MATURITY_COLORS, STAGE_COLORS } from './colors'

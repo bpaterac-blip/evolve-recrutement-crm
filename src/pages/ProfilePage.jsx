@@ -16,6 +16,7 @@ import {
   INTEG_ADD_DATE,
   NOTE_TEMPLATES,
   EVENT_TYPES,
+  EVENT_FORM_TYPES,
   NEXT_EVENT_LABELS,
 } from '../lib/data'
 import InlineDropdown from '../components/InlineDropdown'
@@ -80,6 +81,15 @@ function formatActivityDateTime(ts) {
   return `${date} à ${time.replace(':', 'h')}`
 }
 
+function formatEventDateTime(ts) {
+  if (!ts) return ''
+  const d = new Date(ts)
+  const date = d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+  const time = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+  const dateCap = date.charAt(0).toUpperCase() + date.slice(1)
+  return time ? `${dateCap} à ${time.replace(':', 'h')}` : dateCap
+}
+
 function capFirst(str) {
   if (!str || typeof str !== 'string') return ''
   return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase()
@@ -142,9 +152,8 @@ export default function ProfilePage() {
   const [noteContent, setNoteContent] = useState('')
   const [noteTemplate, setNoteTemplate] = useState('Note libre')
   const [showNoteForm, setShowNoteForm] = useState(false)
-  const [evType, setEvType] = useState('RDV planifié')
+  const [evType, setEvType] = useState('R1')
   const [evDate, setEvDate] = useState('')
-  const [evDetail, setEvDetail] = useState('')
   const [evNotes, setEvNotes] = useState('')
   const [showEventForm, setShowEventForm] = useState(false)
   const [ddIntegCustom, setDdIntegCustom] = useState(false)
@@ -156,7 +165,7 @@ export default function ProfilePage() {
   const [editingNoteId, setEditingNoteId] = useState(null)
   const [editingNoteContent, setEditingNoteContent] = useState('')
   const [editingEventId, setEditingEventId] = useState(null)
-  const [editingEventType, setEditingEventType] = useState('R0')
+  const [editingEventType, setEditingEventType] = useState('R1')
   const [editingEventDate, setEditingEventDate] = useState('')
   const [editingEventDetail, setEditingEventDetail] = useState('')
   const [confirmDeleteNote, setConfirmDeleteNote] = useState(null)
@@ -191,22 +200,23 @@ export default function ProfilePage() {
   }
 
   const mapEventRow = (e) => {
-    // Schéma réel events : profile_id, content, date (text), notes, next_step, next_step_date, created_at
-    const tsSource = e.created_at || e.date
-    const ts = tsSource ? new Date(tsSource).getTime() : undefined
-    const mainText = e.content || ''
-    const formatted = ts ? formatActivityDateTime(ts) : ''
+    const eventDate = e.event_date || e.date || e.created_at
+    const ts = eventDate ? new Date(eventDate).getTime() : undefined
+    const eventType = e.event_type || (e.content || '').split(' — ')[0] || 'Événement'
+    const description = e.description || (e.content || '').split(' — ').slice(1).join(' — ').trim() || ''
+    const formatted = eventDate ? formatEventDateTime(eventDate) : ''
     return {
       id: e.id,
       _source: 'event',
-      d: formatted,        // unique date string
-      t: mainText,         // description (content)
-      n: undefined,
+      d: formatted,
+      t: eventType,
+      n: description,
       ico: 'pin',
       type: 'event',
       ts,
-      nextStep: e.next_step || '',
-      nextStepDate: e.next_step_date || '',
+      eventType,
+      eventDate: e.event_date || e.date,
+      description,
     }
   }
 
@@ -324,55 +334,55 @@ export default function ProfilePage() {
   }
 
   const startEditEvent = (evt) => {
-    const parts = (evt.content || '').split(' — ')
+    const type = evt.event_type || (evt.content || '').split(' — ')[0] || 'R1'
     setEditingEventId(evt.id)
-    setEditingEventType(EVENT_TYPES.includes(parts[0]) ? parts[0] : 'Autre')
-    setEditingEventDate(evt.date || today())
-    setEditingEventDetail(parts.slice(1).join(' — ').trim())
+    setEditingEventType(EVENT_FORM_TYPES.includes(type) ? type : 'Autre')
+    const dateVal = evt.event_date || evt.date || today()
+    setEditingEventDate(typeof dateVal === 'string' && dateVal.includes('T') ? dateVal.slice(0, 16) : dateVal ? new Date(dateVal).toISOString().slice(0, 16) : '')
+    setEditingEventDetail(evt.description || (evt.content || '').split(' — ').slice(1).join(' — ').trim() || '')
   }
 
   const handleSaveEventEdit = async () => {
     if (!editingEventId || !profile?.id) return
-    const content = editingEventType + (editingEventDetail ? ' — ' + editingEventDetail : '')
-    await supabase.from('events').update({ content, date: editingEventDate }).eq('id', editingEventId)
+    const eventDateVal = editingEventDate ? (editingEventDate.includes('T') ? editingEventDate : editingEventDate + 'T12:00:00') : null
+    await supabase.from('events').update({
+      event_type: editingEventType,
+      event_date: eventDateVal,
+      description: editingEventDetail || null,
+    }).eq('id', editingEventId)
     setEditingEventId(null)
-    setEditingEventType('R0')
+    setEditingEventType('R1')
     setEditingEventDate('')
     setEditingEventDetail('')
     await loadActivitiesAndEvents()
   }
 
   const handleAddEvent = async () => {
-    const eventForm = { type: evType, date: evDate || today(), detail: evDetail, notes: evNotes }
     const profileId = profile?.id || id
-    console.log('handleAddEvent appelé', eventForm)
+    const eventDateVal = evDate ? (evDate.includes('T') ? evDate : evDate + 'T12:00:00') : new Date().toISOString().slice(0, 16)
     if (!useSupabase || !profileId) {
-      await addEvent(profileId, { type: evType, date: evDate || today(), note: evDetail })
+      await addEvent(profileId, { type: evType, date: eventDateVal, note: evNotes })
       setEvDate('')
-      setEvDetail('')
       setEvNotes('')
       setShowEventForm(false)
       await loadActivitiesAndEvents()
       return
     }
-    const eventDate = eventForm.date || today()
-    const { data, error } = await supabase.from('events').insert({
+    await supabase.from('events').insert({
       profile_id: profileId,
-      content: eventForm.type + (eventForm.detail ? ' — ' + eventForm.detail : ''),
-      date: eventDate,
-      notes: eventForm.notes || null,
+      event_type: evType,
+      event_date: eventDateVal,
+      description: evNotes || null,
     })
-    console.log('Insert event result:', data, error)
     await supabase.from('activities').insert({
       profile_id: profileId,
       type: 'event_added',
-      note: eventForm.type + (eventForm.detail ? ' — ' + eventForm.detail : ''),
+      note: evType + (evNotes ? ` — ${evNotes}` : ''),
       date: new Date().toISOString().split('T')[0],
       icon: 'pin',
       source: 'manual',
     })
     setEvDate('')
-    setEvDetail('')
     setEvNotes('')
     setShowEventForm(false)
     await loadActivitiesAndEvents()
@@ -907,21 +917,27 @@ export default function ProfilePage() {
                 <button type="button" onClick={() => setShowEventForm(!showEventForm)} style={{ padding: '8px 16px', background: PAGE_STYLE.gold, color: PAGE_STYLE.accent, border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>+ Ajouter un événement</button>
               </div>
               {showEventForm && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24, padding: 20, background: '#F9F8F6', borderRadius: PAGE_STYLE.radius, border: `1px solid ${PAGE_STYLE.border}` }}>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
-                    <select value={evType} onChange={(e) => setEvType(e.target.value)} style={{ padding: '8px 12px', fontSize: 13, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6, minWidth: 160 }}>
-                      {EVENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                    <input type="date" value={evDate} onChange={(e) => setEvDate(e.target.value)} style={{ padding: '8px 12px', fontSize: 13, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6 }} />
-                    <input type="text" value={evDetail} onChange={(e) => setEvDetail(e.target.value)} placeholder="Détail optionnel" style={{ flex: 1, minWidth: 120, padding: '8px 12px', fontSize: 13, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6 }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24, padding: 20, background: '#F9F8F6', borderRadius: PAGE_STYLE.radius, border: `1px solid ${PAGE_STYLE.border}` }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <label style={{ fontSize: 12, fontWeight: 500, color: PAGE_STYLE.textSecondary }}>Date de l'événement</label>
+                    <input type="datetime-local" value={evDate} onChange={(e) => setEvDate(e.target.value)} style={{ padding: '8px 12px', fontSize: 13, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6 }} />
                   </div>
-                  <textarea
-                    value={evNotes}
-                    onChange={(e) => setEvNotes(e.target.value)}
-                    placeholder="Notes (optionnel)…"
-                    rows={3}
-                    style={{ width: '100%', padding: 10, fontSize: 13, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6, resize: 'vertical' }}
-                  />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <label style={{ fontSize: 12, fontWeight: 500, color: PAGE_STYLE.textSecondary }}>Type</label>
+                    <select value={evType} onChange={(e) => setEvType(e.target.value)} style={{ padding: '8px 12px', fontSize: 13, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6 }}>
+                      {EVENT_FORM_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <label style={{ fontSize: 12, fontWeight: 500, color: PAGE_STYLE.textSecondary }}>Notes</label>
+                    <textarea
+                      value={evNotes}
+                      onChange={(e) => setEvNotes(e.target.value)}
+                      placeholder="Description, points clés…"
+                      rows={3}
+                      style={{ width: '100%', padding: 10, fontSize: 13, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6, resize: 'vertical' }}
+                    />
+                  </div>
                   <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                     <button type="button" onClick={handleAddEvent} style={{ padding: '8px 16px', background: PAGE_STYLE.green, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>Ajouter</button>
                   </div>
@@ -937,14 +953,17 @@ export default function ProfilePage() {
                   >
                     {editingEventId === a.id && raw ? (
                       <div onClick={(e) => e.stopPropagation()}>
-                        <select value={editingEventType} onChange={(e) => setEditingEventType(e.target.value)} style={{ padding: '8px 12px', fontSize: 13, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6, minWidth: 160, marginBottom: 10 }}>
-                          {EVENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                        <label style={{ fontSize: 12, fontWeight: 500, color: PAGE_STYLE.textSecondary, display: 'block', marginBottom: 4 }}>Type</label>
+                        <select value={editingEventType} onChange={(e) => setEditingEventType(e.target.value)} style={{ padding: '8px 12px', fontSize: 13, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6, minWidth: 160, marginBottom: 10, display: 'block', width: '100%' }}>
+                          {EVENT_FORM_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                         </select>
-                        <input type="date" value={editingEventDate} onChange={(e) => setEditingEventDate(e.target.value)} style={{ padding: '8px 12px', fontSize: 13, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6, marginBottom: 10, display: 'block', width: '100%' }} />
-                        <textarea value={editingEventDetail} onChange={(e) => setEditingEventDetail(e.target.value)} placeholder="Décrivez le déroulé, les points clés, les prochaines étapes..." rows={4} style={{ width: '100%', padding: 10, fontSize: 13, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6, resize: 'vertical', marginBottom: 10 }} />
+                        <label style={{ fontSize: 12, fontWeight: 500, color: PAGE_STYLE.textSecondary, display: 'block', marginBottom: 4 }}>Date de l'événement</label>
+                        <input type="datetime-local" value={editingEventDate} onChange={(e) => setEditingEventDate(e.target.value)} style={{ padding: '8px 12px', fontSize: 13, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6, marginBottom: 10, display: 'block', width: '100%' }} />
+                        <label style={{ fontSize: 12, fontWeight: 500, color: PAGE_STYLE.textSecondary, display: 'block', marginBottom: 4 }}>Notes</label>
+                        <textarea value={editingEventDetail} onChange={(e) => setEditingEventDetail(e.target.value)} placeholder="Description, points clés…" rows={4} style={{ width: '100%', padding: 10, fontSize: 13, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6, resize: 'vertical', marginBottom: 10 }} />
                         <div style={{ display: 'flex', gap: 8 }}>
                           <button type="button" onClick={handleSaveEventEdit} style={{ padding: '8px 16px', background: PAGE_STYLE.green, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>Enregistrer</button>
-                          <button type="button" onClick={() => { setEditingEventId(null); setEditingEventType('R0'); setEditingEventDate(''); setEditingEventDetail(''); setExpandedEventId(null); }} style={{ padding: '8px 16px', background: 'none', border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>Annuler</button>
+                          <button type="button" onClick={() => { setEditingEventId(null); setEditingEventType('R1'); setEditingEventDate(''); setEditingEventDetail(''); setExpandedEventId(null); }} style={{ padding: '8px 16px', background: 'none', border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>Annuler</button>
                         </div>
                       </div>
                     ) : (
@@ -952,11 +971,12 @@ export default function ProfilePage() {
                         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }} onClick={() => setExpandedEventId((prev) => (prev === a.id ? null : a.id))}>
                           <span style={{ fontSize: 18, display: 'inline-flex', flexShrink: 0 }}><ActivityIcon ico={a.ico || 'pin'} size={18} /></span>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: PAGE_STYLE.text }}>{(a.t || '').split(' — ')[0] || 'Événement'}</div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: PAGE_STYLE.text }}>{a.t || a.eventType || 'Événement'}</div>
                             <div style={{ fontSize: 12, color: PAGE_STYLE.textSecondary, marginTop: 4 }}>{a.d}</div>
-                            {expandedEventId === a.id && raw && (
+                            {a.n && <div style={{ fontSize: 12, color: PAGE_STYLE.textSecondary, marginTop: 6 }}>{a.n}</div>}
+                            {expandedEventId === a.id && raw && (raw.description || raw.notes || raw.next_step) && (
                               <div style={{ marginTop: 12, padding: 12, background: '#F8F5F1', borderRadius: 8, fontSize: 13, color: PAGE_STYLE.text, whiteSpace: 'pre-wrap' }} onClick={(e) => e.stopPropagation()}>
-                                {[raw.content, raw.notes && `\n\nNotes : ${raw.notes}`, raw.next_step && `\n\nProchaine étape : ${raw.next_step}${raw.next_step_date ? ` (${raw.next_step_date})` : ''}`].filter(Boolean).join('') || '—'}
+                                {[raw.description, raw.notes && `\n\nNotes : ${raw.notes}`, raw.next_step && `\n\nProchaine étape : ${raw.next_step}${raw.next_step_date ? ` (${raw.next_step_date})` : ''}`].filter(Boolean).join('') || '—'}
                               </div>
                             )}
                           </div>
@@ -965,7 +985,7 @@ export default function ProfilePage() {
                         {expandedEventId === a.id && raw && (
                           <div className="event-actions" style={{ display: 'flex', gap: 6, marginTop: 12 }} onClick={(e) => e.stopPropagation()}>
                             <button type="button" onClick={() => startEditEvent(raw)} style={{ padding: '3px 10px', fontSize: 12, color: '#173731', background: 'transparent', border: '1px solid #E5E0D8', borderRadius: 6, cursor: 'pointer' }}>Éditer</button>
-                            <button type="button" onClick={() => setConfirmDeleteEvent({ id: raw.id, content: raw.content })} style={{ padding: 3, background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626', display: 'inline-flex' }} title="Supprimer"><IconTrash /></button>
+                            <button type="button" onClick={() => setConfirmDeleteEvent({ id: raw.id, content: raw.event_type || raw.content })} style={{ padding: 3, background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626', display: 'inline-flex' }} title="Supprimer"><IconTrash /></button>
                           </div>
                         )}
                       </>

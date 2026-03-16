@@ -2,7 +2,8 @@ import { Outlet, NavLink, Link, useLocation, useNavigate } from 'react-router-do
 import { useCRM } from '../context/CRMContext'
 import { useAuth } from '../context/AuthContext'
 import { useViewMode } from '../context/ViewModeContext'
-import { IconArrowUp, IconStar } from './Icons'
+import { IconArrowUp } from './Icons'
+import ChatWidget from './ChatWidget'
 
 const TITLES = {
   '/': 'Tableau de bord',
@@ -10,7 +11,6 @@ const TITLES = {
   '/profiles': 'Tous les profils',
   '/analytics': 'Analytics',
   '/import': 'Import & Scoring',
-  '/chat': 'Chat IA',
   '/tickets': 'Tickets',
   '/admin/console': 'Console Administrateur',
   '/admin/tickets': 'Tickets (Admin)',
@@ -66,7 +66,6 @@ export default function Layout() {
         <div className="nav-sec pt-3.5 px-3 pb-1.5">
           <div className="nav-lbl text-[10px] uppercase tracking-widest text-white/35 px-2 mb-1.5">Outils</div>
           <NavLink to="/import" className={({ isActive }) => `nitem flex items-center gap-2.5 py-2 px-2.5 rounded-lg cursor-pointer text-[13.5px] transition-all duration-[0.13s] mb-0.5 select-none ${isActive ? 'active bg-white/15 text-white font-medium' : 'text-white/60 hover:bg-white/[0.08] hover:text-white'}`}><span className="nico text-sm w-[18px] text-center shrink-0">⇪</span>Import & Scoring</NavLink>
-          <NavLink to="/chat" className={({ isActive }) => `nitem flex items-center gap-2.5 py-2 px-2.5 rounded-lg cursor-pointer text-[13.5px] transition-all duration-[0.13s] mb-0.5 select-none ${isActive ? 'active bg-white/15 text-white font-medium' : 'text-white/60 hover:bg-white/[0.08] hover:text-white'}`}><span className="nico text-sm w-[18px] shrink-0 inline-flex items-center justify-center"><IconStar /></span>Chat IA</NavLink>
           <NavLink to="/tickets" className={({ isActive }) => `nitem flex items-center gap-2.5 py-2 px-2.5 rounded-lg cursor-pointer text-[13.5px] transition-all duration-[0.13s] mb-0.5 select-none ${isActive ? 'active bg-white/15 text-white font-medium' : 'text-white/60 hover:bg-white/[0.08] hover:text-white'}`}><span className="nico text-sm w-[18px] text-center shrink-0 inline-flex items-center justify-center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 9a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V9Z"/><path d="M7 9v6"/><path d="M12 9v6"/><path d="M17 9v6"/></svg></span>Tickets</NavLink>
         </div>
         {role === 'admin' && (
@@ -123,6 +122,7 @@ export default function Layout() {
           <Outlet />
         </div>
       </div>
+      <ChatWidget />
     </div>
   )
 }

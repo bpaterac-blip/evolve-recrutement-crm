@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useCRM } from '../context/CRMContext'
+import { EVENTS_TABLE } from '../context/CRMContext'
 import { useAuth } from '../context/AuthContext'
 import { useViewMode } from '../context/ViewModeContext'
 import { enrichProfileWithNetrows } from '../lib/netrows'
@@ -223,7 +224,7 @@ export default function Pipeline() {
   const navigate = useNavigate()
   const { user, userProfile, role } = useAuth()
   const { viewMode } = useViewMode()
-  const { filteredProfiles, changeStage, changeMaturity, changeInteg, changeSource, changeRegion, updateProfileField, updateProfile, showNotif, useSupabase } = useCRM()
+  const { filteredProfiles, changeStage, changeMaturity, changeInteg, changeSource, changeRegion, updateProfileField, updateProfile, showNotif, useSupabase, fetchProfiles } = useCRM()
   const isGlobalView = role === 'admin' && viewMode === 'global'
   const pipeline = filteredProfiles.filter((p) => p.stg && p.stg !== 'Recruté' && p.mat !== 'Archivé')
   const all = filteredProfiles.filter((p) => p.stg && p.mat !== 'Archivé')
@@ -256,6 +257,9 @@ export default function Pipeline() {
   const [expandedEventId, setExpandedEventId] = useState(null)
   const [enriching, setEnriching] = useState(false)
   const [scoreCorrectionOpen, setScoreCorrectionOpen] = useState(false)
+  const [pendingStageChange, setPendingStageChange] = useState(null)
+  const [stageChangeDate, setStageChangeDate] = useState('')
+  const [stageChangeNotes, setStageChangeNotes] = useState('')
 
   const displayProfile = modalProfile ? (filteredProfiles.find((p) => p.id === modalProfile.id) || modalProfile) : null
 
@@ -480,20 +484,63 @@ export default function Pipeline() {
     setActivities(data || [])
   }
 
-  const handleDrop = async (profileId, newStage) => {
+  const handleDrop = (profileId, newStage) => {
     const profile = all.find((p) => String(p.id) === String(profileId))
     if (!profile || profile.stg === newStage) return
+    setPendingStageChange({ profileId, profile, newStage })
+    setStageChangeDate('')
+    setStageChangeNotes('')
+  }
+
+  const handleConfirmStageChange = async () => {
+    if (!pendingStageChange) return
+    const { profileId, profile, newStage } = pendingStageChange
     const oldStage = profile.stg ?? '—'
     changeStage(profileId, newStage)
-    await supabase.from('profiles').update({ stage: newStage }).eq('id', profile.id)
-    await supabase.from('activities').insert({
-      profile_id: profile.id,
-      type: 'stage_change',
-      note: `${oldStage} → ${newStage}`,
-      date: new Date().toISOString().split('T')[0],
-      icon: 'refresh',
-      source: 'manual',
-    })
+    if (useSupabase) {
+      await supabase.from('profiles').update({ stage: newStage }).eq('id', profile.id)
+      const eventDateVal = stageChangeDate ? (stageChangeDate.includes('T') ? stageChangeDate : stageChangeDate + 'T12:00:00') : null
+      if (eventDateVal) {
+        const eventRow = { profile_id: profile.id, event_type: newStage, event_date: eventDateVal, description: stageChangeNotes || newStage }
+        if (user?.id) eventRow.owner_id = user.id
+        await supabase.from(EVENTS_TABLE).insert(eventRow)
+        window.dispatchEvent(new CustomEvent('evolve:event-added'))
+      }
+      await supabase.from('activities').insert({
+        profile_id: profile.id,
+        type: 'stage_change',
+        note: `${oldStage} → ${newStage}`,
+        date: new Date().toISOString().split('T')[0],
+        icon: 'refresh',
+        source: 'manual',
+      })
+      fetchProfiles()
+    }
+    setPendingStageChange(null)
+    setStageChangeDate('')
+    setStageChangeNotes('')
+  }
+
+  const handleSkipStageChangeDate = async () => {
+    if (!pendingStageChange) return
+    const { profileId, profile, newStage } = pendingStageChange
+    const oldStage = profile.stg ?? '—'
+    changeStage(profileId, newStage)
+    if (useSupabase) {
+      await supabase.from('profiles').update({ stage: newStage }).eq('id', profile.id)
+      await supabase.from('activities').insert({
+        profile_id: profile.id,
+        type: 'stage_change',
+        note: `${oldStage} → ${newStage}`,
+        date: new Date().toISOString().split('T')[0],
+        icon: 'refresh',
+        source: 'manual',
+      })
+      fetchProfiles()
+    }
+    setPendingStageChange(null)
+    setStageChangeDate('')
+    setStageChangeNotes('')
   }
 
   const matColor = (m) => MATURITY_COLORS[m] || { bg: '#F3F4F6', text: '#6B7280' }
@@ -1086,6 +1133,41 @@ export default function Pipeline() {
           </div>
         </div>
       )}
+      {pendingStageChange && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setPendingStageChange(null)}>
+          <div style={{ background: 'white', padding: 24, borderRadius: 12, boxShadow: '0 4px 20px rgba(0,0,0,0.15)', minWidth: 360, maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8, color: '#173731' }}>Planifier l'étape {pendingStageChange.newStage}</div>
+            <div style={{ fontSize: 13, color: '#666', marginBottom: 16 }}>{pendingStageChange.profile.fn} {pendingStageChange.profile.ln}</div>
+            <p style={{ fontSize: 13, color: '#444', marginBottom: 12 }}>Renseignez la date prévue pour cette étape</p>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 4 }}>Date de l'événement</label>
+              <input
+                type="datetime-local"
+                required
+                value={stageChangeDate}
+                onChange={(e) => setStageChangeDate(e.target.value)}
+                style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6 }}
+              />
+            </div>
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 4 }}>Notes (optionnel)</label>
+              <textarea
+                value={stageChangeNotes}
+                onChange={(e) => setStageChangeNotes(e.target.value)}
+                placeholder="Notes…"
+                rows={3}
+                style={{ width: '100%', padding: 10, fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, resize: 'vertical' }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+              <button type="button" onClick={() => setPendingStageChange(null)} style={{ padding: '8px 16px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, background: 'white', cursor: 'pointer', color: '#6B6B6B' }}>Annuler</button>
+              <button type="button" onClick={handleSkipStageChangeDate} style={{ padding: '8px 16px', fontSize: 13, border: '1px solid #173731', borderRadius: 6, background: 'white', cursor: 'pointer', color: '#173731' }}>Passer sans date</button>
+              <button type="button" onClick={handleConfirmStageChange} disabled={!stageChangeDate.trim()} style={{ padding: '8px 16px', fontSize: 13, border: 'none', borderRadius: 6, background: '#173731', color: 'white', cursor: 'pointer', opacity: stageChangeDate.trim() ? 1 : 0.5 }}>Confirmer</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {confirmDeleteEvent && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setConfirmDeleteEvent(null)}>
           <div style={{ background: 'white', padding: 24, borderRadius: 12, boxShadow: '0 4px 20px rgba(0,0,0,0.15)', minWidth: 320 }} onClick={(e) => e.stopPropagation()}>

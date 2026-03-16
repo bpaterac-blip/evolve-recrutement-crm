@@ -4,6 +4,7 @@ import { useCRM } from '../context/CRMContext'
 import { useAuth } from '../context/AuthContext'
 import { useViewMode } from '../context/ViewModeContext'
 import { supabase } from '../lib/supabase'
+import { EVENTS_TABLE } from '../context/CRMContext'
 import { STAGE_COLORS, INTEG_OPTS, INTEG_ADD_DATE } from '../lib/data'
 
 const ACCENT = '#173731'
@@ -102,6 +103,7 @@ export default function Dashboard() {
   const [assignModal, setAssignModal] = useState(null)
   const [sessionProfilsRefresh, setSessionProfilsRefresh] = useState(0)
   const [ownerFilter, setOwnerFilter] = useState('all')
+  const [upcomingEvents, setUpcomingEvents] = useState([])
 
   const allProfiles = [...filteredProfiles].filter((p) => p.mat !== 'Archivé')
   const P = ownerFilter === 'all' ? allProfiles : allProfiles.filter((p) => (p.owner_email || '') === ownerFilter)
@@ -170,6 +172,44 @@ export default function Dashboard() {
     loadNextSession()
   }, [addSessionModal])
 
+  const fetchUpcomingEvents = async () => {
+    const today = new Date().toISOString()
+    const { data: eventsData } = await supabase
+      .from(EVENTS_TABLE)
+      .select('id, event_date, event_type, description, profile_id')
+      .gte('event_date', today)
+      .order('event_date', { ascending: true })
+      .limit(5)
+    const events = eventsData || []
+    const profileIds = [...new Set(events.map((e) => e.profile_id).filter(Boolean))]
+    let profilesMap = {}
+    if (profileIds.length > 0) {
+      const { data: profilesData } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name, company, stage, city, region')
+        .in('id', profileIds)
+      if (profilesData) {
+        profilesData.forEach((p) => { profilesMap[p.id] = p })
+      }
+    }
+    const enrichedEvents = events.map((e) => ({
+      ...e,
+      profile: profilesMap[e.profile_id] || null,
+    }))
+    setUpcomingEvents(enrichedEvents)
+  }
+
+  useEffect(() => {
+    fetchUpcomingEvents()
+    const interval = setInterval(fetchUpcomingEvents, 30000)
+    const handleRefresh = () => fetchUpcomingEvents()
+    window.addEventListener('evolve:event-added', handleRefresh)
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('evolve:event-added', handleRefresh)
+    }
+  }, [])
+
   const cardStyle = {
     background: '#ffffff',
     borderRadius: 12,
@@ -189,7 +229,7 @@ export default function Dashboard() {
 
   return (
     <div className="page h-full overflow-y-auto p-[22px]" style={{ background: '#F5F0E8' }}>
-      <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 26, color: ACCENT, marginBottom: 4 }}>Bonjour {userProfile?.first_name || (user?.email || '').split('@')[0] || 'Utilisateur'}</div>
+      <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 26, color: ACCENT, marginBottom: 4 }}>Bonjour {userProfile?.first_name || (user?.email || '').split('@')[0] || 'Utilisateur'} 👋</div>
       <div className="flex items-center gap-3 mb-5 flex-wrap">
         <span className="text-[13px]" style={{ color: '#999' }}>Pipeline au {pipelineDate}</span>
         {isGlobalView && ownerEmails.length > 0 && (
@@ -226,7 +266,7 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mb-4">
-        <div className="lg:col-span-5">
+        <div className="lg:col-span-5 flex flex-col gap-4">
           <div className="tw overflow-hidden" style={{ ...cardStyle, padding: 0 }}>
             <div className="thd py-3 px-5 border-b flex items-center gap-2" style={{ borderColor: 'rgba(0,0,0,0.06)' }}>
               <div style={{ ...sectionTitleStyle, marginBottom: 0 }}>Profils à relancer</div>
@@ -268,6 +308,39 @@ export default function Dashboard() {
                 )}
               </tbody>
             </table>
+          </div>
+
+          <div style={cardStyle}>
+            <div className="flex items-center gap-2" style={{ ...sectionTitleStyle, marginBottom: 12 }}>
+              <span style={{ color: ACCENT }}><IconCalendar /></span>
+              <span>Prochaine session de formation</span>
+            </div>
+            {sessionsLoading ? (
+              <div className="text-[13px]" style={{ color: '#888' }}>Chargement…</div>
+            ) : !nextSession ? (
+              <div className="flex flex-col items-center gap-3 py-4">
+                <span className="text-[13px]" style={{ color: '#888' }}>Aucune session planifiée</span>
+                <button type="button" onClick={() => setAddSessionModal(true)} className="py-2 px-4 rounded-lg text-[13px] font-medium" style={{ backgroundColor: ACCENT, color: 'white' }}>+ Ajouter une session</button>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium text-[13px]" style={{ color: ACCENT }}>{formatDateFr(nextSession.date_session)}</span>
+                  <span style={{ color: '#888' }}>·</span>
+                  <span className="text-[13px]" style={{ color: '#666' }}>{nextSession.lieu || '—'}</span>
+                  <span className="inline-flex px-2 py-0.5 rounded-md text-[11px] font-semibold" style={{ backgroundColor: nextSession.statut === 'confirmée' ? '#D4EDE1' : 'rgba(210,171,118,0.2)', color: nextSession.statut === 'confirmée' ? '#1A7A4A' : GOLD }}>{nextSession.statut}</span>
+                </div>
+                <SessionProfilsList key={sessionProfilsRefresh} sessionId={nextSession.id} horizontal={false} compact />
+                <div className="flex items-center gap-1">
+                  <button type="button" onClick={() => setAssignModal(nextSession)} className="p-2 rounded-md hover:bg-[rgba(0,0,0,0.06)] transition-colors" title="Assigner un profil">
+                    <IconAssigner />
+                  </button>
+                  <button type="button" onClick={() => setAddSessionModal(true)} className="p-2 rounded-md hover:bg-[rgba(0,0,0,0.06)] transition-colors" title="Ajouter une session">
+                    <IconAddSession />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -343,41 +416,48 @@ export default function Dashboard() {
               <span style={{ color: ACCENT }}><IconCalendar /></span>
               <span>Événements à venir</span>
             </div>
-            {(() => {
-              const today = new Date().toISOString().slice(0, 10)
-              const events = P.filter((p) => p.next_event_date && p.next_event_date >= today)
-                .sort((a, b) => (a.next_event_date || '').localeCompare(b.next_event_date || ''))
-                .slice(0, 5)
-              if (events.length === 0) {
-                return (
-                  <div className="flex flex-col items-center justify-center py-6 text-center">
-                    <span className="mb-2" style={{ color: '#888' }}>
-                      <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                        <line x1="16" y1="2" x2="16" y2="6" />
-                        <line x1="8" y1="2" x2="8" y2="6" />
-                        <line x1="3" y1="10" x2="21" y2="10" />
-                      </svg>
-                    </span>
-                    <span className="text-[13px]" style={{ color: '#888' }}>Aucun événement à venir</span>
-                  </div>
-                )
-              }
-              return (
-                <ul className="space-y-2">
-                  {events.map((p) => (
-                    <li key={p.id} className="flex items-center gap-2 cursor-pointer hover:opacity-80" onClick={() => navigate(`/profiles/${p.id}`)}>
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold shrink-0" style={{ backgroundColor: ['#D4EDE1', '#D3E4F8', '#FDEBC8'][events.indexOf(p) % 3], color: ['#1A7A4A', '#1E5FA0', '#B86B0F'][events.indexOf(p) % 3] }}>{(p.fn?.[0] || '') + (p.ln?.[0] || '') || '?'}</div>
+            {upcomingEvents.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-6 text-center">
+                <span className="mb-2" style={{ color: '#888' }}>
+                  <IconCalendar />
+                </span>
+                <span className="text-[13px]" style={{ color: '#888' }}>Aucun événement à venir</span>
+              </div>
+            ) : (
+              <ul className="space-y-2">
+                {upcomingEvents.map((ev, i) => {
+                  const p = ev.profile
+                  const fn = p?.first_name ?? ''
+                  const ln = p?.last_name ?? ''
+                  const initials = (fn?.[0] || '') + (ln?.[0] || '') || '?'
+                  const fullName = [fn, ln].filter(Boolean).join(' ') || '—'
+                  const city = p?.city || ''
+                  const region = p?.region || ''
+                  const locationStr = (city && region) ? `${city} · ${region}` : (city || region || p?.company || '—')
+                  const eventDateFormatted = ev.event_date ? (() => {
+                    const d = new Date(ev.event_date)
+                    const s = d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+                    return s.charAt(0).toUpperCase() + s.slice(1)
+                  })() : '—'
+                  const badgeColors = ['#D4EDE1', '#D3E4F8', '#FDEBC8', 'rgba(210,171,118,0.3)', 'rgba(23,55,49,0.15)']
+                  const badgeTextColors = ['#1A7A4A', '#1E5FA0', '#B86B0F', GOLD, ACCENT]
+                  const badgeStyle = { backgroundColor: badgeColors[i % badgeColors.length], color: badgeTextColors[i % badgeTextColors.length] }
+                  return (
+                    <li key={ev.id} className="flex items-center gap-2 cursor-pointer hover:opacity-80" onClick={() => navigate(`/profiles/${ev.profile_id}`)}>
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold shrink-0" style={badgeStyle}>{initials}</div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-[13px] font-medium">{p.fn} {p.ln}</div>
-                        <div className="text-[12px]" style={{ color: '#888' }}>{p.next_event_label || 'Événement'} · {formatDateShort(p.next_event_date)}</div>
+                        <div className="text-[13px] font-medium">{fullName}</div>
+                        <div className="text-[12px]" style={{ color: '#888' }}>{locationStr}</div>
                       </div>
-                      <span className="tag px-1.5 py-0.5 rounded text-[11px]" style={stag(p.stg)}>{p.stg || '—'}</span>
+                      <div className="flex flex-col items-end shrink-0">
+                        <span className="tag px-1.5 py-0.5 rounded text-[11px]" style={{ backgroundColor: 'rgba(210,171,118,0.25)', color: ACCENT }}>{ev.event_type || 'Événement'}</span>
+                        <span className="text-[12px] mt-0.5" style={{ color: '#888' }}>{eventDateFormatted}</span>
+                      </div>
                     </li>
-                  ))}
-                </ul>
-              )
-            })()}
+                  )
+                })}
+              </ul>
+            )}
           </div>
 
           {isGlobalView && (() => {
@@ -417,38 +497,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div style={{ ...cardStyle, marginTop: 0 }}>
-        <div style={sectionTitleStyle}>Prochaine session de formation</div>
-        {sessionsLoading ? (
-          <div className="text-[13px]" style={{ color: '#888' }}>Chargement…</div>
-        ) : !nextSession ? (
-          <div className="flex flex-col items-center gap-3 py-6">
-            <span className="text-[13px]" style={{ color: '#888' }}>Aucune session planifiée</span>
-            <button type="button" onClick={() => setAddSessionModal(true)} className="py-2 px-4 rounded-lg text-[13px] font-medium" style={{ backgroundColor: ACCENT, color: 'white' }}>+ Ajouter une session</button>
-          </div>
-        ) : (
-          <div className="flex flex-col lg:flex-row lg:items-center gap-4 lg:gap-6">
-            <div className="flex items-center gap-3 flex-wrap shrink-0">
-              <span className="font-medium" style={{ color: ACCENT, fontSize: 18 }}>{formatDateFr(nextSession.date_session)}</span>
-              <span style={{ color: '#888' }}>·</span>
-              <span className="text-[13px]" style={{ color: '#666' }}>{nextSession.lieu || '—'}</span>
-              <span className="inline-flex px-2 py-0.5 rounded-md text-[11px] font-semibold" style={{ backgroundColor: nextSession.statut === 'confirmée' ? '#D4EDE1' : 'rgba(210,171,118,0.2)', color: nextSession.statut === 'confirmée' ? '#1A7A4A' : GOLD }}>{nextSession.statut}</span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <SessionProfilsList key={sessionProfilsRefresh} sessionId={nextSession.id} horizontal />
-            </div>
-            <div className="flex items-center gap-1 shrink-0">
-              <button type="button" onClick={() => setAssignModal(nextSession)} className="p-2 rounded-md hover:bg-[rgba(0,0,0,0.06)] transition-colors" title="Assigner un profil">
-                <IconAssigner />
-              </button>
-              <button type="button" onClick={() => setAddSessionModal(true)} className="p-2 rounded-md hover:bg-[rgba(0,0,0,0.06)] transition-colors" title="Ajouter une session">
-                <IconAddSession />
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
       {editingCell?.rect && currentProfile && (editingCell.field === 'integ' || editingCell.integCustomMode) && (
         <div className="ddrop rounded-lg shadow-lg p-1 min-w-[140px] max-h-[280px] overflow-y-auto" style={{ position: 'fixed', left: editingCell.rect.left, top: editingCell.rect.bottom + 4, zIndex: DROPDOWN_Z, background: 'var(--surface)', border: '1px solid var(--border)' }} onClick={(e) => e.stopPropagation()}>
           {editingCell.field === 'integ' && !editingCell.integCustomMode && (
@@ -485,7 +533,7 @@ function getProfileRegion(p) {
   return p.region || '—'
 }
 
-function SessionProfilsList({ sessionId, horizontal }) {
+function SessionProfilsList({ sessionId, horizontal, compact }) {
   const [profils, setProfils] = useState([])
   useEffect(() => {
     const load = async () => {
@@ -495,6 +543,14 @@ function SessionProfilsList({ sessionId, horizontal }) {
     load()
   }, [sessionId])
   const count = profils.length
+  const formatProfileLine = (p) => {
+    const fn = p.first_name || ''
+    const ln = p.last_name || ''
+    const fullName = [fn, ln].filter(Boolean).join(' ') || '—'
+    const city = getProfileCity(p)
+    const region = getProfileRegion(p)
+    return compact ? `${fullName} · ${city} · ${region}` : `${fullName} · ${p.company || '—'} · ${city} · ${region}`
+  }
   if (horizontal) {
     return (
       <div className="flex items-center gap-2 flex-wrap">
@@ -506,10 +562,13 @@ function SessionProfilsList({ sessionId, horizontal }) {
               const ln = p.last_name || ''
               const initials = (fn[0] || '') + (ln[0] || '') || '?'
               const fullName = [fn, ln].filter(Boolean).join(' ')
+              const city = getProfileCity(p)
+              const region = getProfileRegion(p)
+              const line = compact ? `${fullName || '—'} · ${city} · ${region}` : `${fullName || '—'}`
               return (
                 <div key={p.id} className="flex items-center gap-1.5" style={{ fontSize: 12 }}>
                   <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-[10px] font-semibold" style={{ backgroundColor: 'rgba(23,55,49,0.1)', color: ACCENT }}>{initials}</div>
-                  <span style={{ color: '#444' }}>{fullName || '—'}</span>
+                  <span style={{ color: '#444' }}>{line}</span>
                 </div>
               )
             })}
@@ -519,7 +578,7 @@ function SessionProfilsList({ sessionId, horizontal }) {
     )
   }
   return (
-    <div className="mt-3 pt-3 border-t" style={{ borderColor: 'rgba(0,0,0,0.06)' }}>
+    <div className={compact ? '' : 'mt-3 pt-3 border-t'} style={compact ? {} : { borderColor: 'rgba(0,0,0,0.06)' }}>
       <div className="text-[12px] mb-2" style={{ color: '#888' }}>{count} profil(s) inscrit(s)</div>
       {count > 0 && (
         <ul>
@@ -527,13 +586,10 @@ function SessionProfilsList({ sessionId, horizontal }) {
             const fn = p.first_name || ''
             const ln = p.last_name || ''
             const initials = (fn[0] || '') + (ln[0] || '') || '?'
-            const fullName = [fn, ln].filter(Boolean).join(' ')
-            const city = getProfileCity(p)
-            const region = getProfileRegion(p)
             return (
               <li key={p.id} className="flex items-center gap-2" style={{ fontSize: 12, color: '#444', padding: '4px 0', borderBottom: i < profils.length - 1 ? '1px solid rgba(0,0,0,0.04)' : 'none' }}>
                 <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-[10px] font-semibold" style={{ backgroundColor: 'rgba(23,55,49,0.1)', color: ACCENT }}>{initials}</div>
-                <span>{fullName || '—'} · {p.company || '—'} · {city} · {region}</span>
+                <span>{formatProfileLine(p)}</span>
               </li>
             )
           })}

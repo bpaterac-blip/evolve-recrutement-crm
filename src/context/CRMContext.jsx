@@ -9,7 +9,7 @@ import { INITIAL_PROFILES } from '../lib/data'
 const CRMContext = createContext(null)
 const PROFILES_TABLE = 'profiles'
 const NOTES_TABLE = 'notes'
-const EVENTS_TABLE = 'events'
+export const EVENTS_TABLE = 'events'
 const ACTIVITIES_TABLE = 'activities'
 const SCORING_FEEDBACK_TABLE = 'scoring_feedback'
 
@@ -165,19 +165,31 @@ export function CRMProvider({ children }) {
   }, [useSupabase])
 
   const fetchEvents = useCallback(async (profileId) => {
+    const formatEventDateFr = (d) => {
+      if (!d) return ''
+      const date = new Date(d)
+      const s = date.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+      const time = date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+      const cap = s.charAt(0).toUpperCase() + s.slice(1)
+      return time ? `${cap} à ${time.replace(':', 'h')}` : cap
+    }
     if (!useSupabase || !profileId) return []
     const { data } = await supabase.from(EVENTS_TABLE).select('*').eq('profile_id', profileId).order('created_at', { ascending: false })
     const icos = { 'RDV planifié': 'calendar', 'RDV démission reconversion': 'calendar', 'Point téléphonique': 'mappin', 'Relance prévue': 'envelope', 'Point juridique': 'document', 'Signature contrat': 'pencil', 'Note libre': 'document' }
-    return (data || []).map((e) => ({
-      id: e.id,
-      _source: 'event',
-      d: e.event_date || new Date(e.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }),
-      t: e.event_type,
-      n: e.description || e.event_type,
-      ico: icos[e.event_type] || 'pin',
-      type: 'event',
-      _ts: new Date(e.created_at).getTime(),
-    }))
+    return (data || []).map((e) => {
+      const eventDate = e.event_date || e.date || e.created_at
+      const dFormatted = eventDate ? formatEventDateFr(eventDate) : ''
+      return {
+        id: e.id,
+        _source: 'event',
+        d: dFormatted,
+        t: e.event_type,
+        n: e.description || e.event_type,
+        ico: icos[e.event_type] || 'pin',
+        type: 'event',
+        _ts: eventDate ? new Date(eventDate).getTime() : new Date(e.created_at).getTime(),
+      }
+    })
   }, [useSupabase])
 
   const loadProfileDetail = useCallback(async (profileId) => {
