@@ -1,27 +1,31 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
+import { supabase } from '../lib/supabase'
 
 const fieldClass = 'w-full py-3 px-4 rounded-lg bg-white border border-white/20 text-[var(--text)] font-[inherit] text-[15px] outline-none focus:border-white/40 focus:ring-2 focus:ring-white/20 transition-all placeholder:text-[var(--t3)]'
 
 export default function Login() {
-  const { signInWithPassword } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
-  const [submitting, setSubmitting] = useState(false)
+  const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!email.trim() || !password) return
     setError('')
-    setSubmitting(true)
-    const { error: err } = await signInWithPassword(email.trim(), password)
-    setSubmitting(false)
-    if (err) {
-      setError(err.message || 'Erreur de connexion')
+    setLoading(true)
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password: password
+    })
+
+    setLoading(false)
+    if (error) {
+      setError('Email ou mot de passe incorrect')
       return
     }
+    window.location.href = '/dashboard'
   }
 
   return (
@@ -50,11 +54,11 @@ export default function Login() {
           />
           <button
             type="submit"
-            disabled={submitting}
+            disabled={loading}
             className="w-full py-3 px-4 rounded-lg font-medium text-[15px] font-[inherit] cursor-pointer transition-all disabled:opacity-60 text-[#173731]"
             style={{ background: '#D2AB76' }}
           >
-            {submitting ? 'Connexion…' : 'Se connecter'}
+            {loading ? 'Connexion…' : 'Se connecter'}
           </button>
           <Link
             to="/forgot-password"
