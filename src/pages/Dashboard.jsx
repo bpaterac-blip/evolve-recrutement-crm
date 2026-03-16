@@ -76,6 +76,12 @@ function formatDateFr(d) {
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
+function formatDateShort(d) {
+  if (!d) return '—'
+  const s = new Date(d).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })
+  return s.charAt(0).toUpperCase() + s.slice(1)
+}
+
 function ownerDisplay(p) {
   if (p?.owner_full_name?.trim()) return p.owner_full_name.trim()
   const email = p?.owner_email || ''
@@ -327,12 +333,105 @@ export default function Dashboard() {
           <div style={cardStyle}>
             <div className="flex items-center gap-2 mb-3">
               <span style={{ color: ACCENT }}><IconCalendar /></span>
-              <span className="font-semibold text-sm" style={{ color: ACCENT }}>Prochains événements</span>
+              <span className="font-semibold text-sm" style={{ color: ACCENT }}>Objectif {new Date().getFullYear()}</span>
             </div>
-            <div className="flex flex-col items-center justify-center py-8 text-center">
-              <span className="mb-2" style={{ color: 'var(--t3)' }}><IconCalendar /></span>
-              <span className="text-[13px] text-[var(--t3)]">Synchronisation Google Agenda à venir</span>
+            <div className="text-[12px] text-[var(--t3)] mb-2">15 recrutés par conseiller</div>
+            {(() => {
+              const currentYear = new Date().getFullYear()
+              const myProfiles = isGlobalView ? allProfiles.filter((p) => p.owner_id === user?.id || p.owner_email === user?.email) : P
+              const recruitedThisYear = myProfiles.filter((p) => p.stg === 'Recruté' && p.created_at && new Date(p.created_at).getFullYear() === currentYear)
+              const count = recruitedThisYear.length
+              const pct = Math.min(100, Math.round((count / 15) * 100))
+              const barColor = pct >= 100 ? '#16a34a' : pct >= 67 ? '#3b82f6' : pct >= 34 ? '#f59e0b' : '#dc2626'
+              return (
+                <>
+                  <div className="text-[28px] font-semibold mb-2" style={{ color: ACCENT }}>{count} / 15</div>
+                  <div style={{ height: 8, background: 'var(--s2)', borderRadius: 4, overflow: 'hidden', marginBottom: 8 }}>
+                    <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: 4, transition: 'width 0.3s' }} />
+                  </div>
+                  <div className="text-[12px] text-[var(--t2)]">
+                    {pct >= 100 ? <span style={{ color: '#16a34a', fontWeight: 600 }}>Objectif atteint !</span> : `${pct}% de l'objectif atteint`}
+                  </div>
+                </>
+              )
+            })()}
+          </div>
+
+          {isGlobalView && (() => {
+            const currentYear = new Date().getFullYear()
+            const byOwner = {}
+            allProfiles.forEach((p) => {
+              const email = p.owner_email || ''
+              if (!byOwner[email]) byOwner[email] = { email, count: 0 }
+              if (p.stg === 'Recruté' && p.created_at && new Date(p.created_at).getFullYear() === currentYear) byOwner[email].count++
+            })
+            const owners = Object.values(byOwner).filter((o) => o.email).sort((a, b) => b.count - a.count)
+            if (owners.length === 0) return null
+            return (
+              <div style={cardStyle}>
+                <div className="font-semibold text-sm mb-3" style={{ color: ACCENT }}>Objectif par conseiller</div>
+                <div className="space-y-3">
+                  {owners.map((o) => {
+                    const pct = Math.min(100, Math.round((o.count / 15) * 100))
+                    const barColor = pct >= 100 ? '#16a34a' : pct >= 67 ? '#3b82f6' : pct >= 34 ? '#f59e0b' : '#dc2626'
+                    const name = ownerDisplay(allProfiles.find((p) => (p.owner_email || '') === o.email) || { owner_email: o.email })
+                    return (
+                      <div key={o.email}>
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-[13px] font-medium">{name}</span>
+                          <span className="text-[12px] text-[var(--t2)]">{o.count} / 15</span>
+                        </div>
+                        <div style={{ height: 6, background: 'var(--s2)', borderRadius: 4, overflow: 'hidden' }}>
+                          <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: 4, transition: 'width 0.3s' }} />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()}
+
+          <div style={cardStyle}>
+            <div className="flex items-center gap-2 mb-3">
+              <span style={{ color: ACCENT }}><IconCalendar /></span>
+              <span className="font-semibold text-sm" style={{ color: ACCENT }}>Événements à venir</span>
             </div>
+            {(() => {
+              const today = new Date().toISOString().slice(0, 10)
+              const events = P.filter((p) => p.next_event_date && p.next_event_date >= today)
+                .sort((a, b) => (a.next_event_date || '').localeCompare(b.next_event_date || ''))
+                .slice(0, 5)
+              if (events.length === 0) {
+                return (
+                  <div className="flex flex-col items-center justify-center py-6 text-center">
+                    <span className="mb-2" style={{ color: 'var(--t3)' }}>
+                      <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                        <line x1="16" y1="2" x2="16" y2="6" />
+                        <line x1="8" y1="2" x2="8" y2="6" />
+                        <line x1="3" y1="10" x2="21" y2="10" />
+                      </svg>
+                    </span>
+                    <span className="text-[13px] text-[var(--t3)]">Aucun événement à venir</span>
+                  </div>
+                )
+              }
+              return (
+                <ul className="space-y-2">
+                  {events.map((p) => (
+                    <li key={p.id} className="flex items-center gap-2 cursor-pointer hover:opacity-80" onClick={() => navigate(`/profiles/${p.id}`)}>
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold shrink-0" style={{ backgroundColor: ['#D4EDE1', '#D3E4F8', '#FDEBC8'][events.indexOf(p) % 3], color: ['#1A7A4A', '#1E5FA0', '#B86B0F'][events.indexOf(p) % 3] }}>{(p.fn?.[0] || '') + (p.ln?.[0] || '') || '?'}</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[13px] font-medium">{p.fn} {p.ln}</div>
+                        <div className="text-[12px] text-[var(--t2)]">{p.next_event_label || 'Événement'} · {formatDateShort(p.next_event_date)}</div>
+                      </div>
+                      <span className="tag px-1.5 py-0.5 rounded text-[11px]" style={stag(p.stg)}>{p.stg || '—'}</span>
+                    </li>
+                  ))}
+                </ul>
+              )
+            })()}
           </div>
         </div>
       </div>

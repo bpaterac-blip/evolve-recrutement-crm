@@ -51,6 +51,8 @@ function mapRowToProfile(row) {
     owner_id: row.owner_id ?? null,
     owner_email: row.owner_email ?? null,
     owner_full_name: row.owner_full_name ?? null,
+    next_event_date: row.next_event_date ?? null,
+    next_event_label: row.next_event_label ?? null,
   }
 }
 

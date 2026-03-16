@@ -76,6 +76,7 @@ ${rawText}`
 import { calculateScore, scoreProfile, getExperienceBadge } from '../lib/scoring'
 import { enrichProfileWithNetrows } from '../lib/netrows'
 import { supabase } from '../lib/supabase'
+import { detectDoublon } from '../lib/detectDoublon'
 import { notifyScoringFeedbackUpdated, fetchScoringInstructions } from '../lib/scoringInstructions'
 import { IconLink, IconDot, IconUpload } from '../components/Icons'
 
@@ -112,6 +113,14 @@ const formatExperiencePeriod = (exp) => {
 const getCategory = (sc) => (sc >= 70 ? 'prioritaire' : sc >= 50 ? 'travailler' : 'ecarter')
 const getPriorityLabel = (sc) => (sc >= 70 ? 'Prioritaire' : sc >= 50 ? 'À travailler' : 'À écarter')
 const PRIORITY_OPTS = ['Contact immédiat', 'Prioritaire', 'À travailler', 'À écarter']
+
+const IconWarning = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+    <line x1="12" y1="9" x2="12" y2="13" />
+    <line x1="12" y1="17" x2="12.01" y2="17" />
+  </svg>
+)
 
 const CorrectedBadge = () => (
   <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#F5E6C8', color: '#B8860B', fontWeight: 600 }}>✓ Corrigé par Baptiste</span>
@@ -476,7 +485,7 @@ const priotag = (sc) => {
 
 export default function Import() {
   const navigate = useNavigate()
-  const { showNotif, addProfile, addProfilesBatch, useSupabase } = useCRM()
+  const { showNotif, addProfile, addProfilesBatch, useSupabase, fetchProfiles } = useCRM()
   const [tab, setTab] = useState('iu')
   const [parsedRows, setParsedRows] = useState([])
   const [importSource, setImportSource] = useState(null) // 'csv' | 'pdf'
@@ -496,6 +505,8 @@ export default function Import() {
   const [chatHistory, setChatHistory] = useState({}) // { [rowKey]: [{ role, content }] }
   const [learningRefresh, setLearningRefresh] = useState(0)
   const [learningStats, setLearningStats] = useState(null) // { total, topCompanies, configUpdatedAt }
+  const [doublons, setDoublons] = useState([]) // { imported, existing }[]
+  const [doublonsModalOpen, setDoublonsModalOpen] = useState(false)
   const csvInputRef = useRef(null)
   const pdfInputRef = useRef(null)
   const [pdfAnalyzing, setPdfAnalyzing] = useState(false)
@@ -562,6 +573,8 @@ export default function Import() {
     setModalProfile(null)
     setModalRowKey(null)
     setChatHistory({})
+    setDoublons([])
+    setDoublonsModalOpen(false)
     showNotif('Import effacé — vous pouvez recommencer')
   }
 
@@ -648,22 +661,62 @@ export default function Import() {
   const ecarteRows = parsedRows.filter((r) => (r.sc || 0) < 50)
   const rowsToPush = includeATravailler ? [...priorRows, ...workRows] : priorRows
 
+  const buildProfileRow = (p) => ({
+    first_name: p.fn ?? '',
+    last_name: p.ln ?? '',
+    company: p.co ?? '—',
+    title: p.ti ?? '—',
+    city: p.city ?? '—',
+    region: p.region ?? '',
+    email: p.mail ?? '—',
+    linkedin_url: p.li ?? '—',
+    source: p.src ?? 'Chasse LinkedIn',
+    score: p.sc ?? 0,
+    stage: p.stg ?? null,
+    maturity: p.mat ?? 'Froid',
+    experiences: Array.isArray(p.experiences) ? p.experiences : [],
+    sequence_lemlist: p.sequence_lemlist ?? '',
+    lead_status: p.lead_status ?? '',
+  })
+
   const pushToCRM = async () => {
     if (!rowsToPush.length) return
     setPushing(true)
+    setDoublons([])
     try {
       if (useSupabase) {
-        const n = await addProfilesBatch(rowsToPush)
-        showNotif(`✓ ${n} profils ajoutés au CRM`)
+        const toInsert = []
+        const doublonsList = []
+        for (const p of rowsToPush) {
+          const existing = await detectDoublon(p)
+          if (existing) {
+            doublonsList.push({ imported: p, existing })
+          } else {
+            toInsert.push(p)
+          }
+        }
+        if (toInsert.length > 0) {
+          const n = await addProfilesBatch(toInsert)
+          showNotif(`✓ ${n} profils ajoutés au CRM`)
+        }
+        if (doublonsList.length > 0) {
+          setDoublons(doublonsList)
+          setDoublonsModalOpen(true)
+        }
+        if (toInsert.length > 0 || doublonsList.length > 0) {
+          hasClearedAfterPushRef.current = true
+          clearImportStorage()
+          setTab('is')
+        }
       } else {
         for (const p of rowsToPush) {
           await addProfile(p)
         }
         showNotif(`✓ ${rowsToPush.length} profils ajoutés au CRM`)
+        hasClearedAfterPushRef.current = true
+        clearImportStorage()
+        setTab('is')
       }
-      hasClearedAfterPushRef.current = true
-      clearImportStorage()
-      setTab('is')
     } catch (err) {
       showNotif(`Erreur : ${err?.message}`)
     } finally {
@@ -1066,6 +1119,54 @@ export default function Import() {
 
       {tab === 'is' && parsedRows.length === 0 && (
         <div className="text-[var(--t3)] py-8 text-center">Importez d'abord des profils depuis l'onglet Source.</div>
+      )}
+
+      {doublonsModalOpen && doublons.length > 0 && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, background: 'rgba(0,0,0,0.5)' }} onClick={() => setDoublonsModalOpen(false)}>
+          <div style={{ width: 560, maxWidth: '100%', maxHeight: '90vh', background: 'white', borderRadius: 16, overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ color: '#f59e0b' }}><IconWarning /></span>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: '#173731' }}>{doublons.length} doublon(s) détecté(s)</h2>
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
+              {doublons.map((d, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '14px 0', borderBottom: i < doublons.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                  <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#173731', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600, flexShrink: 0 }}>
+                    {(d.imported.fn?.[0] || '') + (d.imported.ln?.[0] || '') || '?'}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: '#173731' }}>{d.imported.fn} {d.imported.ln}</div>
+                    <div style={{ fontSize: 12, color: 'var(--t3)', marginTop: 2 }}>Existant : {d.existing.first_name} {d.existing.last_name} · {d.existing.company || '—'} · Stade : {d.existing.stage || '—'}</div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                    <button type="button" onClick={async () => { setDoublons((prev) => prev.filter((_, j) => j !== i)); if (doublons.length <= 1) setDoublonsModalOpen(false) }} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'white', fontSize: 12, cursor: 'pointer', color: 'var(--t2)' }}>Ignorer</button>
+                    <button type="button" onClick={async () => {
+                      const row = buildProfileRow(d.imported)
+                      await supabase.from('profiles').update(row).eq('id', d.existing.id)
+                      await fetchProfiles?.()
+                      showNotif(`${d.imported.fn} ${d.imported.ln} mis à jour`)
+                      setDoublons((prev) => prev.filter((_, j) => j !== i))
+                      if (doublons.length <= 1) setDoublonsModalOpen(false)
+                    }} style={{ padding: '6px 12px', borderRadius: 6, background: '#173731', border: 'none', fontSize: 12, cursor: 'pointer', color: 'white' }}>Mettre à jour</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
+              <button type="button" onClick={() => { setDoublons([]); setDoublonsModalOpen(false) }} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border)', background: 'white', fontSize: 13, cursor: 'pointer', color: 'var(--t2)' }}>Ignorer tous</button>
+              <button type="button" onClick={async () => {
+                for (const d of doublons) {
+                  const row = buildProfileRow(d.imported)
+                  await supabase.from('profiles').update(row).eq('id', d.existing.id)
+                }
+                await fetchProfiles?.()
+                showNotif(`${doublons.length} profil(s) mis à jour`)
+                setDoublons([])
+                setDoublonsModalOpen(false)
+              }} style={{ padding: '8px 16px', borderRadius: 8, background: '#D2AB76', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#173731' }}>Mettre à jour tous</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {modalProfile && modalRowKey && (
