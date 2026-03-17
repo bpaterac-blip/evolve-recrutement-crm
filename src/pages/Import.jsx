@@ -114,6 +114,54 @@ const getCategory = (sc) => (sc >= 70 ? 'prioritaire' : sc >= 50 ? 'travailler' 
 const getPriorityLabel = (sc) => (sc >= 70 ? 'Prioritaire' : sc >= 50 ? 'À travailler' : 'À écarter')
 const PRIORITY_OPTS = ['Contact immédiat', 'Prioritaire', 'À travailler', 'À écarter']
 
+const ACCENT = '#173731'
+const GOLD = '#D2AB76'
+
+function escapeCsv(val) {
+  if (val == null || val === '') return ''
+  const s = String(val)
+  if (/[,\n"]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+  return s
+}
+
+function profileToLemlistRow(p) {
+  const email = p.mail || p.email || ''
+  const companyDomain = email && email.includes('@') ? email.split('@')[1] || '' : ''
+  return [
+    escapeCsv(email),
+    escapeCsv(p.fn || ''),
+    escapeCsv(p.ln || ''),
+    escapeCsv(p.co || ''),
+    escapeCsv(companyDomain),
+    escapeCsv(p.li || p.linkedinUrl || ''),
+    escapeCsv(p.phone || ''),
+    escapeCsv(p.ti || ''),
+    escapeCsv(p.city || ''),
+    escapeCsv('R0'),
+  ].join(',')
+}
+
+function exportToLemlistCsv(profiles) {
+  const header = 'email,firstname,lastname,companyName,companyDomain,linkedinUrl,phone,title,city,stade'
+  const rows = profiles.map(profileToLemlistRow)
+  const csv = [header, ...rows].join('\n')
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `lemlist_scoring_${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+const IconExport = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <polyline points="17 8 12 3 7 8" />
+    <line x1="12" y1="3" x2="12" y2="15" />
+  </svg>
+)
+
 const IconWarning = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
@@ -896,9 +944,18 @@ export default function Import() {
                 type="button"
                 onClick={pushToCRM}
                 disabled={pushing || rowsToPush.length === 0}
-                style={{ padding: '8px 16px', borderRadius: 8, background: '#173731', color: 'white', fontWeight: 500, fontSize: 13, cursor: pushing || rowsToPush.length === 0 ? 'not-allowed' : 'pointer', opacity: pushing || rowsToPush.length === 0 ? 0.6 : 1 }}
+                style={{ padding: '8px 16px', borderRadius: 8, background: ACCENT, color: 'white', fontWeight: 500, fontSize: 13, cursor: pushing || rowsToPush.length === 0 ? 'not-allowed' : 'pointer', opacity: pushing || rowsToPush.length === 0 ? 0.6 : 1 }}
               >
                 {pushing ? 'En cours…' : `+ Pousser ${rowsToPush.length} profil(s) dans le CRM`}
+              </button>
+              <button
+                type="button"
+                onClick={() => exportToLemlistCsv(rowsToPush)}
+                disabled={rowsToPush.length === 0}
+                style={{ padding: '8px 16px', borderRadius: 8, background: GOLD, color: ACCENT, fontWeight: 500, fontSize: 13, cursor: rowsToPush.length === 0 ? 'not-allowed' : 'pointer', opacity: rowsToPush.length === 0 ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                <IconExport />
+                Exporter la sélection vers Lemlist
               </button>
             </div>
           </div>
@@ -934,6 +991,7 @@ export default function Import() {
                 {importSource === 'pdf' && <th className="text-left py-2 px-3.5 bg-[#C5E6D0] text-[11.5px] uppercase tracking-wider text-[#1A7A4A] border-b border-[#A8D5BA]">Ancienneté</th>}
                 <th className="text-left py-2 px-3.5 bg-[#C5E6D0] text-[11.5px] uppercase tracking-wider text-[#1A7A4A] border-b border-[#A8D5BA]">Score</th>
                 <th className="text-left py-2 px-3.5 bg-[#C5E6D0] text-[11.5px] uppercase tracking-wider text-[#1A7A4A] border-b border-[#A8D5BA]">Priorité</th>
+                <th className="text-left py-2 px-3.5 bg-[#C5E6D0] text-[11.5px] uppercase tracking-wider text-[#1A7A4A] border-b border-[#A8D5BA] w-12"></th>
               </tr></thead>
               <tbody>
                 {priorRows.map((p, i) => {
@@ -958,10 +1016,20 @@ export default function Import() {
                       <td className="py-2 px-3.5 flex items-center gap-2">
                         {priotag(p.sc)}
                       </td>
+                      <td className="py-2 px-3.5">
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); exportToLemlistCsv([p]) }}
+                          title="Exporter vers Lemlist"
+                          style={{ padding: 6, borderRadius: 6, background: GOLD, color: ACCENT, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        >
+                          <IconExport />
+                        </button>
+                      </td>
                     </tr>
                   )
                 })}
-                {priorRows.length === 0 && <tr><td colSpan={importSource === 'pdf' ? 6 : 5} className="py-4 px-3.5 text-center text-[var(--t3)] text-[13px]">Aucun profil prioritaire</td></tr>}
+                {priorRows.length === 0 && <tr><td colSpan={importSource === 'pdf' ? 7 : 6} className="py-4 px-3.5 text-center text-[var(--t3)] text-[13px]">Aucun profil prioritaire</td></tr>}
               </tbody>
             </table>
           </div>
@@ -976,6 +1044,7 @@ export default function Import() {
                 {importSource === 'pdf' && <th className="text-left py-2 px-3.5 bg-[#FFECB3] text-[11.5px] uppercase tracking-wider text-[#E65100] border-b border-[#FFE0B2]">Ancienneté</th>}
                 <th className="text-left py-2 px-3.5 bg-[#FFECB3] text-[11.5px] uppercase tracking-wider text-[#E65100] border-b border-[#FFE0B2]">Score</th>
                 <th className="text-left py-2 px-3.5 bg-[#FFECB3] text-[11.5px] uppercase tracking-wider text-[#E65100] border-b border-[#FFE0B2]">Priorité</th>
+                <th className="text-left py-2 px-3.5 bg-[#FFECB3] text-[11.5px] uppercase tracking-wider text-[#E65100] border-b border-[#FFE0B2] w-12"></th>
               </tr></thead>
               <tbody>
                 {workRows.map((p, i) => {
@@ -1000,10 +1069,20 @@ export default function Import() {
                       <td className="py-2 px-3.5 flex items-center gap-2">
                         {priotag(p.sc)}
                       </td>
+                      <td className="py-2 px-3.5">
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); exportToLemlistCsv([p]) }}
+                          title="Exporter vers Lemlist"
+                          style={{ padding: 6, borderRadius: 6, background: GOLD, color: ACCENT, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        >
+                          <IconExport />
+                        </button>
+                      </td>
                     </tr>
                   )
                 })}
-                {workRows.length === 0 && <tr><td colSpan={importSource === 'pdf' ? 6 : 5} className="py-4 px-3.5 text-center text-[var(--t3)] text-[13px]">Aucun profil à travailler</td></tr>}
+                {workRows.length === 0 && <tr><td colSpan={importSource === 'pdf' ? 7 : 6} className="py-4 px-3.5 text-center text-[var(--t3)] text-[13px]">Aucun profil à travailler</td></tr>}
               </tbody>
             </table>
           </div>
@@ -1022,6 +1101,7 @@ export default function Import() {
                   {importSource === 'pdf' && <th className="text-left py-2 px-3.5 bg-[#FFCDD2] text-[11.5px] uppercase tracking-wider text-[#c0392b] border-b border-[#FFCDD2]">Ancienneté</th>}
                   <th className="text-left py-2 px-3.5 bg-[#FFCDD2] text-[11.5px] uppercase tracking-wider text-[#c0392b] border-b border-[#FFCDD2]">Score</th>
                   <th className="text-left py-2 px-3.5 bg-[#FFCDD2] text-[11.5px] uppercase tracking-wider text-[#c0392b] border-b border-[#FFCDD2]">Priorité</th>
+                  <th className="text-left py-2 px-3.5 bg-[#FFCDD2] text-[11.5px] uppercase tracking-wider text-[#c0392b] border-b border-[#FFCDD2] w-12"></th>
                 </tr></thead>
                 <tbody>
                   {ecarteRows.map((p, i) => {
@@ -1045,6 +1125,16 @@ export default function Import() {
                         </td>
                         <td className="py-2 px-3.5 flex items-center gap-2">
                           {priotag(p.sc)}
+                        </td>
+                        <td className="py-2 px-3.5">
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); exportToLemlistCsv([p]) }}
+                            title="Exporter vers Lemlist"
+                            style={{ padding: 6, borderRadius: 6, background: GOLD, color: ACCENT, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                          >
+                            <IconExport />
+                          </button>
                         </td>
                       </tr>
                     )

@@ -1,9 +1,18 @@
+import { useState } from 'react'
 import { Outlet, NavLink, Link, useLocation, useNavigate } from 'react-router-dom'
 import { useCRM } from '../context/CRMContext'
 import { useAuth } from '../context/AuthContext'
 import { useViewMode } from '../context/ViewModeContext'
+import { supabase } from '../lib/supabase'
 import { IconArrowUp } from './Icons'
 import ChatWidget from './ChatWidget'
+
+const IconLock = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+  </svg>
+)
 
 const TITLES = {
   '/': 'Tableau de bord',
@@ -26,7 +35,7 @@ export default function Layout() {
   const location = useLocation()
   const navigate = useNavigate()
   const title = TITLES[location.pathname] || 'Evolve Recruiter'
-  console.log('Layout role:', role, 'role === "admin":', role === 'admin')
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false)
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -88,6 +97,15 @@ export default function Layout() {
           </div>
           <button
             type="button"
+            onClick={() => setPasswordModalOpen(true)}
+            className="w-full flex items-center gap-2.5 py-2 px-2.5 rounded-lg text-[13px] text-white/60 hover:bg-white/10 hover:text-white transition-all cursor-pointer font-[inherit] border-none bg-transparent text-left"
+            title="Changer le mot de passe"
+          >
+            <span className="nico text-sm w-[18px] shrink-0 inline-flex items-center justify-center"><IconLock /></span>
+            Changer le mot de passe
+          </button>
+          <button
+            type="button"
             onClick={() => signOut()}
             className="w-full flex items-center gap-2.5 py-2 px-2.5 rounded-lg text-[13px] text-white/60 hover:bg-white/10 hover:text-white transition-all cursor-pointer font-[inherit] border-none bg-transparent text-left"
           >
@@ -123,6 +141,90 @@ export default function Layout() {
         </div>
       </div>
       <ChatWidget />
+      {passwordModalOpen && (
+        <ChangePasswordModal
+          onClose={() => setPasswordModalOpen(false)}
+          onSuccess={() => {
+            setPasswordModalOpen(false)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function ChangePasswordModal({ onClose, onSuccess }) {
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError('')
+    if (newPassword.length < 8) {
+      setError('Le mot de passe doit contenir au moins 8 caractères.')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setError('Les deux mots de passe ne correspondent pas.')
+      return
+    }
+    setSaving(true)
+    try {
+      const { error: err } = await supabase.auth.updateUser({ password: newPassword })
+      if (err) throw err
+      setSuccess(true)
+      setTimeout(() => {
+        onSuccess()
+      }, 2000)
+    } catch (err) {
+      setError(err?.message || 'Erreur lors de la modification du mot de passe.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[1100] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.4)' }} onClick={onClose}>
+      <div className="rounded-xl border shadow-xl w-full max-w-md p-5" style={{ backgroundColor: '#fff', borderColor: 'var(--border)' }} onClick={(e) => e.stopPropagation()}>
+        <div className="font-semibold text-base mb-4" style={{ color: ACCENT }}>Changer mon mot de passe</div>
+        {success ? (
+          <div className="text-[13px] text-[#16a34a] py-4">Mot de passe modifié avec succès</div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <div>
+              <label className="block text-[12px] font-medium text-[var(--t3)] mb-1">Nouveau mot de passe</label>
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                minLength={8}
+                placeholder="Minimum 8 caractères"
+                className="w-full rounded-lg border px-3 py-2 text-[13px]"
+                style={{ borderColor: error ? '#dc2626' : 'var(--border)' }}
+              />
+            </div>
+            <div>
+              <label className="block text-[12px] font-medium text-[var(--t3)] mb-1">Confirmer le mot de passe</label>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Confirmer le mot de passe"
+                className="w-full rounded-lg border px-3 py-2 text-[13px]"
+                style={{ borderColor: error ? '#dc2626' : 'var(--border)' }}
+              />
+            </div>
+            {error && <div className="text-[13px] text-[#dc2626]">{error}</div>}
+            <div className="flex gap-2 justify-end mt-4">
+              <button type="button" onClick={onClose} className="py-2 px-3 rounded-lg text-[13px] font-medium border" style={{ borderColor: ACCENT, color: ACCENT }}>Annuler</button>
+              <button type="submit" disabled={saving} className="py-2 px-3 rounded-lg text-[13px] font-medium disabled:opacity-50" style={{ backgroundColor: ACCENT, color: 'white' }}>{saving ? 'Enregistrement…' : 'Enregistrer'}</button>
+            </div>
+          </form>
+        )}
+      </div>
     </div>
   )
 }
