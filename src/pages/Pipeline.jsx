@@ -21,6 +21,7 @@ const SESSION_CIBLE_STAGES = ["Point d'étape téléphonique", "Point d'étape",
 import InlineDropdown from '../components/InlineDropdown'
 import ScoreCorrectionModal from '../components/ScoreCorrectionModal'
 import ChuteModal from '../components/ChuteModal'
+import PasInteresseModal from '../components/PasInteresseModal'
 import GrilleNotationTab from '../components/GrilleNotationTab'
 import {
   IconEnvelope,
@@ -75,6 +76,7 @@ const MATURITY_BADGE_STYLES = {
   Tiède: { backgroundColor: '#fff7ed', color: '#ea580c' },
   Froid: { backgroundColor: '#f8fafc', color: '#94a3b8' },
   Chute: { backgroundColor: '#fff1f2', color: '#e11d48', fontStyle: 'italic' },
+  'Pas intéressé': { backgroundColor: '#f1f5f9', color: '#64748b', fontStyle: 'italic', fontSize: 10, fontWeight: 600, padding: '3px 9px', borderRadius: 20 },
   Archivé: { backgroundColor: '#f8fafc', color: '#94a3b8' },
   'Très chaud': { backgroundColor: '#fff1f2', color: '#e11d48' },
 }
@@ -115,6 +117,7 @@ function KanbanCard({ profile, stage, onClick, isSelected, ownerBadge, nextEvent
   const matStyle = MATURITY_BADGE_STYLES[profile.mat] || { backgroundColor: '#f8fafc', color: '#94a3b8' }
   const scoreStyle = getScoreBadgeStyle(profile.sc)
   const isChute = profile.mat === 'Chute'
+  const isPasInteresse = profile.mat === 'Pas intéressé'
   const sessionLabel = profile.integration_periode && profile.integration_annee
     ? `${profile.integration_periode} ${profile.integration_annee}`
     : profile.session_formation_id
@@ -143,14 +146,14 @@ function KanbanCard({ profile, stage, onClick, isSelected, ownerBadge, nextEvent
         background: '#ffffff',
         borderRadius: 12,
         border: `1px solid rgba(0,0,0,0.06)`,
-        borderLeft: `3px ${isChute ? 'dashed' : 'solid'} ${borderColor}`,
+        borderLeft: `3px ${(isChute || isPasInteresse) ? 'dashed' : 'solid'} ${borderColor}`,
         padding: 14,
         marginBottom: 8,
         cursor: 'pointer',
         transition: 'all 0.15s',
         position: 'relative',
         overflow: 'hidden',
-        opacity: isChute ? 0.5 : 1,
+        opacity: (isChute || isPasInteresse) ? 0.5 : 1,
         boxShadow: isSelected ? '0 0 0 2px #173731' : 'none',
         width: '100%',
       }}
@@ -295,8 +298,8 @@ export default function Pipeline() {
   const { viewMode } = useViewMode()
   const { filteredProfiles, changeStage, changeMaturity, changeSource, changeRegion, updateProfileField, updateProfile, showNotif, useSupabase, fetchProfiles } = useCRM()
   const isGlobalView = role === 'admin' && viewMode === 'global'
-  const pipeline = filteredProfiles.filter((p) => p.stg && p.stg !== '' && p.stg !== 'Recruté' && p.mat !== 'Archivé' && p.mat !== 'Chute')
-  const all = filteredProfiles.filter((p) => p.stg && p.stg !== '' && p.mat !== 'Archivé' && p.mat !== 'Chute')
+  const pipeline = filteredProfiles.filter((p) => p.stg && p.stg !== '' && p.stg !== 'Recruté' && p.mat !== 'Archivé' && p.mat !== 'Chute' && p.mat !== 'Pas intéressé')
+  const all = filteredProfiles.filter((p) => p.stg && p.stg !== '' && p.mat !== 'Archivé' && p.mat !== 'Chute' && p.mat !== 'Pas intéressé')
   const [modalProfile, setModalProfile] = useState(null)
   const [selectedCardId, setSelectedCardId] = useState(null)
   const [modalTab, setModalTab] = useState('notes')
@@ -346,6 +349,7 @@ export default function Pipeline() {
     notes: '',
   })
   const [chuteModalProfile, setChuteModalProfile] = useState(null)
+  const [pasInteresseModalProfile, setPasInteresseModalProfile] = useState(null)
   const [showStadeDropdown, setShowStadeDropdown] = useState(false)
   const [showMaturiteDropdown, setShowMaturiteDropdown] = useState(false)
   const [showSourceDropdown, setShowSourceDropdown] = useState(false)
@@ -651,6 +655,10 @@ export default function Pipeline() {
       setChuteModalProfile(displayProfile)
       return
     }
+    if (v === 'Pas intéressé') {
+      setPasInteresseModalProfile(displayProfile)
+      return
+    }
     changeMaturity(displayProfile.id, v)
     await supabase.from('activities').insert({
       profile_id: modalProfile.id,
@@ -815,7 +823,7 @@ export default function Pipeline() {
   const stag = (s) => ({ background: stageColor(s).bg, color: stageColor(s).text })
   const matStyle = (m) => ({ background: matColor(m).bg, color: matColor(m).text })
 
-  const MODAL_MAT_STYLES = { Froid: { bg: '#f8fafc', color: '#94a3b8' }, Tiède: { bg: '#fff7ed', color: '#ea580c' }, Chaud: { bg: '#fff1f2', color: '#e11d48' }, 'Très chaud': { bg: '#fff1f2', color: '#e11d48' }, Chute: { bg: '#fff1f2', color: '#e11d48' }, Archivé: { bg: '#f8fafc', color: '#94a3b8' } }
+  const MODAL_MAT_STYLES = { Froid: { bg: '#f8fafc', color: '#94a3b8' }, Tiède: { bg: '#fff7ed', color: '#ea580c' }, Chaud: { bg: '#fff1f2', color: '#e11d48' }, 'Très chaud': { bg: '#fff1f2', color: '#e11d48' }, Chute: { bg: '#fff1f2', color: '#e11d48' }, 'Pas intéressé': { bg: '#f1f5f9', color: '#64748b', fontStyle: 'italic' }, Archivé: { bg: '#f8fafc', color: '#94a3b8' } }
   const MODAL_STAGE_STYLES = { R0: { bg: '#eff6ff', color: '#1d4ed8' }, R1: { bg: '#f0fdf4', color: '#15803d' }, "Point d'étape": { bg: '#fefce8', color: '#a16207' }, "Point d'étape téléphonique": { bg: '#fefce8', color: '#a16207' }, 'R2 Amaury': { bg: '#fff7ed', color: '#c2410c' }, 'Point juridique': { bg: '#f5f3ff', color: '#6d28d9' }, 'Démission reconversion': { bg: '#fff7ed', color: '#ea580c' }, Intégration: { bg: '#f0fdf4', color: '#15803d' }, Recruté: { bg: '#f0fdf4', color: '#15803d' }, Démission: { bg: '#fff7ed', color: '#ea580c' } }
   const MODAL_SOURCE_STYLES = { 'Chasse LinkedIn': { bg: '#eff6ff', color: '#1d4ed8' }, 'Chasse Mail': { bg: '#f0fdf4', color: '#15803d' }, Recommandation: { bg: '#fefce8', color: '#a16207' }, Ads: { bg: '#f5f3ff', color: '#6d28d9' }, 'Chasse externe': { bg: '#f8fafc', color: '#64748b' }, 'Inbound Marketing': { bg: '#f0fdf4', color: '#15803d' }, Autre: { bg: '#f8fafc', color: '#64748b' } }
   const modalMatStyle = (m) => ({ ...MODAL_MAT_STYLES[m || 'Froid'], borderRadius: 20, fontSize: 10, fontWeight: 600, padding: '3px 9px' })
@@ -1436,6 +1444,39 @@ export default function Pipeline() {
               })
               setChuteModalProfile(null)
               if (modalProfile?.id === chuteModalProfile.id) {
+                setModalProfile(null)
+                setSelectedCardId(null)
+              }
+              fetchProfiles()
+            }}
+          />
+        </div>
+      )}
+      {pasInteresseModalProfile && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setPasInteresseModalProfile(null)}>
+          <PasInteresseModal
+            profile={pasInteresseModalProfile}
+            onClose={() => setPasInteresseModalProfile(null)}
+            onSaved={async (raison, detail) => {
+              const oldMat = pasInteresseModalProfile.mat ?? '—'
+              await supabase.from('profiles').update({
+                maturity: 'Pas intéressé',
+                chute_stade: pasInteresseModalProfile.stg || 'Avant pipeline',
+                chute_type: raison,
+                chute_detail: detail || null,
+                chute_date: new Date().toISOString(),
+              }).eq('id', pasInteresseModalProfile.id)
+              changeMaturity(pasInteresseModalProfile.id, 'Pas intéressé')
+              await supabase.from('activities').insert({
+                profile_id: pasInteresseModalProfile.id,
+                type: 'maturity_change',
+                note: `${oldMat} → Pas intéressé`,
+                date: new Date().toISOString().split('T')[0],
+                icon: 'refresh',
+                source: 'manual',
+              })
+              setPasInteresseModalProfile(null)
+              if (modalProfile?.id === pasInteresseModalProfile.id) {
                 setModalProfile(null)
                 setSelectedCardId(null)
               }

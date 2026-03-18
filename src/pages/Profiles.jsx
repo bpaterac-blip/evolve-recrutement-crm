@@ -6,6 +6,7 @@ import { useViewMode } from '../context/ViewModeContext'
 import { supabase } from '../lib/supabase'
 import { STAGES, MATURITIES, SOURCES } from '../lib/data'
 import InlineDropdown from '../components/InlineDropdown'
+import PasInteresseModal from '../components/PasInteresseModal'
 
 const ACCENT = '#173731'
 const GOLD = '#D2AB76'
@@ -27,6 +28,7 @@ const MATURITY_STYLES = {
   Tiède: { backgroundColor: '#fff7ed', color: '#ea580c' },
   Froid: { backgroundColor: '#f8fafc', color: '#94a3b8' },
   Chute: { backgroundColor: '#fff1f2', color: '#e11d48', fontStyle: 'italic' },
+  'Pas intéressé': { backgroundColor: '#f1f5f9', color: '#64748b', fontStyle: 'italic', fontSize: 10, fontWeight: 600, padding: '3px 9px', borderRadius: 20 },
   Archivé: { backgroundColor: '#f8fafc', color: '#cbd5e1' },
   'Très chaud': { backgroundColor: '#fff1f2', color: '#e11d48' },
 }
@@ -114,6 +116,7 @@ export default function Profiles() {
   const [openDropdownId, setOpenDropdownId] = useState(null)
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [pasInteresseModalProfile, setPasInteresseModalProfile] = useState(null)
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -332,7 +335,15 @@ export default function Profiles() {
                         <InlineDropdown
                           options={MATURITIES}
                           value={p.mat}
-                          onChange={(v) => { changeMaturity(p.id, v); setOpenDropdownId(null) }}
+                          onChange={(v) => {
+                            if (v === 'Pas intéressé') {
+                              setPasInteresseModalProfile(p)
+                              setOpenDropdownId(null)
+                              return
+                            }
+                            changeMaturity(p.id, v)
+                            setOpenDropdownId(null)
+                          }}
                           buttonStyle={(v) => ({ borderRadius: 20, padding: '3px 9px', fontSize: 11, border: 'none', cursor: 'pointer', ...(MATURITY_STYLES[v] || { bg: '#f8fafc', color: '#94a3b8' }) })}
                           buttonClassName=""
                           open={openDropdownId?.profileId === p.id && openDropdownId?.field === 'mat'}
@@ -371,6 +382,27 @@ export default function Profiles() {
         </div>
       </div>
 
+      {pasInteresseModalProfile && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setPasInteresseModalProfile(null)}>
+          <PasInteresseModal
+            profile={pasInteresseModalProfile}
+            onClose={() => setPasInteresseModalProfile(null)}
+            onSaved={async (raison, detail) => {
+              const oldMat = pasInteresseModalProfile.mat ?? '—'
+              await supabase.from('profiles').update({
+                maturity: 'Pas intéressé',
+                chute_stade: pasInteresseModalProfile.stg || 'Avant pipeline',
+                chute_type: raison,
+                chute_detail: detail || null,
+                chute_date: new Date().toISOString(),
+              }).eq('id', pasInteresseModalProfile.id)
+              changeMaturity(pasInteresseModalProfile.id, 'Pas intéressé')
+              setPasInteresseModalProfile(null)
+              await fetchProfiles()
+            }}
+          />
+        </div>
+      )}
       {deleteModalOpen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, background: 'rgba(0,0,0,0.4)' }} onClick={() => setDeleteModalOpen(false)}>
           <div style={{ background: '#F5F0E8', borderRadius: 12, border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 4px 20px rgba(0,0,0,0.15)', maxWidth: 400, padding: 24 }} onClick={(e) => e.stopPropagation()}>

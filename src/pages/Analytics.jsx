@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useCRM } from '../context/CRMContext'
+import { PAS_INTERESSE_TYPES } from '../lib/data'
 import { useAuth } from '../context/AuthContext'
 import { useViewMode } from '../context/ViewModeContext'
 import { supabase } from '../lib/supabase'
@@ -17,7 +18,7 @@ const ANALYTICS_SOURCES = ['Chasse LinkedIn', 'Chasse Mail', 'Recommandation', '
 
 const ANALYTICS_STAGES = ['R0', 'R1', "Point d'étape téléphonique", 'R2 Amaury', 'Point juridique', 'Démission reconversion', 'Intégration', 'Recruté']
 
-const CHUTE_STAGES = ['R0', 'R1', "Point d'étape téléphonique", 'R2 Amaury', 'Point juridique', 'Démission reconversion']
+const CHUTE_STAGES = ['Avant pipeline', 'R0', 'R1', "Point d'étape téléphonique", 'R2 Amaury', 'Point juridique', 'Démission reconversion']
 
 const CHUTE_TYPES = ['Contraintes contractuelles', 'Situation personnelle', 'Offres concurrentes', 'Statut / réglementaire', 'Contact perdu', 'Autre']
 
@@ -289,6 +290,9 @@ function ChuteProfilesModal({ title, profiles, columns, onClose }) {
     if (columns.includes('chute_date')) parts.push(formatDate(p.chute_date))
     return parts.join(' · ')
   }
+  const getMatBadgeStyle = (mat) => mat === 'Pas intéressé'
+    ? { background: '#f1f5f9', color: '#64748b', fontStyle: 'italic', fontSize: 10, fontWeight: 600, padding: '3px 9px', borderRadius: 20 }
+    : { background: '#fff1f2', color: '#e11d48', fontStyle: 'italic', fontSize: 10, fontWeight: 600, padding: '3px 9px', borderRadius: 20 }
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
       <div style={{ background: '#fff', borderRadius: 12, boxShadow: '0 4px 20px rgba(0,0,0,0.15)', maxWidth: 520, maxHeight: '80vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }} onClick={(e) => e.stopPropagation()}>
@@ -305,8 +309,11 @@ function ChuteProfilesModal({ title, profiles, columns, onClose }) {
                   <div style={{ width: 28, height: 28, borderRadius: '50%', background: ACCENT, color: GOLD, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>
                     {initials(p.fn || p.first_name, p.ln || p.last_name)}
                   </div>
-                  <div>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: ACCENT }}>{p.fn || p.first_name} {p.ln || p.last_name}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: ACCENT }}>{p.fn || p.first_name} {p.ln || p.last_name}</span>
+                      <span style={{ ...getMatBadgeStyle(p.mat), flexShrink: 0 }}>{p.mat === 'Pas intéressé' ? 'Pas intéressé' : 'Chute'}</span>
+                    </div>
                     <div style={{ fontSize: 12, color: '#888' }}>{getSub(p)}</div>
                   </div>
                 </li>
@@ -460,7 +467,7 @@ export default function Analytics() {
 
     const forFunnel = PPeriod.filter((p) => p.stg && p.stg !== '')
     const forAlways = ownerFilteredAll
-    const chuteProfiles = forAlways.filter((p) => p.mat === 'Chute')
+    const chuteProfiles = forAlways.filter((p) => p.mat === 'Chute' || p.mat === 'Pas intéressé')
 
     const countInStage = (stg) => {
       if (stg === "Point d'étape téléphonique") return forFunnel.filter((p) => normalizeStageForMatch(p.stg) === stg).length
@@ -509,12 +516,17 @@ export default function Analytics() {
     })
 
     const chuteByStage = CHUTE_STAGES.map((stage) => {
-      const matchStg = (p) => (stage === "Point d'étape téléphonique" ? (normalizeStageForMatch(p.chute_stade || p.stg) === stage) : ((p.chute_stade || p.stg) === stage))
+      const matchStg = (p) => {
+        const stade = p.chute_stade || p.stg || 'Avant pipeline'
+        if (stage === 'Avant pipeline') return stade === 'Avant pipeline' || !stade || stade === ''
+        if (stage === "Point d'étape téléphonique") return normalizeStageForMatch(stade) === stage
+        return stade === stage
+      }
       const chuteCount = chuteProfiles.filter((p) => matchStg(p)).length
-      const currentInStage = forAlways.filter((p) => {
+      const currentInStage = stage === 'Avant pipeline' ? 0 : forAlways.filter((p) => {
         const s = p.stg
-        if (stage === "Point d'étape téléphonique") return normalizeStageForMatch(s) === stage && p.mat !== 'Chute'
-        return s === stage && p.mat !== 'Chute'
+        if (stage === "Point d'étape téléphonique") return normalizeStageForMatch(s) === stage && p.mat !== 'Chute' && p.mat !== 'Pas intéressé'
+        return s === stage && p.mat !== 'Chute' && p.mat !== 'Pas intéressé'
       }).length
       const denom = currentInStage + chuteCount
       const taux = denom > 0 ? Math.round((chuteCount / denom) * 100) : 0
@@ -527,7 +539,8 @@ export default function Analytics() {
       if (!chuteByType[t]) chuteByType[t] = []
       chuteByType[t].push(p)
     })
-    const raisonsAbandon = CHUTE_TYPES.map((t) => ({
+    const allRaisonTypes = [...CHUTE_TYPES, ...PAS_INTERESSE_TYPES]
+    const raisonsAbandon = allRaisonTypes.map((t) => ({
       type: t,
       count: (chuteByType[t] || []).length,
       profiles: chuteByType[t] || [],

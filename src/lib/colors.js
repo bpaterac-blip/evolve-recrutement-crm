@@ -7,6 +7,7 @@ export const MATURITY_COLORS = {
   Tiède: { bg: '#FFF7ED', text: '#C2410C' },
   Chaud: { bg: '#FEF2F2', text: '#DC2626' },
   Chute: { bg: '#F3F4F6', text: '#6B7280' },
+  'Pas intéressé': { bg: '#f1f5f9', text: '#64748b' },
   Archivé: { bg: '#F3F4F6', text: '#6B7280' },
 }
 

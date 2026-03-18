@@ -87,6 +87,10 @@ export default function Dashboard() {
   const [stageCounts, setStageCounts] = useState([])
   const [pointsEtapeCetteSemaine, setPointsEtapeCetteSemaine] = useState([])
   const [pointsEtapeLoading, setPointsEtapeLoading] = useState(true)
+  const [contactesCeMois, setContactesCeMois] = useState(null)
+  const [contactesDiff, setContactesDiff] = useState(null)
+  const [recrutes2026, setRecrutes2026] = useState(null)
+  const [recrutesCeMois, setRecrutesCeMois] = useState(null)
 
   const allProfiles = [...filteredProfiles].filter((p) => p.mat !== 'Archivé')
   const P = ownerFilter === 'all' ? allProfiles : allProfiles.filter((p) => (p.owner_email || '') === ownerFilter)
@@ -206,6 +210,43 @@ export default function Dashboard() {
   }, [P.map((p) => p.id).filter(Boolean).join(','), ownerFilter])
 
   useEffect(() => {
+    const loadContactesRecrutes = async () => {
+      const now = new Date()
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString()
+      const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString()
+      const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59).toISOString()
+
+      const isGlobalView = role === 'admin' && viewMode === 'global'
+      const ownerFilterForQuery = isGlobalView ? null : user?.id
+
+      let qCeMois = supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', startOfMonth).lte('created_at', endOfMonth)
+      let qMoisPrec = supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', startOfLastMonth).lte('created_at', endOfLastMonth)
+      if (ownerFilterForQuery) {
+        qCeMois = qCeMois.eq('owner_id', ownerFilterForQuery)
+        qMoisPrec = qMoisPrec.eq('owner_id', ownerFilterForQuery)
+      }
+      const { count: contactesCeMoisVal } = await qCeMois
+      const { count: contactesMoisPrecedent } = await qMoisPrec
+      const diff = (contactesCeMoisVal || 0) - (contactesMoisPrecedent || 0)
+      setContactesCeMois(contactesCeMoisVal ?? 0)
+      setContactesDiff(diff)
+
+      let qRecrutes2026 = supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('stage', 'Recruté').gte('created_at', '2026-01-01T00:00:00.000Z')
+      let qRecrutesCeMois = supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('stage', 'Recruté').gte('updated_at', startOfMonth)
+      if (ownerFilterForQuery) {
+        qRecrutes2026 = qRecrutes2026.eq('owner_id', ownerFilterForQuery)
+        qRecrutesCeMois = qRecrutesCeMois.eq('owner_id', ownerFilterForQuery)
+      }
+      const { count: recrutes2026Val } = await qRecrutes2026
+      const { count: recrutesCeMoisVal } = await qRecrutesCeMois
+      setRecrutes2026(recrutes2026Val ?? 0)
+      setRecrutesCeMois(recrutesCeMoisVal ?? 0)
+    }
+    loadContactesRecrutes()
+  }, [role, viewMode, user?.id])
+
+  useEffect(() => {
     const loadStageCounts = async () => {
       let query = supabase.from('profiles').select('stage').neq('maturity', 'Archivé')
       if (role === 'admin' && viewMode === 'global') {
@@ -249,7 +290,7 @@ export default function Dashboard() {
 
   return (
     <div className="page h-full overflow-y-auto p-[22px]" style={{ background: '#F5F0E8' }}>
-      <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 26, color: ACCENT, marginBottom: 4 }}>Bonjour {userProfile?.first_name || (user?.email || '').split('@')[0] || 'Utilisateur'}</div>
+      <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 26, color: ACCENT, marginBottom: 4 }}>Bonjour {userProfile?.first_name || (user?.email || '').split('@')[0] || 'Utilisateur'} 👋</div>
       <div className="flex items-center gap-3 mb-5 flex-wrap">
         <span className="text-[13px]" style={{ color: '#999' }}>Pipeline au {pipelineDate}</span>
         {isGlobalView && ownerEmails.length > 0 && (
@@ -264,9 +305,28 @@ export default function Dashboard() {
 
       <div className="stats-row grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
         <div style={cardStyle}>
-          <div style={sectionTitleStyle}>Contactés (mois en cours)</div>
-          <div style={valueStyle}>34</div>
-          <div className="text-xs mt-1" style={{ color: '#888' }}>+12 vs février</div>
+          <div style={sectionTitleStyle}>Contactés ce mois</div>
+          <div style={valueStyle}>{contactesCeMois ?? '—'}</div>
+          <div
+            className="text-xs mt-1"
+            style={{
+              color: contactesDiff != null
+                ? contactesDiff > 0
+                  ? '#15803d'
+                  : contactesDiff < 0
+                    ? '#dc2626'
+                    : '#aaa'
+                : '#888',
+            }}
+          >
+            {contactesDiff != null
+              ? contactesDiff > 0
+                ? `+${contactesDiff} vs mois dernier`
+                : contactesDiff < 0
+                  ? `${contactesDiff} vs mois dernier`
+                  : 'Stable vs mois dernier'
+              : '—'}
+          </div>
         </div>
         <div style={cardStyle}>
           <div style={sectionTitleStyle}>En pipeline actif</div>
@@ -275,8 +335,23 @@ export default function Dashboard() {
         </div>
         <div style={cardStyle}>
           <div style={sectionTitleStyle}>Recrutés 2026</div>
-          <div style={valueStyle}>{P.filter((p) => p.stg === 'Recruté' && p.created_at && new Date(p.created_at).getFullYear() === 2026).length}</div>
-          <div className="text-xs mt-1" style={{ color: '#16a34a' }}>+1 ce mois</div>
+          <div style={valueStyle}>{recrutes2026 ?? '—'}</div>
+          <div
+            className="text-xs mt-1"
+            style={{
+              color: recrutesCeMois != null
+                ? recrutesCeMois > 0
+                  ? '#15803d'
+                  : '#aaa'
+                : '#888',
+            }}
+          >
+            {recrutesCeMois != null
+              ? recrutesCeMois > 0
+                ? `+${recrutesCeMois} ce mois`
+                : '0 ce mois'
+              : '—'}
+          </div>
         </div>
       </div>
 
@@ -471,6 +546,8 @@ const MATURITY_BADGE_STYLES = {
   Chaud: { bg: '#dc2626', color: 'white' },
   Tiède: { bg: '#f59e0b', color: 'white' },
   Froid: { bg: '#94a3b8', color: 'white' },
+  Chute: { bg: '#fff1f2', color: '#e11d48', fontStyle: 'italic' },
+  'Pas intéressé': { bg: '#f1f5f9', color: '#64748b', fontStyle: 'italic', fontSize: 10, fontWeight: 600, padding: '3px 9px', borderRadius: 20 },
 }
 
 function formatDateDebutRange(dateDebut) {
