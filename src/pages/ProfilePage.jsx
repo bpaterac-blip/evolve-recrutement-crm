@@ -3,8 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { jsPDF } from 'jspdf'
 import { supabase } from '../lib/supabase'
 import { useCRM } from '../context/CRMContext'
-import { enrichProfileWithNetrows } from '../lib/netrows'
-import { scoreProfile, getExperienceBadge } from '../lib/scoring'
+import { getExperienceBadge } from '../lib/scoring'
 import {
   STAGES,
   MATURITIES,
@@ -24,7 +23,7 @@ import ScoreCorrectionModal from '../components/ScoreCorrectionModal'
 import ChuteModal from '../components/ChuteModal'
 import PasInteresseModal from '../components/PasInteresseModal'
 import GrilleNotationTab from '../components/GrilleNotationTab'
-import { ActivityIcon, IconMap, IconCalendar, IconUpload, IconTrash, IconPencil, IconClose } from '../components/Icons'
+import { ActivityIcon, IconMap, IconCalendar, IconUpload, IconTrash, IconPencil, IconClose, IconDocument } from '../components/Icons'
 
 const ICON_S = 14
 const IconEnvelope = () => <svg width={ICON_S} height={ICON_S} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" /><polyline points="22,6 12,13 2,6" /></svg>
@@ -34,8 +33,6 @@ const IconTag = () => <svg width={ICON_S} height={ICON_S} viewBox="0 0 24 24" fi
 const IconMapPin = () => <svg width={ICON_S} height={ICON_S} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg>
 const IconStar = () => <svg width={ICON_S} height={ICON_S} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
 const IconUser = () => <svg width={ICON_S} height={ICON_S} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
-const IconLinkedIn = () => <svg width={14} height={14} viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
-
 console.log('Supabase URL:', import.meta.env.VITE_SUPABASE_URL)
 console.log('Supabase KEY:', import.meta.env.VITE_SUPABASE_ANON_KEY ? 'OK' : 'MANQUANTE')
 
@@ -175,7 +172,6 @@ export default function ProfilePage() {
   const [confirmDeleteEvent, setConfirmDeleteEvent] = useState(null)
   const [expandedNoteId, setExpandedNoteId] = useState(null)
   const [expandedEventId, setExpandedEventId] = useState(null)
-  const [enriching, setEnriching] = useState(false)
   const [scoreCorrectionOpen, setScoreCorrectionOpen] = useState(false)
   const [chuteModalProfile, setChuteModalProfile] = useState(null)
   const [pasInteresseModalProfile, setPasInteresseModalProfile] = useState(null)
@@ -201,6 +197,7 @@ export default function ProfilePage() {
       ico,
       type: a.activity_type === 'score_corrected' ? 'score_warning' : (a.type || 'std'),
       ts,
+      author: a.author,
     }
   }
 
@@ -222,6 +219,7 @@ export default function ProfilePage() {
       eventType,
       eventDate: e.event_date || e.date,
       description,
+      author: e.author,
     }
   }
 
@@ -465,6 +463,11 @@ export default function ProfilePage() {
   }
 
   const mergedActs = [...localActivities.map(mapActivityRow), ...localEvents.map(mapEventRow)].sort((a, b) => (b.ts || 0) - (a.ts || 0))
+  const activityTypeLabel = (a) => {
+    if (a._source === 'event') return 'Événement'
+    const m = { stage_change: 'Stade', note_added: 'Note', maturity_change: 'Maturité', source_change: 'Source', region_change: 'Région', field_edit: 'Modification', score_corrected: 'Score' }
+    return m[a.type] || 'Activité'
+  }
   const eventsMapped = localEvents.map(mapEventRow)
 
   const refreshActivities = () => { if (useSupabase) setTimeout(() => loadActivitiesAndEvents(), 400) }
@@ -551,26 +554,6 @@ export default function ProfilePage() {
     await loadActivitiesAndEvents()
   }
 
-  const handleEnrichNetrows = async () => {
-    const linkedinUrl = profile?.li
-    if (!linkedinUrl) return
-    setEnriching(true)
-    try {
-      const result = await enrichProfileWithNetrows(linkedinUrl)
-      const { score } = scoreProfile(profile, result.experiences)
-      const updated = { ...profile, experiences: result.experiences, sc: score }
-      updateProfile(profile.id, { experiences: result.experiences, sc: score })
-      if (useSupabase) {
-        await supabase.from('profiles').update({ experiences: result.experiences, score }).eq('id', profile.id)
-      }
-      showNotif('Profil enrichi ✓')
-    } catch (err) {
-      showNotif(`Erreur Netrows : ${err?.message}`)
-    } finally {
-      setEnriching(false)
-    }
-  }
-
   const linkUrl = (v) => (v && (v.startsWith('http') ? v : `https://${v}`))
   const iconStyle = { color: '#6B6B6B', width: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }
   const FieldRow = ({ field, value, label, icon, placeholder, isLink }) => (
@@ -616,8 +599,8 @@ export default function ProfilePage() {
     marginRight: 24,
     fontSize: 14,
     fontWeight: 500,
-    color: active ? PAGE_STYLE.accent : PAGE_STYLE.textSecondary,
-    borderBottom: active ? `2px solid ${PAGE_STYLE.accent}` : '2px solid transparent',
+    color: active ? '#173731' : PAGE_STYLE.textSecondary,
+    borderBottom: active ? '2px solid #173731' : '2px solid transparent',
     cursor: 'pointer',
     transition: PAGE_STYLE.transition,
   })
@@ -638,7 +621,7 @@ export default function ProfilePage() {
 
         <header style={{ display: 'flex', alignItems: 'flex-start', gap: 24, marginBottom: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 20, flex: 1 }}>
-          <div style={{ width: 56, height: 56, borderRadius: '50%', background: PAGE_STYLE.accent, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 600, flexShrink: 0 }}>
+          <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#173731', color: '#E7E0D0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 600, flexShrink: 0 }}>
             {initials(profile.fn, profile.ln)}
           </div>
           <div>
@@ -689,20 +672,25 @@ export default function ProfilePage() {
                 )}
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: `1px solid ${PAGE_STYLE.border}` }}>
-              <span style={iconStyle}><IconStar /></span>
-              <span style={{ color: PAGE_STYLE.textSecondary, fontSize: 13, width: 100 }}>Score</span>
-              <div className="score-row" style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontWeight: 600, fontSize: 13 }}>{profile.sc ?? '—'}</span>
-                <button
-                  type="button"
-                  onClick={() => setScoreCorrectionOpen(true)}
-                  className="score-inexact-btn"
-                  style={{ fontSize: 12, color: '#F97316', background: 'transparent', border: 'none', cursor: 'pointer', opacity: 0, transition: 'opacity 0.15s' }}
-                  title="Signaler un score inexact"
-                >
-                  ⚠ Score inexact
-                </button>
+            <div style={{ padding: '10px 0', borderBottom: `1px solid ${PAGE_STYLE.border}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={iconStyle}><IconStar /></span>
+                <span style={{ color: PAGE_STYLE.textSecondary, fontSize: 13, width: 100 }}>Score</span>
+                <div className="score-row" style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontWeight: 600, fontSize: 13 }}>{profile.sc ?? '—'}</span>
+                  <button
+                    type="button"
+                    onClick={() => setScoreCorrectionOpen(true)}
+                    className="score-inexact-btn"
+                    style={{ fontSize: 12, color: '#F97316', background: 'transparent', border: 'none', cursor: 'pointer', opacity: 0, transition: 'opacity 0.15s' }}
+                    title="Signaler un score inexact"
+                  >
+                    ⚠ Score inexact
+                  </button>
+                </div>
+              </div>
+              <div style={{ height: 4, background: 'rgba(0,0,0,0.08)', borderRadius: 2, marginTop: 8, overflow: 'hidden' }}>
+                <div style={{ height: '100%', background: '#173731', width: `${Math.min(100, (profile.sc ?? 0))}%`, borderRadius: 2, transition: 'width 0.3s' }} />
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: `1px solid ${PAGE_STYLE.border}` }}>
@@ -771,39 +759,11 @@ export default function ProfilePage() {
                 ))}
               </select>
             </div>
-            {profile.li && (
-              <div style={{ marginTop: 16 }}>
-                <button
-                  type="button"
-                  onClick={handleEnrichNetrows}
-                  disabled={enriching}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    padding: '10px 14px',
-                    background: '#fff',
-                    border: '1px solid #173731',
-                    borderRadius: 8,
-                    color: '#173731',
-                    fontSize: 13,
-                    cursor: enriching ? 'not-allowed' : 'pointer',
-                    opacity: enriching ? 0.7 : 1,
-                    width: '100%',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <IconLinkedIn />
-                  {enriching ? 'Enrichissement…' : 'Enrichir via Netrows'}
-                </button>
-              </div>
-            )}
           </div>
 
           <div style={{ marginTop: 24, background: PAGE_STYLE.cardBg, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: PAGE_STYLE.radius, padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
             <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: PAGE_STYLE.textSecondary, marginBottom: 16 }}>Actions rapides</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <button type="button" style={{ padding: '10px 14px', textAlign: 'left', borderRadius: 8, border: `1px solid ${PAGE_STYLE.border}`, background: 'none', cursor: 'pointer', fontSize: 13, transition: PAGE_STYLE.transition, display: 'flex', alignItems: 'center', gap: 8 }}><IconCalendar /> Planifier un RDV Google Meet</button>
               <button type="button" onClick={handleExportPDF} style={{ padding: '10px 14px', textAlign: 'left', borderRadius: 8, border: `1px solid ${PAGE_STYLE.border}`, background: 'none', cursor: 'pointer', fontSize: 13, transition: PAGE_STYLE.transition, display: 'flex', alignItems: 'center', gap: 8 }}><IconUpload /> Exporter la fiche</button>
               <button type="button" onClick={handleDeleteProfile} style={{ padding: '10px 14px', textAlign: 'left', borderRadius: 8, border: '1px solid #e5c0c0', background: 'none', color: '#c0392b', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}><IconTrash /> Supprimer le profil</button>
             </div>
@@ -844,28 +804,35 @@ export default function ProfilePage() {
           </div>
 
           {activeTab === 'activity' && (
-            <div style={{ position: 'relative', paddingLeft: 24 }}>
-              <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 2, background: PAGE_STYLE.accent, borderRadius: 1 }} />
+            <div style={{ position: 'relative', paddingLeft: 28 }}>
+              <div style={{ position: 'absolute', left: 6, top: 0, bottom: 0, width: 1, background: '#E5E0D8' }} />
               {loadingDetail && mergedActs.length === 0 && localActivities.length === 0 && localEvents.length === 0 ? (
                 <div style={{ color: PAGE_STYLE.textSecondary, fontSize: 13 }}>Chargement…</div>
               ) : mergedActs.length === 0 ? (
                 <div style={{ color: PAGE_STYLE.textSecondary, fontSize: 13 }}>Aucune activité</div>
               ) : (
-                mergedActs.map((a, i) => (
-                  <div key={a.id ? `${a._source}-${a.id}` : `act-${i}`} style={{ position: 'relative', paddingBottom: 20 }} className="activity-row">
-                    <div style={{ position: 'absolute', left: -28, top: 2, width: 10, height: 10, borderRadius: '50%', background: PAGE_STYLE.cardBg, border: `2px solid ${PAGE_STYLE.accent}` }} />
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                      <span style={{ fontSize: 16, display: 'inline-flex', color: a.ico === 'score_warning' ? '#F97316' : 'inherit' }}><ActivityIcon ico={a.ico} size={16} /></span>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 13, fontWeight: 500, color: a.ico === 'score_warning' ? '#F97316' : PAGE_STYLE.text }}>{a.t}</div>
-                        <div style={{ fontSize: 11, color: PAGE_STYLE.textSecondary, marginTop: 4 }}>{a.d}</div>
+                <>
+                  {mergedActs.map((item, i) => (
+                    <div key={item.id ? `${item._source}-${item.id}` : `act-${i}`} style={{ position: 'relative', marginBottom: 16 }} className="activity-row">
+                      <div style={{ position: 'absolute', left: -22, top: 4, width: 10, height: 10, borderRadius: '50%', background: '#173731', border: '2px solid #fff' }} />
+                      <div style={{ background: '#F9F7F4', borderRadius: 8, border: '0.5px solid #E5E0D8', padding: '10px 14px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: '#EEF4FB', color: '#185FA5', border: '0.5px solid #B5D4F4', fontWeight: 500 }}>
+                              {activityTypeLabel(item)}
+                            </span>
+                            <span style={{ fontSize: 13, fontWeight: 500, color: '#0D1117' }}>{item.t}{item.n ? ` — ${item.n}` : ''}</span>
+                          </div>
+                          <span style={{ fontSize: 11, color: '#9CA3AF' }}>{item.d}</span>
+                        </div>
+                        <p style={{ fontSize: 12, color: '#6B7280', margin: 0 }}>
+                          Modifié par <span style={{ fontWeight: 500, color: '#0D1117' }}>{item.author || 'Baptiste PATERAC'}</span>
+                        </p>
                       </div>
-                      {a.id && a._source && (
-                        <button type="button" onClick={() => handleDeleteActivity(a)} title="Supprimer" style={{ opacity: 0.5, padding: 4, background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: PAGE_STYLE.textSecondary, flexShrink: 0, display: 'inline-flex' }} className="activity-delete-btn"><IconClose /></button>
-                      )}
                     </div>
-                  </div>
-                ))
+                  ))}
+                  <p style={{ fontSize: 11, color: '#9CA3AF', textAlign: 'center', marginTop: 8 }}>Début de l'historique</p>
+                </>
               )}
             </div>
           )}
@@ -877,7 +844,7 @@ export default function ProfilePage() {
           {activeTab === 'notes' && (
             <>
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-                <button type="button" onClick={() => setShowNoteForm(!showNoteForm)} style={{ padding: '8px 16px', background: PAGE_STYLE.gold, color: PAGE_STYLE.accent, border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>+ Nouvelle note</button>
+                <button type="button" onClick={() => setShowNoteForm(!showNoteForm)} style={{ padding: '8px 16px', background: '#173731', color: '#E7E0D0', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>+ Nouvelle note</button>
               </div>
               {showNoteForm && (
                 <div style={{ marginBottom: 24, padding: 20, background: '#F9F8F6', borderRadius: PAGE_STYLE.radius, border: `1px solid ${PAGE_STYLE.border}` }}>
@@ -925,14 +892,19 @@ export default function ProfilePage() {
                   )}
                 </div>
               ))}
-              {notesList.length === 0 && !showNoteForm && <div style={{ color: PAGE_STYLE.textSecondary, fontSize: 13 }}>Aucune note</div>}
+              {notesList.length === 0 && !showNoteForm && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 48, gap: 12 }}>
+                  <span style={{ width: 48, height: 48, display: 'flex', color: '#bbb' }}><IconDocument /></span>
+                  <div style={{ fontSize: 12, color: '#bbb' }}>Cliquez sur + Nouvelle note pour commencer</div>
+                </div>
+              )}
             </>
           )}
 
           {activeTab === 'events' && (
             <>
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-                <button type="button" onClick={() => setShowEventForm(!showEventForm)} style={{ padding: '8px 16px', background: PAGE_STYLE.gold, color: PAGE_STYLE.accent, border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>+ Ajouter un événement</button>
+                <button type="button" onClick={() => setShowEventForm(!showEventForm)} style={{ padding: '8px 16px', background: '#173731', color: '#E7E0D0', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>+ Nouvel événement</button>
               </div>
               {showEventForm && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24, padding: 20, background: '#F9F8F6', borderRadius: PAGE_STYLE.radius, border: `1px solid ${PAGE_STYLE.border}` }}>
@@ -1011,7 +983,12 @@ export default function ProfilePage() {
                   </div>
                 )
               })}
-              {eventsMapped.length === 0 && !showEventForm && <div style={{ color: PAGE_STYLE.textSecondary, fontSize: 13 }}>Aucun événement</div>}
+              {eventsMapped.length === 0 && !showEventForm && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 48, gap: 12 }}>
+                  <span style={{ width: 48, height: 48, display: 'flex', color: '#bbb' }}><IconDocument /></span>
+                  <div style={{ fontSize: 12, color: '#bbb' }}>Cliquez sur + Nouvel événement pour commencer</div>
+                </div>
+              )}
             </>
           )}
         </div>

@@ -913,22 +913,6 @@ export default function Pipeline() {
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <button
-              type="button"
-              onClick={() => { setModalProfile(null); setSelectedCardId(null) }}
-              style={{
-                position: 'absolute',
-                top: 16,
-                right: 16,
-                fontSize: 20,
-                cursor: 'pointer',
-                zIndex: 60,
-                background: 'none',
-                border: 'none',
-              }}
-            >
-              <IconClose />
-            </button>
             {(showStadeDropdown || showMaturiteDropdown || showSourceDropdown) && (
               <div
                 style={{ position: 'fixed', inset: 0, zIndex: 49 }}
@@ -950,7 +934,7 @@ export default function Pipeline() {
                 overflowY: 'auto',
               }}
             >
-              <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#173731', color: '#D2AB76', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700 }}>
+              <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#173731', color: '#E7E0D0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700 }}>
                 {(displayProfile.fn?.[0] || '') + (displayProfile.ln?.[0] || '')}
               </div>
               <h2 style={{ fontSize: 16, fontWeight: 700, margin: '12px 0 4px', color: '#173731' }}>
@@ -966,16 +950,21 @@ export default function Pipeline() {
                   <InlineDropdown options={SOURCES} value={displayProfile.src} onChange={(v) => { changeSource(displayProfile.id, v); setShowSourceDropdown(false); loadActivities(); }} buttonStyle={(v) => modalSourceStyle(v || displayProfile.src)} buttonClassName="tag tag-btn" open={showSourceDropdown} onOpenChange={(v) => { setShowSourceDropdown(v); if (v) { setShowStadeDropdown(false); setShowMaturiteDropdown(false); } }} containerClassName="source-dropdown" />
                 )}
               </div>
-              <div style={{ background: '#ffffff', borderRadius: 10, border: '1px solid rgba(0,0,0,0.08)', padding: '10px 14px', marginTop: 8, display: 'flex', justifyContent: 'space-between' }}>
-                <div>
-                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#aaa', marginBottom: 2 }}>Score IA</div>
-                  <div style={{ fontSize: 22, fontWeight: 700, color: '#173731' }}>{displayProfile.sc ?? '—'}</div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#aaa', marginBottom: 2 }}>Priorité</div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: (displayProfile.sc ?? 0) >= 70 ? '#15803d' : (displayProfile.sc ?? 0) >= 50 ? '#a16207' : '#94a3b8' }}>
-                    {(displayProfile.sc ?? 0) >= 70 ? 'Prioritaire' : (displayProfile.sc ?? 0) >= 50 ? 'À travailler' : 'À écarter'}
+              <div style={{ background: '#ffffff', borderRadius: 10, border: '1px solid rgba(0,0,0,0.08)', padding: '10px 14px', marginTop: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#aaa', marginBottom: 2 }}>Score IA</div>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: '#173731' }}>{displayProfile.sc ?? '—'}</div>
                   </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#aaa', marginBottom: 2 }}>Priorité</div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: (displayProfile.sc ?? 0) >= 70 ? '#15803d' : (displayProfile.sc ?? 0) >= 50 ? '#a16207' : '#94a3b8' }}>
+                      {(displayProfile.sc ?? 0) >= 70 ? 'Prioritaire' : (displayProfile.sc ?? 0) >= 50 ? 'À travailler' : 'À écarter'}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ height: 4, background: 'rgba(0,0,0,0.08)', borderRadius: 2, marginTop: 8, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', background: '#173731', width: `${Math.min(100, (displayProfile.sc ?? 0))}%`, borderRadius: 2, transition: 'width 0.3s' }} />
                 </div>
               </div>
               <button type="button" onClick={() => setScoreCorrectionOpen(true)} style={{ marginTop: 6, fontSize: 11, color: '#ea580c', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left' }} title="Signaler un score inexact">
@@ -1077,7 +1066,7 @@ export default function Pipeline() {
 
             {/* COLONNE DROITE */}
             <div style={{ flex: 1, minHeight: 0, background: '#ffffff', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-              <div style={{ display: 'flex', gap: 8, padding: '0 24px', borderBottom: '1px solid rgba(0,0,0,0.06)', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '0 24px', borderBottom: '1px solid rgba(0,0,0,0.06)', flexShrink: 0 }}>
                 {['notes', 'events', 'activity', 'grille'].map((tab) => (
                   <button
                     key={tab}
@@ -1098,6 +1087,23 @@ export default function Pipeline() {
                     {tab === 'notes' ? 'Notes' : tab === 'events' ? 'Événements' : tab === 'activity' ? 'Activité' : 'Grille de notation'}
                   </button>
                 ))}
+                <button
+                  type="button"
+                  onClick={() => { setModalProfile(null); setSelectedCardId(null) }}
+                  style={{
+                    padding: 8,
+                    cursor: 'pointer',
+                    background: 'none',
+                    border: 'none',
+                    color: '#666',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginLeft: 'auto',
+                  }}
+                >
+                  <IconClose />
+                </button>
               </div>
 
               {loadingDetail ? (
@@ -1112,8 +1118,8 @@ export default function Pipeline() {
                         style={{
                           padding: '8px 16px',
                           borderRadius: 8,
-                          background: '#D2AB76',
-                          color: '#173731',
+                          background: '#173731',
+                          color: '#E7E0D0',
                           border: 'none',
                           cursor: 'pointer',
                           fontSize: 13,
@@ -1127,8 +1133,7 @@ export default function Pipeline() {
                   {!showNoteForm && notes.length === 0 && (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 48, gap: 12 }}>
                       <span style={{ width: 48, height: 48, display: 'flex', color: '#bbb' }}><IconDocument /></span>
-                      <div style={{ fontSize: 13, color: '#bbb' }}>Aucune note pour ce profil</div>
-                      <div style={{ fontSize: 12, color: '#ddd' }}>Cliquez sur + Nouvelle note</div>
+                      <div style={{ fontSize: 12, color: '#bbb' }}>Cliquez sur + Nouvelle note pour commencer</div>
                     </div>
                   )}
                   {showNoteForm && (
@@ -1239,18 +1244,24 @@ export default function Pipeline() {
                         style={{
                           padding: '8px 16px',
                           borderRadius: 8,
-                          background: '#D2AB76',
-                          color: '#173731',
+                          background: '#173731',
+                          color: '#E7E0D0',
                           border: 'none',
                           cursor: 'pointer',
                           fontSize: 13,
                           fontWeight: 500,
                         }}
                       >
-                        + Événement
+                        + Nouvel événement
                       </button>
                     )}
                   </div>
+                  {!showEventForm && events.length === 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 48, gap: 12 }}>
+                      <span style={{ width: 48, height: 48, display: 'flex', color: '#bbb' }}><IconDocument /></span>
+                      <div style={{ fontSize: 12, color: '#bbb' }}>Cliquez sur + Nouvel événement pour commencer</div>
+                    </div>
+                  )}
                   {showEventForm && (
                     <div style={{ background: '#F8F5F1', padding: 16, borderRadius: 10, marginBottom: 16 }}>
                       <select value={evType} onChange={(e) => setEvType(e.target.value)} style={{ width: '100%', padding: 8, marginBottom: 12, borderRadius: 6, border: '1px solid #E5E0D8' }}>
