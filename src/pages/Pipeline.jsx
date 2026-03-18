@@ -1211,23 +1211,37 @@ export default function Pipeline() {
                   ))}
                 </div>
               ) : modalTab === 'activity' ? (
-                <div style={{ flex: 1, overflowY: 'auto', padding: 24, position: 'relative', paddingLeft: 24 }}>
-                  <div style={{ position: 'absolute', left: 5, top: 0, bottom: 0, width: 2, background: '#173731' }} />
+                <div style={{ flex: 1, overflowY: 'auto', padding: 24, position: 'relative', paddingLeft: 28 }}>
+                  <div style={{ position: 'absolute', left: 6, top: 0, bottom: 0, width: 1, background: '#E5E0D8' }} />
                   {activities.length === 0 ? (
                     <div style={{ color: '#6B6B6B', fontSize: 13 }}>Aucune activité</div>
                   ) : (
-                    activities.map((a) => (
-                      <div key={a.id} style={{ position: 'relative', marginBottom: 16, paddingLeft: 16 }}>
-                        <div style={{ position: 'absolute', left: -19, top: 2, width: 10, height: 10, borderRadius: '50%', background: '#173731' }} />
-                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                          <span style={{ color: '#6B6B6B', flexShrink: 0, marginTop: 1 }}><IconActivity /></span>
-                          <div>
-                            <div style={{ fontSize: 13, color: '#1A1A1A' }}>{a.note || a.activity_type || a.old_value || a.new_value || '—'}</div>
-                            <div style={{ fontSize: 11, color: '#6B6B6B', marginTop: 2 }}>{formatActivityDate(a.created_at)}</div>
+                    <>
+                      {activities.map((a) => {
+                        const typeLabel = a.activity_type === 'score_corrected' ? 'Score' : { stage_change: 'Stade', note_added: 'Note', maturity_change: 'Maturité', source_change: 'Source', region_change: 'Région', field_edit: 'Modification' }[a.type] || 'Activité'
+                        const title = a.note || a.activity_type || a.old_value || a.new_value || '—'
+                        return (
+                          <div key={a.id} style={{ position: 'relative', marginBottom: 16 }}>
+                            <div style={{ position: 'absolute', left: -22, top: 4, width: 10, height: 10, borderRadius: '50%', background: '#173731', border: '2px solid #fff' }} />
+                            <div style={{ background: '#F9F7F4', borderRadius: 8, border: '0.5px solid #E5E0D8', padding: '10px 14px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: '#EEF4FB', color: '#185FA5', border: '0.5px solid #B5D4F4', fontWeight: 500 }}>
+                                    {typeLabel}
+                                  </span>
+                                  <span style={{ fontSize: 13, fontWeight: 500, color: '#0D1117' }}>{title}</span>
+                                </div>
+                                <span style={{ fontSize: 11, color: '#9CA3AF' }}>{formatActivityDate(a.created_at)}</span>
+                              </div>
+                              <p style={{ fontSize: 12, color: '#6B7280', margin: 0 }}>
+                                Modifié par <span style={{ fontWeight: 500, color: '#0D1117' }}>{a.author || 'Baptiste PATERAC'}</span>
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                      </div>
-                    ))
+                        )
+                      })}
+                      <p style={{ fontSize: 11, color: '#9CA3AF', textAlign: 'center', marginTop: 8 }}>Début de l'historique</p>
+                    </>
                   )}
                 </div>
               ) : modalTab === 'grille' ? (
