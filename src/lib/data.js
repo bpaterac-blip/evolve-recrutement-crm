@@ -1,9 +1,11 @@
 export const STAGES = ['R0', 'R1', "Point d'étape", 'R2 Amaury', 'Point juridique', 'Démission reconversion', 'Recruté']
-export const MATURITIES = ['Froid', 'Tiède', 'Chaud', 'Très chaud', 'Archivé']
+export const MATURITIES = ['Chaud', 'Tiède', 'Froid', 'Chute', 'Archivé']
 export const INTEG_OPTS = ['—', 'Janvier 2026', 'Avril 2026', 'Juin 2026', 'Juillet 2026', 'Septembre 2026', 'Novembre 2026', 'Janvier 2027', 'Avril 2027', 'Juin 2027', 'Septembre 2027', 'Novembre 2027', 'Intégré']
 export const INTEG_ADD_DATE = '+ Ajouter une date...'
 
-export const SOURCES = ['Chasse LinkedIn', 'Chasse Mail', 'Recommandation', 'Inbound', 'Ads', 'Chasse externe', 'Direct contact', 'Lemlist']
+export const SOURCES = ['Chasse LinkedIn', 'Chasse Mail', 'Recommandation', 'Ads', 'Chasse externe', 'Inbound Marketing', 'Autre']
+
+export const CHUTE_TYPES = ['Contraintes contractuelles', 'Situation personnelle', 'Offres concurrentes', 'Statut / réglementaire', 'Contact perdu', 'Autre']
 
 export const REGIONS = [
   'Paris / Île-de-France',

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useCRM } from '../context/CRMContext'
 import { IconClose } from './Icons'
 import { detectDoublon } from '../lib/detectDoublon'
+import { SOURCES } from '../lib/data'
 
 const IconWarning = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -80,7 +81,7 @@ export default function NewProfileModal({ onClose }) {
           </div>
           <div className="mb-2.5"><label className="inlin-lbl text-xs text-[var(--t3)] block mb-1">Source</label>
             <select className="inlin-sel w-full py-2 px-2.5 border border-[var(--b2)] rounded-md text-[13px] outline-none bg-[var(--surface)] cursor-pointer" value={src} onChange={(e) => setSrc(e.target.value)}>
-              <option>Chasse LinkedIn</option><option>Chasse Mail</option><option>Recommandation</option><option>Inbound</option><option>Ads</option><option>Direct contact</option>
+              {SOURCES.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
           <button type="button" className="btn bp w-full py-2.5" onClick={handleSubmit} disabled={!!doublon}>Enregistrer</button>

@@ -38,7 +38,7 @@ function mapWaalaxyRow(row) {
     region: region || '',
     li: (row.linkedinUrl || '').trim() || '—',
     mail,
-    src: 'Chasse LinkedIn',
+    src: '',
   }
 }
 
@@ -61,7 +61,7 @@ function mapLemlistRow(row) {
     title: tiVal,
     city: city || '—',
     region: region || '',
-    src: 'Lemlist',
+    src: 'Chasse LinkedIn',
     sequence_lemlist: (row.campaigns || '').trim() || '',
     lead_status: (row.leadStatus || '').trim() || '',
     lastContactedDate: (row.lastContactedDate || '').trim() || '',
@@ -83,7 +83,7 @@ const SALES_NAV_MAP = {
 }
 
 function mapSalesNavigatorRow(row) {
-  const out = { fn: '', ln: '', co: '—', ti: '—', city: '—', region: '', mail: '—', li: '—', src: 'Chasse LinkedIn' }
+  const out = { fn: '', ln: '', co: '—', ti: '—', city: '—', region: '', mail: '—', li: '—', src: '' }
   for (const [col, val] of Object.entries(row)) {
     const k = SALES_NAV_MAP[col?.trim()]
     if (k && val) out[k] = String(val).trim()
@@ -114,7 +114,7 @@ const COLUMN_MAP = {
 }
 
 function mapGenericRow(row) {
-  const out = { fn: '', ln: '', co: '—', ti: '—', city: '—', region: '', mail: '—', li: '—', src: 'Chasse LinkedIn' }
+  const out = { fn: '', ln: '', co: '—', ti: '—', city: '—', region: '', mail: '—', li: '—', src: '' }
   for (const [col, val] of Object.entries(row)) {
     const k = COLUMN_MAP[col?.trim()] || col?.toLowerCase?.()?.replace(/\s/g, '_')
     if (out[k] !== undefined && val) out[k] = String(val).trim()

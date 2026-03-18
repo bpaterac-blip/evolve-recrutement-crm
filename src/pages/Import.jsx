@@ -154,14 +154,6 @@ function exportToLemlistCsv(profiles) {
   URL.revokeObjectURL(url)
 }
 
-const IconExport = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-    <polyline points="17 8 12 3 7 8" />
-    <line x1="12" y1="3" x2="12" y2="15" />
-  </svg>
-)
-
 const IconWarning = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
@@ -586,6 +578,7 @@ export default function Import() {
   useEffect(() => {
     if (!useSupabase || tab !== 'im') return
     const load = async () => {
+      const { count } = await supabase.from('scoring_feedback').select('*', { count: 'exact', head: true })
       const { data: fb } = await supabase.from('scoring_feedback').select('profile_data, previous_score').limit(500)
       const companies = {}
       ;(fb || []).forEach((f) => {
@@ -593,8 +586,8 @@ export default function Import() {
         companies[co] = (companies[co] || 0) + 1
       })
       const topCompanies = Object.entries(companies).sort((a, b) => b[1] - a[1]).slice(0, 3)
-      const { data: cfg } = await supabase.from('scoring_config').select('updated_at').limit(1).single()
-      setLearningStats({ total: (fb || []).length, topCompanies, configUpdatedAt: cfg?.updated_at })
+      const { data: lastFeedback } = await supabase.from('scoring_feedback').select('created_at').order('created_at', { ascending: false }).limit(1).single()
+      setLearningStats({ total: count ?? 0, topCompanies, lastInstructionAt: lastFeedback?.created_at })
     }
     load()
   }, [useSupabase, tab, learningRefresh])
@@ -778,21 +771,21 @@ export default function Import() {
   }
 
   const profilesWithLinkedIn = parsedRows.filter(hasValidLinkedIn)
-  const netrowsCount = profilesWithLinkedIn.length
+  const netrowsEligibleCount = parsedRows.filter((p) => hasValidLinkedIn(p) && p._enrichStatus !== 'enriched').length
 
   const handleEnrichWithNetrows = async () => {
-    if (!netrowsCount) return
+    if (!netrowsEligibleCount) return
     if (!useSupabase) {
       showNotif('Enrichissement Netrows nécessite Supabase (Edge Function)')
       return
     }
     setEnriching(true)
     setEnrichedCount(0)
-    setEnrichTotal(netrowsCount)
+    setEnrichTotal(netrowsEligibleCount)
     setEnrichSummary(null)
     let enriched = 0
     let failed = 0
-    let noLinkedIn = parsedRows.length - netrowsCount
+    let noLinkedIn = parsedRows.length - profilesWithLinkedIn.length
     const updatedRows = [...parsedRows]
 
     for (let i = 0; i < parsedRows.length; i++) {
@@ -802,6 +795,7 @@ export default function Import() {
         if (updatedRows[i]) updatedRows[i] = { ...updatedRows[i], _enrichStatus: 'Sans LinkedIn' }
         continue
       }
+      if (p._enrichStatus === 'enriched') continue
       try {
         const data = await enrichProfileWithNetrows(li)
         const experiences = data.experiences || []
@@ -851,14 +845,36 @@ export default function Import() {
   const avgScore = parsedRows.length ? Math.round(parsedRows.reduce((a, r) => a + (r.sc || 0), 0) / parsedRows.length) : 0
 
   return (
-    <div className="page h-full overflow-y-auto p-[22px]">
-      <div className="font-serif text-[22px] mb-1">Import & Scoring</div>
-      <div className="text-[13px] text-[var(--t3)] mb-5">CSV Sales Navigator ou PDF LinkedIn — mappe les colonnes, lance le scoring automatique</div>
-      <div className="itabs flex border-b border-[var(--border)] mb-5">
-          <div className={`itab py-2.5 px-4 text-[13px] font-medium cursor-pointer border-b-2 border-transparent transition-all ${tab === 'iu' ? 'active text-[var(--accent)] border-b-[var(--accent)]' : 'text-[var(--t3)]'}`} onClick={() => setTab('iu')}>① Source</div>
-          <div className={`itab py-2.5 px-4 text-[13px] font-medium cursor-pointer border-b-2 border-transparent transition-all ${tab === 'im' ? 'active text-[var(--accent)] border-b-[var(--accent)]' : 'text-[var(--t3)]'}`} onClick={() => setTab('im')}>② Résultat scoring</div>
-          <div className={`itab py-2.5 px-4 text-[13px] font-medium cursor-pointer border-b-2 border-transparent transition-all ${tab === 'is' ? 'active text-[var(--accent)] border-b-[var(--accent)]' : 'text-[var(--t3)]'}`} onClick={() => setTab('is')}>③ Profils intégrés au CRM</div>
+    <div className="page h-full overflow-y-auto p-[22px]" style={{ background: '#F5F0E8' }}>
+      <div className="font-serif text-[22px] mb-1" style={{ color: ACCENT }}>Import & Scoring</div>
+      <div className="text-[13px] mb-5" style={{ color: '#6B6B6B' }}>CSV Sales Navigator ou PDF LinkedIn — mappe les colonnes, lance le scoring automatique</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16, marginBottom: 20 }}>
+        <div style={{ background: 'white', borderRadius: 12, padding: 4, display: 'flex', gap: 4, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+          <button type="button" onClick={() => setTab('iu')} style={{ padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 500, border: 'none', cursor: 'pointer', background: tab === 'iu' ? ACCENT : 'transparent', color: tab === 'iu' ? GOLD : '#6B6B6B' }}>Source</button>
+          <button type="button" onClick={() => setTab('im')} style={{ padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 500, border: 'none', cursor: 'pointer', background: tab === 'im' ? ACCENT : 'transparent', color: tab === 'im' ? GOLD : '#6B6B6B' }}>Résultat scoring</button>
+          <button type="button" onClick={() => setTab('is')} style={{ padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 500, border: 'none', cursor: 'pointer', background: tab === 'is' ? ACCENT : 'transparent', color: tab === 'is' ? GOLD : '#6B6B6B' }}>Profils intégrés</button>
         </div>
+        {tab === 'im' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', color: '#333' }}>
+              <input type="checkbox" checked={includeATravailler} onChange={(e) => setIncludeATravailler(e.target.checked)} />
+              Inclure les À travailler
+            </label>
+            {netrowsEligibleCount > 0 && importSource === 'csv' && (
+              <button type="button" onClick={handleEnrichWithNetrows} disabled={enriching} style={{ padding: '8px 16px', borderRadius: 8, background: 'white', color: ACCENT, fontWeight: 500, fontSize: 13, border: '1px solid #173731', cursor: enriching ? 'not-allowed' : 'pointer', opacity: enriching ? 0.6 : 1 }}>
+                {enriching ? 'Enrichissement…' : `Enrichir via Netrows (${netrowsEligibleCount} profils)`}
+              </button>
+            )}
+            <button type="button" onClick={pushToCRM} disabled={pushing || rowsToPush.length === 0} style={{ padding: '8px 16px', borderRadius: 8, background: ACCENT, color: GOLD, fontWeight: 500, fontSize: 13, cursor: pushing || rowsToPush.length === 0 ? 'not-allowed' : 'pointer', opacity: pushing || rowsToPush.length === 0 ? 0.6 : 1 }}>
+              {pushing ? 'En cours…' : `Pousser ${rowsToPush.length} profil(s) dans le CRM`}
+            </button>
+            <button type="button" onClick={() => exportToLemlistCsv(rowsToPush)} disabled={rowsToPush.length === 0} style={{ padding: '8px 16px', borderRadius: 8, background: GOLD, color: ACCENT, fontWeight: 500, fontSize: 13, cursor: rowsToPush.length === 0 ? 'not-allowed' : 'pointer', opacity: rowsToPush.length === 0 ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <IconUpload />
+              Exporter vers Lemlist
+            </button>
+          </div>
+        )}
+      </div>
 
       {restoredFromSession && parsedRows.length > 0 && (
         <div style={{ background: '#E8F5E9', border: '1px solid #A5D6A7', borderRadius: 8, padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
@@ -923,43 +939,6 @@ export default function Import() {
 
       {tab === 'im' && (
         <>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
-            <div className="font-semibold text-[13.5px]">Résultats {importSource === 'pdf' ? 'PDF' : 'CSV'} — {parsedRows.length} profil(s) détecté(s)</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
-                <input type="checkbox" checked={includeATravailler} onChange={(e) => setIncludeATravailler(e.target.checked)} />
-                Inclure les À travailler (50-69 pts)
-              </label>
-              {netrowsCount > 0 && importSource === 'csv' && (
-                <button
-                  type="button"
-                  onClick={handleEnrichWithNetrows}
-                  disabled={enriching}
-                  style={{ padding: '8px 16px', borderRadius: 8, background: 'white', color: '#173731', fontWeight: 500, fontSize: 13, border: '1px solid #173731', cursor: enriching ? 'not-allowed' : 'pointer', opacity: enriching ? 0.6 : 1 }}
-                >
-                  {enriching ? 'Enrichissement…' : `Enrichir via Netrows (${netrowsCount} profils)`}
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={pushToCRM}
-                disabled={pushing || rowsToPush.length === 0}
-                style={{ padding: '8px 16px', borderRadius: 8, background: ACCENT, color: 'white', fontWeight: 500, fontSize: 13, cursor: pushing || rowsToPush.length === 0 ? 'not-allowed' : 'pointer', opacity: pushing || rowsToPush.length === 0 ? 0.6 : 1 }}
-              >
-                {pushing ? 'En cours…' : `+ Pousser ${rowsToPush.length} profil(s) dans le CRM`}
-              </button>
-              <button
-                type="button"
-                onClick={() => exportToLemlistCsv(rowsToPush)}
-                disabled={rowsToPush.length === 0}
-                style={{ padding: '8px 16px', borderRadius: 8, background: GOLD, color: ACCENT, fontWeight: 500, fontSize: 13, cursor: rowsToPush.length === 0 ? 'not-allowed' : 'pointer', opacity: rowsToPush.length === 0 ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 6 }}
-              >
-                <IconExport />
-                Exporter la sélection vers Lemlist
-              </button>
-            </div>
-          </div>
-
           {enriching && (
             <div style={{ background: '#F5F3EF', borderRadius: 8, padding: '12px 16px', marginBottom: 16 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -981,166 +960,114 @@ export default function Import() {
             </div>
           )}
 
-          <div style={{ marginBottom: 16, background: '#D4EDE1', border: '1px solid #A8D5BA', borderRadius: 10, overflow: 'hidden' }}>
-            <div style={{ padding: '10px 14px', fontWeight: 600, fontSize: 13, color: '#1A7A4A' }}>Prioritaires ≥70 pts ({priorCount})</div>
-            <table className="mt w-full border-collapse">
-              <thead><tr>
-                <th className="text-left py-2 px-3.5 bg-[#C5E6D0] text-[11.5px] uppercase tracking-wider text-[#1A7A4A] border-b border-[#A8D5BA]">Profil</th>
-                <th className="text-left py-2 px-3.5 bg-[#C5E6D0] text-[11.5px] uppercase tracking-wider text-[#1A7A4A] border-b border-[#A8D5BA]">Employeur</th>
-                <th className="text-left py-2 px-3.5 bg-[#C5E6D0] text-[11.5px] uppercase tracking-wider text-[#1A7A4A] border-b border-[#A8D5BA]">Intitulé</th>
-                {importSource === 'pdf' && <th className="text-left py-2 px-3.5 bg-[#C5E6D0] text-[11.5px] uppercase tracking-wider text-[#1A7A4A] border-b border-[#A8D5BA]">Ancienneté</th>}
-                <th className="text-left py-2 px-3.5 bg-[#C5E6D0] text-[11.5px] uppercase tracking-wider text-[#1A7A4A] border-b border-[#A8D5BA]">Score</th>
-                <th className="text-left py-2 px-3.5 bg-[#C5E6D0] text-[11.5px] uppercase tracking-wider text-[#1A7A4A] border-b border-[#A8D5BA]">Priorité</th>
-                <th className="text-left py-2 px-3.5 bg-[#C5E6D0] text-[11.5px] uppercase tracking-wider text-[#1A7A4A] border-b border-[#A8D5BA] w-12"></th>
-              </tr></thead>
-              <tbody>
-                {priorRows.map((p, i) => {
-                  const rowKey = `prior-${i}`
-                  return (
-                    <tr
-                      key={rowKey}
-                      className="border-b border-[#A8D5BA] cursor-pointer hover:bg-[#C5E6D0]/50 transition-colors"
-                      onClick={() => { setModalProfile(p); setModalRowKey(rowKey) }}
-                    >
-                      <td className="py-2 px-3.5"><div className="pc flex items-center gap-2.5"><div className="av w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold shrink-0" style={{ backgroundColor: '#D4EDE1', color: '#1A7A4A' }}>{ini(p.fn, p.ln)}</div><div className="pn font-medium">{p.fn} {p.ln}</div></div></td>
-                      <td className="py-2 px-3.5 text-[12.5px]">{p.co || '—'}</td>
-                      <td className="py-2 px-3.5 text-[12.5px] text-[var(--t2)]">{p.ti || '—'}</td>
-                      {importSource === 'pdf' && <td className="py-2 px-3.5 text-[12.5px] text-[var(--t3)]">{p.dur || '—'}</td>}
-                      <td className="py-2 px-3.5">
-                        <div className="flex items-center gap-2">
-                          <span className={`sc inline-flex items-center justify-center w-9 h-6 rounded-md ${scpill(p.sc)}`}>{p.sc}</span>
-                          {p._correctedByUser && <CorrectedBadge />}
-                          <ScoreImprovementBadge p={p} />
-                        </div>
-                      </td>
-                      <td className="py-2 px-3.5 flex items-center gap-2">
-                        {priotag(p.sc)}
-                      </td>
-                      <td className="py-2 px-3.5">
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); exportToLemlistCsv([p]) }}
-                          title="Exporter vers Lemlist"
-                          style={{ padding: 6, borderRadius: 6, background: GOLD, color: ACCENT, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                        >
-                          <IconExport />
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })}
-                {priorRows.length === 0 && <tr><td colSpan={importSource === 'pdf' ? 7 : 6} className="py-4 px-3.5 text-center text-[var(--t3)] text-[13px]">Aucun profil prioritaire</td></tr>}
-              </tbody>
-            </table>
+          <div style={{ marginBottom: 16, background: 'white', borderRadius: 16, border: '1px solid rgba(0,0,0,0.06)', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+            <div style={{ padding: '16px 24px', borderBottom: '1px solid rgba(0,0,0,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#16a34a' }} />
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#15803d' }}>Prioritaires</span>
+              </div>
+              <span style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, background: '#dcfce7', color: '#15803d', fontWeight: 500 }}>{priorCount} profils · ≥70 pts</span>
+            </div>
+            <div style={{ padding: '0 24px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '36px 2.5fr 1.5fr 2fr 70px 110px 40px', alignItems: 'center', gap: 12, padding: '12px 0', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#bbb', borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+                <span>Avatar</span><span>Profil</span><span>Employeur</span><span>Intitulé</span><span>Score</span><span>Priorité</span><span />
+              </div>
+              {priorRows.map((p, i) => {
+                const rowKey = `prior-${i}`
+                return (
+                  <div key={rowKey} style={{ display: 'grid', gridTemplateColumns: '36px 2.5fr 1.5fr 2fr 70px 110px 40px', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid rgba(0,0,0,0.04)', cursor: 'pointer' }} onClick={() => { setModalProfile(p); setModalRowKey(rowKey) }} onMouseEnter={(e) => { e.currentTarget.style.background = '#f8fafc' }} onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}>
+                    <div style={{ width: 36, height: 36, borderRadius: '50%', background: ACCENT, color: GOLD, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600 }}>{ini(p.fn, p.ln)}</div>
+                    <span style={{ fontSize: 13, color: '#333', fontWeight: 500 }}>{p.fn} {p.ln}</span>
+                    <span style={{ fontSize: 12, color: '#555' }}>{p.co || '—'}</span>
+                    <span style={{ fontSize: 12, color: '#555' }}>{p.ti || '—'}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <span style={{ padding: '4px 10px', borderRadius: 8, background: '#dcfce7', color: '#15803d', fontSize: 12, fontWeight: 600 }}>{p.sc}</span>
+                      {p._correctedByUser && <CorrectedBadge />}
+                      <ScoreImprovementBadge p={p} />
+                    </div>
+                    <span style={{ padding: '4px 10px', borderRadius: 20, background: '#dcfce7', color: '#15803d', fontSize: 11, fontWeight: 500 }}>Prioritaire</span>
+                    <button type="button" onClick={(e) => { e.stopPropagation(); exportToLemlistCsv([p]) }} title="Exporter vers Lemlist" style={{ width: 28, height: 28, borderRadius: 8, background: '#F5F0E8', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <IconUpload />
+                    </button>
+                  </div>
+                )
+              })}
+              {priorRows.length === 0 && <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: '#888' }}>Aucun profil prioritaire</div>}
+            </div>
           </div>
 
-          <div style={{ marginBottom: 16, background: '#FFF3E0', border: '1px solid #FFE0B2', borderRadius: 10, overflow: 'hidden' }}>
-            <div style={{ padding: '10px 14px', fontWeight: 600, fontSize: 13, color: '#E65100' }}>À travailler 50-69 pts ({workCount})</div>
-            <table className="mt w-full border-collapse">
-              <thead><tr>
-                <th className="text-left py-2 px-3.5 bg-[#FFECB3] text-[11.5px] uppercase tracking-wider text-[#E65100] border-b border-[#FFE0B2]">Profil</th>
-                <th className="text-left py-2 px-3.5 bg-[#FFECB3] text-[11.5px] uppercase tracking-wider text-[#E65100] border-b border-[#FFE0B2]">Employeur</th>
-                <th className="text-left py-2 px-3.5 bg-[#FFECB3] text-[11.5px] uppercase tracking-wider text-[#E65100] border-b border-[#FFE0B2]">Intitulé</th>
-                {importSource === 'pdf' && <th className="text-left py-2 px-3.5 bg-[#FFECB3] text-[11.5px] uppercase tracking-wider text-[#E65100] border-b border-[#FFE0B2]">Ancienneté</th>}
-                <th className="text-left py-2 px-3.5 bg-[#FFECB3] text-[11.5px] uppercase tracking-wider text-[#E65100] border-b border-[#FFE0B2]">Score</th>
-                <th className="text-left py-2 px-3.5 bg-[#FFECB3] text-[11.5px] uppercase tracking-wider text-[#E65100] border-b border-[#FFE0B2]">Priorité</th>
-                <th className="text-left py-2 px-3.5 bg-[#FFECB3] text-[11.5px] uppercase tracking-wider text-[#E65100] border-b border-[#FFE0B2] w-12"></th>
-              </tr></thead>
-              <tbody>
-                {workRows.map((p, i) => {
-                  const rowKey = `work-${i}`
-                  return (
-                    <tr
-                      key={rowKey}
-                      className="border-b border-[#FFE0B2] cursor-pointer hover:bg-[#FFECB3]/50 transition-colors"
-                      onClick={() => { setModalProfile(p); setModalRowKey(rowKey) }}
-                    >
-                      <td className="py-2 px-3.5"><div className="pc flex items-center gap-2.5"><div className="av w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold shrink-0" style={{ backgroundColor: '#FDEBC8', color: '#B86B0F' }}>{ini(p.fn, p.ln)}</div><div className="pn font-medium">{p.fn} {p.ln}</div></div></td>
-                      <td className="py-2 px-3.5 text-[12.5px]">{p.co || '—'}</td>
-                      <td className="py-2 px-3.5 text-[12.5px] text-[var(--t2)]">{p.ti || '—'}</td>
-                      {importSource === 'pdf' && <td className="py-2 px-3.5 text-[12.5px] text-[var(--t3)]">{p.dur || '—'}</td>}
-                      <td className="py-2 px-3.5">
-                        <div className="flex items-center gap-2">
-                          <span className={`sc inline-flex items-center justify-center w-9 h-6 rounded-md ${scpill(p.sc)}`}>{p.sc}</span>
-                          {p._correctedByUser && <CorrectedBadge />}
-                          <ScoreImprovementBadge p={p} />
-                        </div>
-                      </td>
-                      <td className="py-2 px-3.5 flex items-center gap-2">
-                        {priotag(p.sc)}
-                      </td>
-                      <td className="py-2 px-3.5">
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); exportToLemlistCsv([p]) }}
-                          title="Exporter vers Lemlist"
-                          style={{ padding: 6, borderRadius: 6, background: GOLD, color: ACCENT, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                        >
-                          <IconExport />
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })}
-                {workRows.length === 0 && <tr><td colSpan={importSource === 'pdf' ? 7 : 6} className="py-4 px-3.5 text-center text-[var(--t3)] text-[13px]">Aucun profil à travailler</td></tr>}
-              </tbody>
-            </table>
+          <div style={{ marginBottom: 16, background: 'white', borderRadius: 16, border: '1px solid rgba(0,0,0,0.06)', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+            <div style={{ padding: '16px 24px', borderBottom: '1px solid rgba(0,0,0,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }} />
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#a16207' }}>À travailler</span>
+              </div>
+              <span style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, background: '#fefce8', color: '#a16207', fontWeight: 500 }}>{workCount} profils · 50-69 pts</span>
+            </div>
+            <div style={{ padding: '0 24px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '36px 2.5fr 1.5fr 2fr 70px 110px 40px', alignItems: 'center', gap: 12, padding: '12px 0', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#bbb', borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+                <span>Avatar</span><span>Profil</span><span>Employeur</span><span>Intitulé</span><span>Score</span><span>Priorité</span><span />
+              </div>
+              {workRows.map((p, i) => {
+                const rowKey = `work-${i}`
+                return (
+                  <div key={rowKey} style={{ display: 'grid', gridTemplateColumns: '36px 2.5fr 1.5fr 2fr 70px 110px 40px', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid rgba(0,0,0,0.04)', cursor: 'pointer' }} onClick={() => { setModalProfile(p); setModalRowKey(rowKey) }} onMouseEnter={(e) => { e.currentTarget.style.background = '#f8fafc' }} onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}>
+                    <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#fefce8', color: '#a16207', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600 }}>{ini(p.fn, p.ln)}</div>
+                    <span style={{ fontSize: 13, color: '#333', fontWeight: 500 }}>{p.fn} {p.ln}</span>
+                    <span style={{ fontSize: 12, color: '#555' }}>{p.co || '—'}</span>
+                    <span style={{ fontSize: 12, color: '#555' }}>{p.ti || '—'}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <span style={{ padding: '4px 10px', borderRadius: 8, background: '#fefce8', color: '#a16207', fontSize: 12, fontWeight: 600 }}>{p.sc}</span>
+                      {p._correctedByUser && <CorrectedBadge />}
+                      <ScoreImprovementBadge p={p} />
+                    </div>
+                    <span style={{ padding: '4px 10px', borderRadius: 20, background: '#fefce8', color: '#a16207', fontSize: 11, fontWeight: 500 }}>À travailler</span>
+                    <button type="button" onClick={(e) => { e.stopPropagation(); exportToLemlistCsv([p]) }} title="Exporter vers Lemlist" style={{ width: 28, height: 28, borderRadius: 8, background: '#F5F0E8', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <IconUpload />
+                    </button>
+                  </div>
+                )
+              })}
+              {workRows.length === 0 && <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: '#888' }}>Aucun profil à travailler</div>}
+            </div>
           </div>
 
-          <div style={{ marginBottom: 16, background: '#FFEBEE', border: '1px solid #FFCDD2', borderRadius: 10, overflow: 'hidden' }}>
-            <button type="button" onClick={() => setEcarteExpanded(!ecarteExpanded)} style={{ width: '100%', padding: '10px 14px', fontWeight: 600, fontSize: 13, color: '#c0392b', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span>À écarter &lt;50 pts ({ecarteRows.length})</span>
-              <span style={{ transition: 'transform 0.2s', transform: ecarteExpanded ? 'rotate(180deg)' : 'none' }}>▾</span>
+          <div style={{ marginBottom: 16, background: 'white', borderRadius: 16, border: '1px solid rgba(0,0,0,0.06)', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+            <button type="button" onClick={() => setEcarteExpanded(!ecarteExpanded)} style={{ width: '100%', padding: '16px 24px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: ecarteExpanded ? '1px solid rgba(0,0,0,0.04)' : 'none' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444' }} />
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#dc2626' }}>À écarter</span>
+                <span style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, background: '#fef2f2', color: '#dc2626', fontWeight: 500 }}>{ecarteRows.length} profils · &lt;50 pts</span>
+              </div>
+              <span style={{ transition: 'transform 0.2s', transform: ecarteExpanded ? 'rotate(180deg)' : 'none', color: '#888' }}>▾</span>
             </button>
             {ecarteExpanded && (
-              <table className="mt w-full border-collapse">
-                <thead><tr>
-                  <th className="text-left py-2 px-3.5 bg-[#FFCDD2] text-[11.5px] uppercase tracking-wider text-[#c0392b] border-b border-[#FFCDD2]">Profil</th>
-                  <th className="text-left py-2 px-3.5 bg-[#FFCDD2] text-[11.5px] uppercase tracking-wider text-[#c0392b] border-b border-[#FFCDD2]">Employeur</th>
-                  <th className="text-left py-2 px-3.5 bg-[#FFCDD2] text-[11.5px] uppercase tracking-wider text-[#c0392b] border-b border-[#FFCDD2]">Intitulé</th>
-                  {importSource === 'pdf' && <th className="text-left py-2 px-3.5 bg-[#FFCDD2] text-[11.5px] uppercase tracking-wider text-[#c0392b] border-b border-[#FFCDD2]">Ancienneté</th>}
-                  <th className="text-left py-2 px-3.5 bg-[#FFCDD2] text-[11.5px] uppercase tracking-wider text-[#c0392b] border-b border-[#FFCDD2]">Score</th>
-                  <th className="text-left py-2 px-3.5 bg-[#FFCDD2] text-[11.5px] uppercase tracking-wider text-[#c0392b] border-b border-[#FFCDD2]">Priorité</th>
-                  <th className="text-left py-2 px-3.5 bg-[#FFCDD2] text-[11.5px] uppercase tracking-wider text-[#c0392b] border-b border-[#FFCDD2] w-12"></th>
-                </tr></thead>
-                <tbody>
-                  {ecarteRows.map((p, i) => {
-                    const rowKey = `ecarte-${i}`
-                    return (
-                      <tr
-                        key={rowKey}
-                        className="border-b border-[#FFCDD2] cursor-pointer hover:bg-[#FFCDD2]/30 transition-colors"
-                        onClick={() => { setModalProfile(p); setModalRowKey(rowKey) }}
-                      >
-                        <td className="py-2 px-3.5"><div className="pc flex items-center gap-2.5"><div className="av w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold shrink-0" style={{ backgroundColor: '#FDE8E8', color: '#c0392b' }}>{ini(p.fn, p.ln)}</div><div className="pn font-medium">{p.fn} {p.ln}</div></div></td>
-                        <td className="py-2 px-3.5 text-[12.5px]">{p.co || '—'}</td>
-                        <td className="py-2 px-3.5 text-[12.5px] text-[var(--t2)]">{p.ti || '—'}</td>
-                        {importSource === 'pdf' && <td className="py-2 px-3.5 text-[12.5px] text-[var(--t3)]">{p.dur || '—'}</td>}
-                        <td className="py-2 px-3.5">
-                          <div className="flex items-center gap-2">
-                            <span className={`sc inline-flex items-center justify-center w-9 h-6 rounded-md ${scpill(p.sc)}`}>{p.sc}</span>
-                            {p._correctedByUser && <CorrectedBadge />}
-                            <ScoreImprovementBadge p={p} />
-                          </div>
-                        </td>
-                        <td className="py-2 px-3.5 flex items-center gap-2">
-                          {priotag(p.sc)}
-                        </td>
-                        <td className="py-2 px-3.5">
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); exportToLemlistCsv([p]) }}
-                            title="Exporter vers Lemlist"
-                            style={{ padding: 6, borderRadius: 6, background: GOLD, color: ACCENT, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                          >
-                            <IconExport />
-                          </button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+              <div style={{ padding: '0 24px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '36px 2.5fr 1.5fr 2fr 70px 110px 40px', alignItems: 'center', gap: 12, padding: '12px 0', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#bbb', borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+                  <span>Avatar</span><span>Profil</span><span>Employeur</span><span>Intitulé</span><span>Score</span><span>Priorité</span><span />
+                </div>
+                {ecarteRows.map((p, i) => {
+                  const rowKey = `ecarte-${i}`
+                  return (
+                    <div key={rowKey} style={{ display: 'grid', gridTemplateColumns: '36px 2.5fr 1.5fr 2fr 70px 110px 40px', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid rgba(0,0,0,0.04)', cursor: 'pointer' }} onClick={() => { setModalProfile(p); setModalRowKey(rowKey) }} onMouseEnter={(e) => { e.currentTarget.style.background = '#f8fafc' }} onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}>
+                      <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#fef2f2', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600 }}>{ini(p.fn, p.ln)}</div>
+                      <span style={{ fontSize: 13, color: '#333', fontWeight: 500 }}>{p.fn} {p.ln}</span>
+                      <span style={{ fontSize: 12, color: '#555' }}>{p.co || '—'}</span>
+                      <span style={{ fontSize: 12, color: '#555' }}>{p.ti || '—'}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <span style={{ padding: '4px 10px', borderRadius: 8, background: '#fef2f2', color: '#dc2626', fontSize: 12, fontWeight: 600 }}>{p.sc}</span>
+                        {p._correctedByUser && <CorrectedBadge />}
+                        <ScoreImprovementBadge p={p} />
+                      </div>
+                      <span style={{ padding: '4px 10px', borderRadius: 20, background: '#fef2f2', color: '#dc2626', fontSize: 11, fontWeight: 500 }}>À écarter</span>
+                      <button type="button" onClick={(e) => { e.stopPropagation(); exportToLemlistCsv([p]) }} title="Exporter vers Lemlist" style={{ width: 28, height: 28, borderRadius: 8, background: '#F5F0E8', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <IconUpload />
+                      </button>
+                    </div>
+                  )
+                })}
+                {ecarteRows.length === 0 && <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: '#888' }}>Aucun profil à écarter</div>}
+              </div>
             )}
           </div>
 
@@ -1148,15 +1075,15 @@ export default function Import() {
             <div style={{ marginTop: 24, padding: 16, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)' }}>
               <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12, color: '#173731' }}>Ce que l'IA a appris de vos corrections</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center', marginBottom: 12 }}>
-                <span style={{ fontSize: 12, color: 'var(--t2)' }}>{learningStats?.total ?? 0} correction{(learningStats?.total ?? 0) > 1 ? 's' : ''} enregistrée{(learningStats?.total ?? 0) > 1 ? 's' : ''}</span>
+                <span style={{ fontSize: 12, color: 'var(--t2)' }}>{learningStats?.total ?? 0} correction(s) enregistrée(s)</span>
                 {learningStats?.topCompanies?.length > 0 && (
                   <span style={{ fontSize: 12, color: 'var(--t2)' }}>
                     Top employeurs corrigés : {learningStats.topCompanies.map(([c, n]) => `${c} (${n})`).join(', ')}
                   </span>
                 )}
-                {learningStats?.configUpdatedAt && (
+                {learningStats?.lastInstructionAt && (
                   <span style={{ fontSize: 11, color: 'var(--t3)' }}>
-                    Dernière config : {new Date(learningStats.configUpdatedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    Dernière instruction : {new Date(learningStats.lastInstructionAt).toLocaleString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                   </span>
                 )}
               </div>

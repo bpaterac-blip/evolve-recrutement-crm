@@ -12,15 +12,17 @@ import {
   REGIONS,
   STAGE_COLORS,
   MATURITY_COLORS,
-  INTEG_OPTS,
-  INTEG_ADD_DATE,
   NOTE_TEMPLATES,
   EVENT_TYPES,
   EVENT_FORM_TYPES,
   NEXT_EVENT_LABELS,
 } from '../lib/data'
+
+const SESSION_CIBLE_STAGES = ["Point d'étape téléphonique", "Point d'étape", 'R2 Amaury', 'Point juridique', 'Démission reconversion', 'Intégration', 'Recruté']
 import InlineDropdown from '../components/InlineDropdown'
 import ScoreCorrectionModal from '../components/ScoreCorrectionModal'
+import ChuteModal from '../components/ChuteModal'
+import GrilleNotationTab from '../components/GrilleNotationTab'
 import { ActivityIcon, IconMap, IconCalendar, IconUpload, IconTrash, IconPencil, IconClose } from '../components/Icons'
 
 const ICON_S = 14
@@ -124,7 +126,6 @@ export default function ProfilePage() {
     updateProfileField,
     changeStage,
     changeMaturity,
-    changeInteg,
     changeSource,
     changeRegion,
     saveNote,
@@ -133,12 +134,14 @@ export default function ProfilePage() {
     deleteProfile,
     addEvent,
     fetchNotes,
+    fetchProfiles,
     loadProfileDetail,
     profileActivities,
     deleteActivity,
     deleteEvent,
     today,
     useSupabase,
+    showNotif,
   } = useCRM()
 
   const profileIndex = profiles.findIndex((p) => String(p.id) === String(id))
@@ -156,8 +159,7 @@ export default function ProfilePage() {
   const [evDate, setEvDate] = useState('')
   const [evNotes, setEvNotes] = useState('')
   const [showEventForm, setShowEventForm] = useState(false)
-  const [ddIntegCustom, setDdIntegCustom] = useState(false)
-  const [integCustomVal, setIntegCustomVal] = useState('')
+  const [sessionsCibles, setSessionsCibles] = useState([])
   const [activeTab, setActiveTab] = useState('notes')
   const [loadingDetail, setLoadingDetail] = useState(true)
   const [localActivities, setLocalActivities] = useState([])
@@ -174,6 +176,7 @@ export default function ProfilePage() {
   const [expandedEventId, setExpandedEventId] = useState(null)
   const [enriching, setEnriching] = useState(false)
   const [scoreCorrectionOpen, setScoreCorrectionOpen] = useState(false)
+  const [chuteModalProfile, setChuteModalProfile] = useState(null)
 
   const mapActivityRow = (a) => {
     const tsSource = a.created_at || a.date
@@ -244,6 +247,12 @@ export default function ProfilePage() {
     if (!profile?.id || !useSupabase) return
     fetchNotes(profile.id).then((data) => setNotesList(data || []))
   }, [profile?.id, useSupabase, fetchNotes])
+
+  const showSessionCible = profile && SESSION_CIBLE_STAGES.includes(profile.stg)
+  useEffect(() => {
+    if (!showSessionCible || !useSupabase) return
+    supabase.from('sessions_formation').select('id, periode, annee, date_session, statut').order('date_session', { ascending: true }).then(({ data }) => setSessionsCibles(data || []))
+  }, [showSessionCible, useSupabase])
 
   useEffect(() => {
     setNoteContent(NOTE_TEMPLATES[noteTemplate] ?? '')
@@ -416,7 +425,7 @@ export default function ProfilePage() {
     push(`Maturité : ${profile.mat}`)
     push(`Stade : ${profile.stg}`)
     push(`Source : ${profile.src}`)
-    push(`Intégration potentielle : ${profile.integ || '—'}`)
+    push(`Session cible : ${profile.integration_periode && profile.integration_annee ? `${profile.integration_periode} ${profile.integration_annee}` : '—'}`)
     push(`Email : ${profile.mail}`)
     push(`LinkedIn : ${profile.li}`)
     y += 4
@@ -482,6 +491,10 @@ export default function ProfilePage() {
   }
 
   const handleChangeMaturity = async (newMat) => {
+    if (newMat === 'Chute') {
+      setChuteModalProfile(profile)
+      return
+    }
     const profileId = profile?.id || id
     const oldMat = profile?.mat ?? ''
     changeMaturity(profileId, newMat)
@@ -527,23 +540,6 @@ export default function ProfilePage() {
       note: `${oldRegion || '—'} → ${newRegion || '—'}`,
       date: new Date().toISOString().split('T')[0],
       icon: 'mappin',
-      source: 'manual',
-    })
-    await loadActivitiesAndEvents()
-  }
-
-  const handleChangeInteg = async (newInteg) => {
-    const profileId = profile?.id || id
-    const oldInteg = profile?.integ ?? ''
-    changeInteg(profileId, newInteg)
-    refreshActivities()
-    if (!useSupabase || !profileId || oldInteg === newInteg) return
-    await supabase.from('activities').insert({
-      profile_id: profileId,
-      type: 'integration_change',
-      note: `${oldInteg || '—'} → ${newInteg || '—'}`,
-      date: new Date().toISOString().split('T')[0],
-      icon: 'calendar',
       source: 'manual',
     })
     await loadActivitiesAndEvents()
@@ -717,23 +713,34 @@ export default function ProfilePage() {
                 <InlineDropdown options={STAGES} value={profile.stg} onChange={handleChangeStage} buttonStyle={stag} placeholder="—" />
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0' }}>
-              <span style={iconStyle}><IconCalendar /></span>
-              <span style={{ color: PAGE_STYLE.textSecondary, fontSize: 13, width: 100 }}>Intégration potentielle</span>
-              {!ddIntegCustom ? (
-                <select value={profile.integ || '—'} onChange={(e) => { const v = e.target.value; if (v === INTEG_ADD_DATE) setDdIntegCustom(true); else handleChangeInteg(v); }} style={{ flex: 1, padding: '6px 10px', fontSize: 13, borderRadius: 6, border: 'none', background: '#D4EDE1', color: '#1A7A4A', cursor: 'pointer' }}>
-                  {INTEG_OPTS.map((o) => <option key={o} value={o}>{o}</option>)}
-                  {profile.integ && !INTEG_OPTS.includes(profile.integ) && <option value={profile.integ}>{profile.integ}</option>}
-                  <option value={INTEG_ADD_DATE}>{INTEG_ADD_DATE}</option>
+            {showSessionCible && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: `1px solid ${PAGE_STYLE.border}` }}>
+                <span style={iconStyle}><IconCalendar /></span>
+                <span style={{ color: PAGE_STYLE.textSecondary, fontSize: 13, width: 100 }}>Session cible</span>
+                <select
+                  value={profile.session_formation_id || ''}
+                  onChange={async (e) => {
+                    const sessionId = e.target.value
+                    if (!sessionId || !profile?.id || !useSupabase) return
+                    const session = sessionsCibles.find((s) => s.id === sessionId)
+                    await supabase.from('profiles').update({
+                      session_formation_id: sessionId,
+                      integration_periode: session?.periode ?? null,
+                      integration_annee: session?.annee ?? null,
+                      integration_confirmed: false,
+                    }).eq('id', profile.id)
+                    updateProfile(profile.id, { session_formation_id: sessionId, integration_periode: session?.periode, integration_annee: session?.annee, integration_confirmed: false })
+                    fetchProfiles?.()
+                  }}
+                  style={{ flex: 1, padding: '6px 10px', fontSize: 13, borderRadius: 6, border: `1px solid ${PAGE_STYLE.border}`, background: PAGE_STYLE.cardBg, cursor: 'pointer' }}
+                >
+                  <option value="">—</option>
+                  {sessionsCibles.map((s) => (
+                    <option key={s.id} value={s.id}>{[s.periode, s.annee].filter(Boolean).join(' ') || s.date_session || '—'}</option>
+                  ))}
                 </select>
-              ) : (
-                <div style={{ display: 'flex', gap: 8, flex: 1 }}>
-                  <input type="text" placeholder="ex: Mars 2027" value={integCustomVal} onChange={(e) => setIntegCustomVal(e.target.value)} style={{ flex: 1, padding: '6px 10px', fontSize: 13, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6 }} />
-                  <button type="button" onClick={() => { if (integCustomVal.trim()) { handleChangeInteg(integCustomVal.trim()); setDdIntegCustom(false); setIntegCustomVal(''); } }} style={{ padding: '6px 12px', background: PAGE_STYLE.green, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>✓</button>
-                  <button type="button" onClick={() => { setDdIntegCustom(false); setIntegCustomVal(''); }} style={{ padding: '6px 12px', background: 'none', border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>Annuler</button>
-                </div>
-              )}
-            </div>
+              </div>
+            )}
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: `1px solid ${PAGE_STYLE.border}` }}>
               <span style={iconStyle}><IconCalendar /></span>
               <span style={{ color: PAGE_STYLE.textSecondary, fontSize: 13, width: 100 }}>Prochain événement</span>
@@ -827,6 +834,7 @@ export default function ProfilePage() {
             <button type="button" style={tabStyle(activeTab === 'notes')} onClick={() => setActiveTab('notes')}>Notes</button>
             <button type="button" style={tabStyle(activeTab === 'events')} onClick={() => setActiveTab('events')}>Événements</button>
             <button type="button" style={tabStyle(activeTab === 'activity')} onClick={() => setActiveTab('activity')}>Activité</button>
+            <button type="button" style={tabStyle(activeTab === 'grille')} onClick={() => setActiveTab('grille')}>Grille de notation</button>
           </div>
 
           {activeTab === 'activity' && (
@@ -854,6 +862,10 @@ export default function ProfilePage() {
                 ))
               )}
             </div>
+          )}
+
+          {activeTab === 'grille' && (
+            <GrilleNotationTab profile={profile} updateProfile={updateProfile} useSupabase={useSupabase} />
           )}
 
           {activeTab === 'notes' && (
@@ -1033,6 +1045,37 @@ export default function ProfilePage() {
               <button type="button" onClick={async () => { await deleteEvent(profile.id, confirmDeleteEvent.id, confirmDeleteEvent.content); await loadActivitiesAndEvents(); setConfirmDeleteEvent(null); }} style={{ padding: '8px 16px', fontSize: 13, border: 'none', borderRadius: 6, background: '#DC2626', color: 'white', cursor: 'pointer' }}>Confirmer</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {chuteModalProfile && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setChuteModalProfile(null)}>
+          <ChuteModal
+            profile={chuteModalProfile}
+            onClose={() => setChuteModalProfile(null)}
+            onSaved={async (chuteType, chuteDetail) => {
+              const oldMat = chuteModalProfile.mat ?? '—'
+              await supabase.from('profiles').update({
+                maturity: 'Chute',
+                chute_stade: chuteModalProfile.stg ?? null,
+                chute_type: chuteType,
+                chute_detail: chuteDetail || null,
+                chute_date: new Date().toISOString(),
+              }).eq('id', chuteModalProfile.id)
+              changeMaturity(chuteModalProfile.id, 'Chute')
+              await supabase.from('activities').insert({
+                profile_id: chuteModalProfile.id,
+                type: 'maturity_change',
+                note: `${oldMat} → Chute`,
+                date: new Date().toISOString().split('T')[0],
+                icon: 'refresh',
+                source: 'manual',
+              })
+              setChuteModalProfile(null)
+              fetchProfiles?.()
+              await loadActivitiesAndEvents()
+            }}
+          />
         </div>
       )}
 

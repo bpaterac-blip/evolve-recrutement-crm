@@ -1,14 +1,55 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useCRM } from '../context/CRMContext'
 import { useAuth } from '../context/AuthContext'
 import { useViewMode } from '../context/ViewModeContext'
 import { supabase } from '../lib/supabase'
-import { STAGES, MATURITIES, SOURCES, STAGE_COLORS, MATURITY_COLORS, INTEG_OPTS, INTEG_ADD_DATE } from '../lib/data'
+import { STAGES, MATURITIES, SOURCES } from '../lib/data'
 import InlineDropdown from '../components/InlineDropdown'
 
 const ACCENT = '#173731'
 const GOLD = '#D2AB76'
+
+const SOURCE_STYLES = {
+  'Chasse LinkedIn': { backgroundColor: '#eff6ff', color: '#1d4ed8' },
+  Recommandation: { backgroundColor: '#fefce8', color: '#a16207' },
+  'Chasse Mail': { backgroundColor: '#f0fdf4', color: '#15803d' },
+  'Chasse externe': { backgroundColor: '#fff7ed', color: '#c2410c' },
+  'Inbound Marketing': { backgroundColor: '#faf5ff', color: '#7e22ce' },
+  Ads: { backgroundColor: '#fff1f2', color: '#e11d48' },
+  Autre: { backgroundColor: '#f8fafc', color: '#94a3b8' },
+  Inbound: { backgroundColor: '#faf5ff', color: '#7e22ce' },
+  'Direct contact': { backgroundColor: '#f8fafc', color: '#94a3b8' },
+}
+
+const MATURITY_STYLES = {
+  Chaud: { backgroundColor: '#fff1f2', color: '#e11d48' },
+  Tiède: { backgroundColor: '#fff7ed', color: '#ea580c' },
+  Froid: { backgroundColor: '#f8fafc', color: '#94a3b8' },
+  Chute: { backgroundColor: '#fff1f2', color: '#e11d48', fontStyle: 'italic' },
+  Archivé: { backgroundColor: '#f8fafc', color: '#cbd5e1' },
+  'Très chaud': { backgroundColor: '#fff1f2', color: '#e11d48' },
+}
+
+const STAGE_STYLES = {
+  R0: { backgroundColor: '#eff6ff', color: '#1d4ed8' },
+  R1: { backgroundColor: '#f0fdf4', color: '#15803d' },
+  "Point d'étape téléphonique": { backgroundColor: '#fefce8', color: '#a16207' },
+  "Point d'étape": { backgroundColor: '#fefce8', color: '#a16207' },
+  'R2 Amaury': { backgroundColor: '#fff7ed', color: '#c2410c' },
+  'Point juridique': { backgroundColor: '#faf5ff', color: '#7e22ce' },
+  'Démission reconversion': { backgroundColor: '#fff1f2', color: '#e11d48' },
+  Intégration: { backgroundColor: '#dcfce7', color: '#15803d' },
+  Recruté: { backgroundColor: ACCENT, color: GOLD },
+  Démission: { backgroundColor: '#fff1f2', color: '#e11d48' },
+}
+
+function getScoreStyle(score) {
+  if (score == null) return { backgroundColor: '#f8fafc', color: '#94a3b8' }
+  if (score >= 70) return { backgroundColor: '#dcfce7', color: '#15803d' }
+  if (score >= 50) return { backgroundColor: '#fefce8', color: '#a16207' }
+  return { backgroundColor: '#f8fafc', color: '#94a3b8' }
+}
 
 const IconTrash = () => (
   <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -49,40 +90,40 @@ function escapeCsv(val) {
   return s
 }
 
-function ownerDisplay(p) {
-  if (p?.owner_full_name?.trim()) return p.owner_full_name.trim()
-  const email = p?.owner_email || ''
-  if (!email) return '—'
-  const name = email.split('@')[0]
-  return name.charAt(0).toUpperCase() + name.slice(1).replace(/[._]/g, ' ')
+function formatSession(p) {
+  if (p?.integration_periode && p?.integration_annee) return `${p.integration_periode} ${p.integration_annee}`
+  if (p?.integration_periode) return p.integration_periode
+  if (p?.integration_annee) return p.integration_annee
+  return null
 }
 
-const SRC_TAG = { 'Chasse LinkedIn': 'tb', 'Chasse Mail': 'tt', 'Recommandation': 'tp', 'Inbound': 'tg', 'Ads': 'ta', 'Chasse externe': 'ta', 'Direct contact': 'tx' }
-
-const DROPDOWN_Z = 9999
-
-function openDropdown(e, editingCell, setEditingCell, profileId, field, extra = {}) {
-  e.stopPropagation()
-  if (editingCell?.profileId === profileId && editingCell?.field === field && !editingCell?.integCustomMode) {
-    setEditingCell(null)
-    return
-  }
-  const r = e.currentTarget.getBoundingClientRect()
-  setEditingCell({ profileId, field, rect: { left: r.left, bottom: r.bottom, width: r.width }, ...extra })
+function formatAddedDate(p) {
+  if (p?.created_at) return new Date(p.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })
+  return p?.dt || '—'
 }
 
 export default function Profiles() {
   const navigate = useNavigate()
   const { role } = useAuth()
   const { viewMode } = useViewMode()
-  const { profiles, filteredProfiles, changeStage, changeMaturity, changeSource, changeInteg, loading, fetchProfiles } = useCRM()
+  const { profiles, filteredProfiles, changeStage, changeMaturity, changeSource, loading, fetchProfiles } = useCRM()
   const isGlobalView = role === 'admin' && viewMode === 'global'
   const [srcFilter, setSrcFilter] = useState('')
   const [stgFilter, setStgFilter] = useState('')
   const [matFilter, setMatFilter] = useState('')
-  const [editingCell, setEditingCell] = useState(null)
+  const [openDropdownId, setOpenDropdownId] = useState(null)
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.source-dropdown') && !e.target.closest('.maturite-dropdown') && !e.target.closest('.stade-dropdown')) {
+        setOpenDropdownId(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   const P = filteredProfiles.filter((p) => {
     if (srcFilter && p.src !== srcFilter) return false
@@ -93,12 +134,6 @@ export default function Profiles() {
   })
 
   const ini = (a, b) => (a?.[0] || '') + (b?.[0] || '')
-  const scpill = (s) => s >= 70 ? 'sh' : s >= 45 ? 'sm2' : 'sl'
-  const srctag = (s) => SRC_TAG[s] || 'tx'
-  const stag = (s) => STAGE_COLORS[s] ? { backgroundColor: STAGE_COLORS[s].bg, color: STAGE_COLORS[s].text } : {}
-  const mattag = (m) => ({ Froid: 'tx', Tiède: 'ta', Chaud: 'tb', 'Très chaud': 'tg' }[m] || 'tx')
-  const currentProfile = editingCell ? P.find((p) => p.id === editingCell.profileId) : null
-
   const selectedCount = selectedIds.size
   const allSelected = P.length > 0 && P.every((p) => selectedIds.has(p.id))
   const someSelected = selectedCount > 0
@@ -128,9 +163,7 @@ export default function Profiles() {
     }
   }
 
-  const handleDeleteSelection = () => {
-    setDeleteModalOpen(true)
-  }
+  const handleDeleteSelection = () => setDeleteModalOpen(true)
 
   const confirmDelete = async () => {
     const ids = [...selectedIds]
@@ -144,7 +177,6 @@ export default function Profiles() {
   const handleExportCsv = () => {
     const toExport = profiles.filter((p) => selectedIds.has(p.id))
     if (toExport.length === 0) return
-
     const headers = ['Prénom', 'Nom', 'Employeur', 'Poste', 'URL LinkedIn', 'Score', 'Priorité', 'Stade', 'Maturité', "Date d'import"]
     const rows = toExport.map((p) => [
       escapeCsv(p.fn),
@@ -165,139 +197,197 @@ export default function Profiles() {
     a.href = url
     const today = new Date().toISOString().slice(0, 10)
     const namePart = `${(toExport[0].fn || '')}_${(toExport[0].ln || '')}`.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '')
-    a.download = toExport.length === 1
-      ? (namePart ? `profil_${namePart}.csv` : 'profil.csv')
-      : `export_profils_${today}.csv`
+    a.download = toExport.length === 1 ? (namePart ? `profil_${namePart}.csv` : 'profil.csv') : `export_profils_${today}.csv`
     a.click()
     URL.revokeObjectURL(url)
   }
 
+  const headerCellStyle = {
+    fontSize: 10,
+    fontWeight: 600,
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase',
+    color: '#bbb',
+    padding: '12px 20px',
+    borderBottom: '1px solid rgba(0,0,0,0.06)',
+  }
+
+  const rowStyle = {
+    padding: '14px 20px',
+    borderBottom: '1px solid rgba(0,0,0,0.04)',
+    transition: 'background 0.12s',
+  }
+
   return (
-    <div className="page h-full overflow-y-auto p-[22px]">
-      <div className="tw bg-[var(--surface)] border border-[var(--border)] rounded-[10px] overflow-hidden">
-        <div className="thd py-3 px-4 border-b border-[var(--border)] flex items-center gap-2 flex-wrap">
-          <div className="ttl font-semibold text-sm">Tous les profils</div>
-          <span className="bdg bg-[var(--s2)] text-[var(--t2)] text-xs py-0.5 px-2 rounded-full font-medium">{P.length} profils</span>
+    <div style={{ padding: 22, background: '#F5F0E8' }}>
+      <div style={{ background: '#ffffff', borderRadius: 16, border: '1px solid rgba(0,0,0,0.06)', overflow: 'visible' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '20px 24px', borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
+          <h1 style={{ fontSize: 18, fontWeight: 600, color: '#1A1A1A', margin: 0 }}>Tous les profils</h1>
+          <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 12px', borderRadius: 20, background: ACCENT, color: GOLD, fontSize: 12, fontWeight: 600 }}>
+            {P.length} profils
+          </span>
           {someSelected && (
-            <div className="flex items-center gap-3" style={{ backgroundColor: 'rgba(210, 171, 118, 0.15)', padding: '6px 12px', borderRadius: 8 }}>
-              <span className="text-[13px] font-medium" style={{ color: ACCENT }}>{selectedCount} profil(s) sélectionné(s)</span>
-              <button type="button" onClick={handleExportCsv} className="flex items-center gap-1.5 py-1.5 px-2.5 rounded-md text-[12px] font-medium hover:opacity-90" style={{ backgroundColor: ACCENT, color: 'white' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 12px', borderRadius: 8, background: 'rgba(210, 171, 118, 0.15)' }}>
+              <span style={{ fontSize: 13, fontWeight: 500, color: ACCENT }}>{selectedCount} profil(s) sélectionné(s)</span>
+              <button type="button" onClick={handleExportCsv} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, background: ACCENT, color: 'white', cursor: 'pointer', fontSize: 12, fontWeight: 500, border: 'none' }}>
                 <IconDownload /> Exporter en CSV
               </button>
-              <button type="button" onClick={handleDeleteSelection} className="flex items-center gap-1.5 py-1.5 px-2.5 rounded-md text-[12px] font-medium hover:opacity-90" style={{ backgroundColor: '#dc2626', color: 'white' }}>
+              <button type="button" onClick={handleDeleteSelection} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, background: '#dc2626', color: 'white', cursor: 'pointer', fontSize: 12, fontWeight: 500, border: 'none' }}>
                 <IconTrash /> Supprimer la sélection
               </button>
             </div>
           )}
-          <div className="frow flex gap-1.5 ml-auto">
-            <select className="fsel font-[inherit] text-xs py-1 px-2 border border-[var(--b2)] rounded-md text-[var(--text)] bg-[var(--surface)] outline-none cursor-pointer" value={srcFilter} onChange={(e) => setSrcFilter(e.target.value)}>
+          <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
+            <select value={srcFilter} onChange={(e) => setSrcFilter(e.target.value)} style={{ fontSize: 11, padding: '6px 10px', borderRadius: 8, border: '1px solid rgba(0,0,0,0.1)', background: '#fff', color: '#1A1A1A', cursor: 'pointer', outline: 'none' }}>
               <option value="">Toutes sources</option>
               {SOURCES.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
-            <select className="fsel font-[inherit] text-xs py-1 px-2 border border-[var(--b2)] rounded-md text-[var(--text)] bg-[var(--surface)] outline-none cursor-pointer" value={stgFilter} onChange={(e) => setStgFilter(e.target.value)}>
+            <select value={stgFilter} onChange={(e) => setStgFilter(e.target.value)} style={{ fontSize: 11, padding: '6px 10px', borderRadius: 8, border: '1px solid rgba(0,0,0,0.1)', background: '#fff', color: '#1A1A1A', cursor: 'pointer', outline: 'none' }}>
               <option value="">Tous stades</option>
               {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
+            <select value={matFilter} onChange={(e) => setMatFilter(e.target.value)} style={{ fontSize: 11, padding: '6px 10px', borderRadius: 8, border: '1px solid rgba(0,0,0,0.1)', background: '#fff', color: '#1A1A1A', cursor: 'pointer', outline: 'none' }}>
+              <option value="">Toutes maturités</option>
+              <option value="Sans archivés">Sans archivés</option>
+              {MATURITIES.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
           </div>
         </div>
-        <table className="w-full border-collapse">
-          <thead><tr>
-            <th className="w-10 py-2 px-2 bg-[var(--s2)] border-b border-[var(--border)]">
-              <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} className="cursor-pointer" />
-            </th>
-            <th className="text-left text-[11px] font-medium uppercase tracking-wider text-[var(--t3)] py-2 px-4 bg-[var(--s2)] border-b border-[var(--border)]">Profil</th>
-            {isGlobalView && <th className="text-left text-[11px] font-medium uppercase tracking-wider text-[var(--t3)] py-2 px-4 bg-[var(--s2)] border-b border-[var(--border)]">Responsable</th>}
-            <th className="text-left text-[11px] font-medium uppercase tracking-wider text-[var(--t3)] py-2 px-4 bg-[var(--s2)] border-b border-[var(--border)]">Ville</th>
-            <th className="text-left text-[11px] font-medium uppercase tracking-wider text-[var(--t3)] py-2 px-4 bg-[var(--s2)] border-b border-[var(--border)]">Région</th>
-            <th className="text-left text-[11px] font-medium uppercase tracking-wider text-[var(--t3)] py-2 px-4 bg-[var(--s2)] border-b border-[var(--border)]">Source</th>
-            <th className="text-left text-[11px] font-medium uppercase tracking-wider text-[var(--t3)] py-2 px-4 bg-[var(--s2)] border-b border-[var(--border)]">Score</th>
-            <th className="text-left text-[11px] font-medium uppercase tracking-wider text-[var(--t3)] py-2 px-4 bg-[var(--s2)] border-b border-[var(--border)]">Maturité</th>
-            <th className="text-left text-[11px] font-medium uppercase tracking-wider text-[var(--t3)] py-2 px-4 bg-[var(--s2)] border-b border-[var(--border)]">Stade</th>
-            <th className="text-left text-[11px] font-medium uppercase tracking-wider text-[var(--t3)] py-2 px-4 bg-[var(--s2)] border-b border-[var(--border)]">Intégration pot.</th>
-            <th className="text-left text-[11px] font-medium uppercase tracking-wider text-[var(--t3)] py-2 px-4 bg-[var(--s2)] border-b border-[var(--border)]">Contact</th>
-          </tr></thead>
+
+        <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <th style={{ ...headerCellStyle, width: 48, textAlign: 'left' }}>
+                <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} style={{ cursor: 'pointer' }} />
+              </th>
+              <th style={{ ...headerCellStyle, textAlign: 'left' }}>Profil</th>
+              <th style={{ ...headerCellStyle, textAlign: 'left' }}>Source</th>
+              <th style={{ ...headerCellStyle, textAlign: 'left' }}>Score</th>
+              <th style={{ ...headerCellStyle, textAlign: 'left' }}>Maturité</th>
+              <th style={{ ...headerCellStyle, textAlign: 'left' }}>Stade</th>
+              <th style={{ ...headerCellStyle, textAlign: 'left' }}>Session</th>
+              <th style={{ ...headerCellStyle, textAlign: 'left' }}>Ajouté</th>
+            </tr>
+          </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={isGlobalView ? 11 : 10} className="py-12 text-center text-[var(--t3)]">Chargement…</td></tr>
-            ) : P.length === 0 ? (
-              <tr><td colSpan={isGlobalView ? 11 : 10} className="py-12 text-center text-[var(--t3)]">Aucun profil</td></tr>
-            ) : P.map((p, i) => (
-              <tr key={p.id} className={`border-b border-[var(--border)] hover:bg-[#F8F5F1] last:border-b-0 cursor-pointer ${selectedIds.has(p.id) ? '' : ''}`} style={selectedIds.has(p.id) ? { backgroundColor: 'rgba(210, 171, 118, 0.1)' } : {}} onClick={() => { setEditingCell(null); navigate(`/profiles/${p.id}`); }}>
-                <td className="py-2.5 px-2" onClick={(e) => e.stopPropagation()}>
-                  <input type="checkbox" checked={selectedIds.has(p.id)} onChange={() => toggleSelect(p.id)} className="cursor-pointer" onClick={(e) => e.stopPropagation()} />
-                </td>
-                <td className="py-2.5 px-4 cursor-pointer">
-                  <div className="pc flex items-center gap-2.5">
-                    <div className={`av w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold shrink-0`} style={{ backgroundColor: ['#D4EDE1', '#D3E4F8', '#FDEBC8', '#EAD8FA', '#FADBD8', '#CCEEF5'][i % 6], color: ['#1A7A4A', '#1E5FA0', '#B86B0F', '#7B3FC4', '#C0392B', '#0E7490'][i % 6] }}>{ini(p.fn, p.ln)}</div>
-                    <div><div className="pn font-medium text-[13.5px]">{p.fn} {p.ln}</div><div className="ps text-xs text-[var(--t3)] mt-0.5">{p.co} · {p.ti}</div></div>
-                  </div>
-                </td>
-                {isGlobalView && <td className="py-2.5 px-4 text-[12px] text-[var(--t2)]">{ownerDisplay(p)}</td>}
-                <td className="py-2.5 px-4 text-[var(--t2)]">{p.city}</td>
-                <td className="py-2.5 px-4 text-[var(--t2)]">{p.region || '—'}</td>
-                <td className="py-2.5 px-4" onClick={(e) => e.stopPropagation()}>
-                  <InlineDropdown options={SOURCES} value={p.src} onChange={(v) => changeSource(p.id, v)} buttonClassName={`tag tag-btn ${srctag(p.src)}`} />
-                </td>
-                <td className="py-2.5 px-4"><span className={`sc inline-flex items-center justify-center w-9 h-6 rounded-md ${scpill(p.sc)}`}>{p.sc}</span></td>
-                <td className="py-2.5 px-4" onClick={(e) => e.stopPropagation()}>
-                  <InlineDropdown options={MATURITIES} value={p.mat} onChange={(v) => changeMaturity(p.id, v)} buttonStyle={(v) => MATURITY_COLORS[v] || {}} buttonClassName="tag tag-btn px-2 py-0.5 rounded-md text-xs" />
-                </td>
-                <td className="py-2.5 px-4" onClick={(e) => e.stopPropagation()}>
-                  <InlineDropdown options={STAGES} value={p.stg} onChange={(v) => changeStage(p.id, v)} buttonStyle={(v) => STAGE_COLORS[v] || {}} buttonClassName="tag tag-btn px-2 py-0.5 rounded-md text-xs" placeholder="—" />
-                </td>
-                <td className="py-2.5 px-4" onClick={(e) => e.stopPropagation()}>
-                  <button type="button" className="tag tag-btn px-2 py-0.5 rounded-md text-xs" style={{ background: '#D4EDE1', color: '#1A7A4A' }} onClick={(e) => openDropdown(e, editingCell, setEditingCell, p.id, 'integ')}>{(p.integ || '—')} ▾</button>
-                </td>
-                <td className="py-2.5 px-4 text-[var(--t3)] text-xs">{p.dt}</td>
+              <tr>
+                <td colSpan={8} style={{ ...rowStyle, padding: 48, textAlign: 'center', color: '#bbb' }}>Chargement…</td>
               </tr>
-            ))}
+            ) : P.length === 0 ? (
+              <tr>
+                <td colSpan={8} style={{ ...rowStyle, padding: 48, textAlign: 'center', color: '#bbb' }}>Aucun profil</td>
+              </tr>
+            ) : (
+              P.map((p) => {
+                const sessionStr = formatSession(p)
+                const scoreStyle = getScoreStyle(p.sc)
+                const srcStyle = SOURCE_STYLES[p.src] || { backgroundColor: '#f8fafc', color: '#94a3b8' }
+                return (
+                  <tr
+                    key={p.id}
+                    style={{ ...rowStyle, cursor: 'pointer', background: selectedIds.has(p.id) ? 'rgba(210, 171, 118, 0.1)' : undefined }}
+                    onMouseEnter={(e) => { if (!selectedIds.has(p.id)) e.currentTarget.style.background = '#faf9f7' }}
+                    onMouseLeave={(e) => { if (!selectedIds.has(p.id)) e.currentTarget.style.background = '' }}
+                    onClick={() => { setOpenDropdownId(null); navigate(`/profiles/${p.id}`) }}
+                  >
+                    <td style={rowStyle} onClick={(e) => e.stopPropagation()}>
+                      <input type="checkbox" checked={selectedIds.has(p.id)} onChange={() => toggleSelect(p.id)} style={{ cursor: 'pointer' }} onClick={(e) => e.stopPropagation()} />
+                    </td>
+                    <td style={rowStyle}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{ width: 36, height: 36, borderRadius: '50%', background: ACCENT, color: GOLD, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
+                          {ini(p.fn, p.ln)}
+                        </div>
+                        <div style={{ minWidth: 0, maxWidth: 350 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: ACCENT }}>{p.fn} {p.ln}</div>
+                          <div style={{ fontSize: 11, color: '#bbb', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{[p.co, p.ti, p.city, p.region].filter(Boolean).join(' · ') || '—'}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td style={rowStyle} onClick={(e) => e.stopPropagation()}>
+                      <div className="source-dropdown" style={{ maxWidth: 130 }}>
+                        <InlineDropdown
+                          options={SOURCES}
+                          value={p.src}
+                          onChange={(v) => { changeSource(p.id, v); setOpenDropdownId(null) }}
+                          formatDisplay={(v) => ((v === 'Inbound Marketing' || v === 'Inbound') ? 'Inbound Mktg' : v)}
+                          buttonClassName=""
+                          buttonStyle={{ display: 'inline-block', borderRadius: 20, padding: '3px 7px', fontSize: 10, fontWeight: 600, border: 'none', cursor: 'pointer', maxWidth: 130, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...srcStyle }}
+                          open={openDropdownId?.profileId === p.id && openDropdownId?.field === 'source'}
+                          onOpenChange={(v) => { if (v) setOpenDropdownId({ profileId: p.id, field: 'source' }); else setOpenDropdownId(null) }}
+                          containerClassName="source-dropdown"
+                        />
+                      </div>
+                    </td>
+                    <td style={rowStyle}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 34, height: 34, borderRadius: 10, fontSize: 12, fontWeight: 700, ...scoreStyle }}>
+                        {p.sc ?? '—'}
+                      </span>
+                    </td>
+                    <td style={rowStyle} onClick={(e) => e.stopPropagation()}>
+                      <div className="maturite-dropdown">
+                        <InlineDropdown
+                          options={MATURITIES}
+                          value={p.mat}
+                          onChange={(v) => { changeMaturity(p.id, v); setOpenDropdownId(null) }}
+                          buttonStyle={(v) => ({ borderRadius: 20, padding: '3px 9px', fontSize: 11, border: 'none', cursor: 'pointer', ...(MATURITY_STYLES[v] || { bg: '#f8fafc', color: '#94a3b8' }) })}
+                          buttonClassName=""
+                          open={openDropdownId?.profileId === p.id && openDropdownId?.field === 'mat'}
+                          onOpenChange={(v) => { if (v) setOpenDropdownId({ profileId: p.id, field: 'mat' }); else setOpenDropdownId(null) }}
+                          containerClassName="maturite-dropdown"
+                        />
+                      </div>
+                    </td>
+                    <td style={rowStyle} onClick={(e) => e.stopPropagation()}>
+                      <div className="stade-dropdown">
+                        <InlineDropdown
+                          options={STAGES}
+                          value={p.stg}
+                          onChange={(v) => { changeStage(p.id, v); setOpenDropdownId(null) }}
+                          buttonStyle={(v) => ({ borderRadius: 20, padding: '3px 9px', fontSize: 11, border: 'none', cursor: 'pointer', ...(STAGE_STYLES[v] || { backgroundColor: '#f8fafc', color: '#94a3b8' }) })}
+                          buttonClassName=""
+                          placeholder="—"
+                          open={openDropdownId?.profileId === p.id && openDropdownId?.field === 'stade'}
+                          onOpenChange={(v) => { if (v) setOpenDropdownId({ profileId: p.id, field: 'stade' }); else setOpenDropdownId(null) }}
+                          containerClassName="stade-dropdown"
+                        />
+                      </div>
+                    </td>
+                    <td style={{ ...rowStyle, fontSize: 11, fontWeight: 500, color: sessionStr ? ACCENT : '#ddd' }}>
+                      {sessionStr || '—'}
+                    </td>
+                    <td style={{ ...rowStyle, fontSize: 11, color: '#ccc' }}>
+                      {formatAddedDate(p)}
+                    </td>
+                  </tr>
+                )
+              })
+            )}
           </tbody>
         </table>
+        </div>
       </div>
 
-      {editingCell?.rect && currentProfile && (editingCell.field === 'integ' || editingCell.integCustomMode) && (
-        <div
-          className="ddrop bg-[var(--surface)] border border-[var(--border)] rounded-lg shadow-lg p-1 min-w-[140px] max-h-[280px] overflow-y-auto"
-          style={{ position: 'fixed', left: editingCell.rect.left, top: editingCell.rect.bottom + 4, zIndex: DROPDOWN_Z }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {editingCell.field === 'integ' && !editingCell.integCustomMode && (
-            <>
-              {INTEG_OPTS.map((o) => (
-                <div key={o} className={`ddi py-1.5 px-2.5 rounded-md text-[13px] cursor-pointer hover:bg-[var(--s2)] ${(currentProfile.integ || '—') === o ? 'font-semibold' : ''}`} onClick={() => { changeInteg(currentProfile.id, o); setEditingCell(null); }}>{o}</div>
-              ))}
-              <div className="ddi border-t border-[var(--border)] mt-1 pt-1 py-1.5 px-2.5 rounded-md text-[13px] cursor-pointer hover:bg-[var(--s2)] text-[var(--accent)] font-medium" onClick={() => setEditingCell((c) => ({ ...c, integCustomMode: true, integCustomValue: '' }))}>{INTEG_ADD_DATE}</div>
-            </>
-          )}
-          {editingCell.field === 'integ' && editingCell.integCustomMode && (
-            <div className="p-2 space-y-2 min-w-[200px]">
-              <input type="text" className="inlin-input w-full py-1.5 px-2 text-[13px]" placeholder="ex: Mars 2027" value={editingCell.integCustomValue ?? ''} onChange={(e) => setEditingCell((c) => ({ ...c, integCustomValue: e.target.value }))} autoFocus />
-              <div className="flex gap-1.5">
-                <button type="button" className="btn bp bsm flex-1" onClick={() => { const v = (editingCell.integCustomValue || '').trim(); if (v) { changeInteg(currentProfile.id, v); setEditingCell(null); } }}>Valider</button>
-                <button type="button" className="btn bo bsm" onClick={() => setEditingCell((c) => ({ ...c, integCustomMode: false, integCustomValue: '' }))}>Annuler</button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
       {deleteModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.4)' }} onClick={() => setDeleteModalOpen(false)}>
-          <div className="rounded-xl border shadow-xl w-full max-w-md p-5" style={{ backgroundColor: '#F5F0E8', borderColor: 'var(--border)' }} onClick={(e) => e.stopPropagation()}>
-            <div className="flex flex-col items-center text-center mb-4">
-              <span className="mb-3"><IconWarning /></span>
-              <p className="text-[14px] font-medium mb-1">
+        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, background: 'rgba(0,0,0,0.4)' }} onClick={() => setDeleteModalOpen(false)}>
+          <div style={{ background: '#F5F0E8', borderRadius: 12, border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 4px 20px rgba(0,0,0,0.15)', maxWidth: 400, padding: 24 }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', marginBottom: 20 }}>
+              <span style={{ marginBottom: 12 }}><IconWarning /></span>
+              <p style={{ fontSize: 14, fontWeight: 500, margin: '0 0 4px', color: '#1A1A1A' }}>
                 {selectedCount === 1 ? 'Supprimer ce profil ?' : `Supprimer ${selectedCount} profils ?`}
               </p>
-              <p className="text-[13px] text-[var(--t2)]">
+              <p style={{ fontSize: 13, color: '#6B6B6B', margin: 0 }}>
                 {selectedCount === 1
                   ? 'Cette action est irréversible. Le profil sera définitivement supprimé de la base.'
                   : `Cette action est irréversible. Ces ${selectedCount} profils seront définitivement supprimés de la base.`}
               </p>
             </div>
-            <div className="flex gap-2 justify-end">
-              <button type="button" onClick={() => setDeleteModalOpen(false)} className="py-2 px-3 rounded-lg text-[13px] font-medium border" style={{ borderColor: ACCENT, color: ACCENT, background: 'transparent' }}>Annuler</button>
-              <button type="button" onClick={confirmDelete} className="flex items-center gap-1.5 py-2 px-3 rounded-lg text-[13px] font-medium" style={{ backgroundColor: '#dc2626', color: 'white' }}><IconTrash /> Confirmer la suppression</button>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button type="button" onClick={() => setDeleteModalOpen(false)} style={{ padding: '8px 16px', fontSize: 13, fontWeight: 500, borderRadius: 8, border: `1px solid ${ACCENT}`, background: 'transparent', color: ACCENT, cursor: 'pointer' }}>Annuler</button>
+              <button type="button" onClick={confirmDelete} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 13, fontWeight: 500, borderRadius: 8, background: '#dc2626', color: 'white', border: 'none', cursor: 'pointer' }}><IconTrash /> Confirmer la suppression</button>
             </div>
           </div>
         </div>

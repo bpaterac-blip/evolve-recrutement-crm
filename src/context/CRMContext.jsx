@@ -42,17 +42,26 @@ function mapRowToProfile(row) {
     mail: row.email ?? '—',
     li: row.linkedin_url ?? '—',
     experiences,
-    dur: '',
+    dur: row.duration ?? '',
     notes: '',
     acts: [],
     sequence_lemlist: row.sequence_lemlist ?? '',
     lead_status: row.lead_status ?? '',
     session_formation_id: row.session_formation_id ?? null,
+    integration_confirmed: row.integration_confirmed ?? false,
+    integration_periode: row.integration_periode ?? null,
+    integration_annee: row.integration_annee ?? null,
     owner_id: row.owner_id ?? null,
     owner_email: row.owner_email ?? null,
     owner_full_name: row.owner_full_name ?? null,
     next_event_date: row.next_event_date ?? null,
     next_event_label: row.next_event_label ?? null,
+    chute_stade: row.chute_stade ?? null,
+    chute_type: row.chute_type ?? null,
+    chute_detail: row.chute_detail ?? null,
+    chute_date: row.chute_date ?? null,
+    grille_notation: row.grille_notation ?? {},
+    grille_commentaires: row.grille_commentaires ?? null,
   }
 }
 
@@ -75,8 +84,12 @@ function mapProfileToRow(profile) {
     sequence_lemlist: profile.sequence_lemlist ?? '',
     integration_date: profile.integ ?? '—',
     lead_status: profile.lead_status ?? '',
+    integration_periode: profile.integration_periode ?? null,
+    integration_annee: profile.integration_annee ?? null,
     next_event_date: profile.next_event_date ?? null,
     next_event_label: profile.next_event_label ?? null,
+    grille_notation: profile.grille_notation ?? {},
+    grille_commentaires: profile.grille_commentaires ?? null,
   }
   if (experiences.length) row.experiences = experiences
   return row

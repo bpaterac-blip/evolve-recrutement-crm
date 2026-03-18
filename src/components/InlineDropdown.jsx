@@ -10,9 +10,18 @@ const DROPDOWN_Z = 9999
  * @param {Object|(v: string) => Object} buttonStyle - Style du bouton (objet ou fonction de la valeur)
  * @param {string} [buttonClassName] - Classes CSS du bouton (optionnel, ex. "tag tag-btn tb")
  * @param {string} [placeholder] - Texte si valeur vide
+ * @param {boolean} [open] - Controlled: état ouvert (optionnel)
+ * @param {(v: boolean) => void} [onOpenChange] - Controlled: callback changement état (optionnel)
+ * @param {string} [containerClassName] - Classe pour le conteneur (pour click-outside)
  */
-export default function InlineDropdown({ options, value, onChange, buttonStyle = {}, buttonClassName = '', placeholder = '—' }) {
-  const [open, setOpen] = useState(false)
+export default function InlineDropdown({ options, value, onChange, buttonStyle = {}, buttonClassName = '', placeholder = '—', formatDisplay, open: openProp, onOpenChange, containerClassName = '' }) {
+  const [openInternal, setOpenInternal] = useState(false)
+  const isControlled = openProp !== undefined
+  const open = isControlled ? openProp : openInternal
+  const setOpen = (v) => {
+    if (isControlled) onOpenChange?.(typeof v === 'function' ? v(open) : v)
+    else setOpenInternal(typeof v === 'function' ? v(openInternal) : v)
+  }
   const [rect, setRect] = useState(null)
   const buttonRef = useRef(null)
 
@@ -25,22 +34,22 @@ export default function InlineDropdown({ options, value, onChange, buttonStyle =
   }, [open])
 
   useEffect(() => {
-    if (!open) return
+    if (!open || isControlled) return
     const close = () => setOpen(false)
     window.addEventListener('click', close)
     return () => window.removeEventListener('click', close)
-  }, [open])
+  }, [open, isControlled])
 
   return (
-    <>
+    <div className={containerClassName} style={{ position: 'relative', display: 'inline-block' }}>
       <button
         ref={buttonRef}
         type="button"
         className={buttonClassName}
-        style={{ ...resolvedStyle, cursor: 'pointer', padding: '6px 10px', fontSize: 13, borderRadius: 6, border: 'none' }}
+        style={{ cursor: 'pointer', padding: '6px 10px', fontSize: 13, borderRadius: 6, border: 'none', ...resolvedStyle }}
         onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
       >
-        {(value || placeholder).toString().trim() || placeholder} ▾
+        {(formatDisplay ? formatDisplay(value) : (value || placeholder)).toString().trim() || placeholder} ▾
       </button>
       {open && rect && (
         <div
@@ -60,6 +69,6 @@ export default function InlineDropdown({ options, value, onChange, buttonStyle =
           ))}
         </div>
       )}
-    </>
+    </div>
   )
 }

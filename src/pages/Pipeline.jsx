@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useCRM } from '../context/CRMContext'
 import { EVENTS_TABLE } from '../context/CRMContext'
 import { useAuth } from '../context/AuthContext'
 import { useViewMode } from '../context/ViewModeContext'
-import { enrichProfileWithNetrows } from '../lib/netrows'
-import { scoreProfile, getExperienceBadge } from '../lib/scoring'
+import { getExperienceBadge } from '../lib/scoring'
 import {
   STAGES,
   STAGE_COLORS,
@@ -16,11 +15,13 @@ import {
   EVENT_TYPES,
   SOURCES,
   REGIONS,
-  INTEG_OPTS,
-  INTEG_ADD_DATE,
 } from '../lib/data'
+
+const SESSION_CIBLE_STAGES = ["Point d'étape téléphonique", "Point d'étape", 'R2 Amaury', 'Point juridique', 'Démission reconversion', 'Intégration', 'Recruté']
 import InlineDropdown from '../components/InlineDropdown'
 import ScoreCorrectionModal from '../components/ScoreCorrectionModal'
+import ChuteModal from '../components/ChuteModal'
+import GrilleNotationTab from '../components/GrilleNotationTab'
 import {
   IconEnvelope,
   IconLink,
@@ -43,8 +44,6 @@ import {
   IconEvent,
 } from '../components/Icons'
 
-const IconLinkedIn = () => <svg width={14} height={14} viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
-
 function formatActivityDate(ts) {
   if (!ts) return ''
   const d = new Date(ts)
@@ -58,6 +57,35 @@ function capFirst(str) {
 
 const ICON_SM = { width: 13, height: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#1A1A1A' }
 
+const STAGE_BORDER_COLORS = {
+  R0: '#3b82f6',
+  R1: '#10b981',
+  "Point d'étape téléphonique": '#f59e0b',
+  "Point d'étape": '#f59e0b',
+  'R2 Amaury': '#ef4444',
+  'Point juridique': '#8b5cf6',
+  'Démission reconversion': '#f97316',
+  Intégration: '#10b981',
+  Recruté: '#173731',
+  Démission: '#f97316',
+}
+
+const MATURITY_BADGE_STYLES = {
+  Chaud: { backgroundColor: '#fff1f2', color: '#e11d48' },
+  Tiède: { backgroundColor: '#fff7ed', color: '#ea580c' },
+  Froid: { backgroundColor: '#f8fafc', color: '#94a3b8' },
+  Chute: { backgroundColor: '#fff1f2', color: '#e11d48', fontStyle: 'italic' },
+  Archivé: { backgroundColor: '#f8fafc', color: '#94a3b8' },
+  'Très chaud': { backgroundColor: '#fff1f2', color: '#e11d48' },
+}
+
+function getScoreBadgeStyle(score) {
+  if (score == null) return { backgroundColor: '#f8fafc', color: '#94a3b8' }
+  if (score >= 70) return { backgroundColor: '#dcfce7', color: '#15803d' }
+  if (score >= 50) return { backgroundColor: '#fefce8', color: '#a16207' }
+  return { backgroundColor: '#f8fafc', color: '#94a3b8' }
+}
+
 function hashToColor(str) {
   if (!str) return { bg: '#E5E7EB', text: '#6B7280' }
   let h = 0
@@ -67,133 +95,140 @@ function hashToColor(str) {
   return { bg: hues[idx] + '20', text: hues[idx] }
 }
 
-function KanbanCard({ profile, stage, onClick, isSelected, ownerBadge }) {
-  const matColor = MATURITY_COLORS[profile.mat] || { bg: '#F3F4F6', text: '#6B7280' }
+function formatShortDate(dateStr) {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+}
 
-  const handleClick = () => onClick(profile)
+function KanbanCard({ profile, stage, onClick, isSelected, ownerBadge, nextEvent }) {
+  const handleClick = () => onClick?.(profile)
+
+  const hasUpcomingEvent = nextEvent && (nextEvent.event_date || nextEvent.date)
+  const displayDate = hasUpcomingEvent
+    ? formatShortDate(nextEvent.event_date || nextEvent.date)
+    : (profile.created_at ? formatShortDate(profile.created_at) : profile.dt || '')
+  const dateColor = hasUpcomingEvent ? '#D2AB76' : '#ccc'
+  const eventTypeLabel = hasUpcomingEvent && (nextEvent.event_type || (nextEvent.content || '').split(' — ')[0]) ? (nextEvent.event_type || (nextEvent.content || '').split(' — ')[0]) : ''
+
+  const borderColor = STAGE_BORDER_COLORS[stage] || '#94a3b8'
+  const matStyle = MATURITY_BADGE_STYLES[profile.mat] || { backgroundColor: '#f8fafc', color: '#94a3b8' }
+  const scoreStyle = getScoreBadgeStyle(profile.sc)
+  const isChute = profile.mat === 'Chute'
+  const sessionLabel = profile.integration_periode && profile.integration_annee
+    ? `${profile.integration_periode} ${profile.integration_annee}`
+    : profile.session_formation_id
+      ? 'Session assignée'
+      : null
 
   return (
     <div
-      className="kanban-card"
+      className={`kanban-card${isSelected ? ' selected' : ''}`}
       draggable={true}
       onDragStart={(e) => e.dataTransfer.setData('profileId', String(profile.id))}
       onClick={handleClick}
+      onMouseEnter={(e) => {
+        if (!isSelected) {
+          e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)'
+          e.currentTarget.style.transform = 'translateY(-1px)'
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!isSelected) {
+          e.currentTarget.style.boxShadow = ''
+          e.currentTarget.style.transform = ''
+        }
+      }}
       style={{
-        background: 'white',
-        borderRadius: 10,
-        padding: 16,
+        background: '#ffffff',
+        borderRadius: 12,
+        border: `1px solid rgba(0,0,0,0.06)`,
+        borderLeft: `3px ${isChute ? 'dashed' : 'solid'} ${borderColor}`,
+        padding: 14,
         marginBottom: 8,
-        cursor: 'grab',
-        borderLeft: `3px solid ${matColor.text}`,
-        boxShadow: isSelected ? '0 0 0 2px #173731' : '0 1px 3px rgba(0,0,0,0.08)',
-        transition: 'box-shadow 0.15s',
+        cursor: 'pointer',
+        transition: 'all 0.15s',
+        position: 'relative',
+        overflow: 'hidden',
+        opacity: isChute ? 0.5 : 1,
+        boxShadow: isSelected ? '0 0 0 2px #173731' : 'none',
         width: '100%',
       }}
     >
-      {/* LIGNE 1 - Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-        <div
-          style={{
-            width: 32,
-            height: 32,
-            borderRadius: '50%',
-            background: '#173731',
-            color: 'white',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 12,
-            fontWeight: 600,
-            flexShrink: 0,
-          }}
-        >
-          {(profile.fn?.[0] || '') + (profile.ln?.[0] || '')}
+      {/* Ligne 1 - Avatar + Nom | Score */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
+          <div
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: '50%',
+              background: '#173731',
+              color: '#D2AB76',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 11,
+              fontWeight: 600,
+              flexShrink: 0,
+            }}
+          >
+            {(profile.fn?.[0] || '') + (profile.ln?.[0] || '')}
+          </div>
+          <span style={{ fontSize: 12, fontWeight: 700, color: '#173731', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile.fn} {profile.ln}</span>
         </div>
-        <div style={{ fontWeight: 600, fontSize: 14, minWidth: 0, color: '#1A1A1A', flex: 1 }}>{profile.fn} {profile.ln}</div>
-        {ownerBadge && (
-          <span style={{ fontSize: 10, fontWeight: 600, width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, backgroundColor: ownerBadge.bg, color: ownerBadge.text }} title={profile.owner_full_name || profile.owner_email || ''}>{ownerBadge.initial}</span>
-        )}
+        <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 6, flexShrink: 0, ...scoreStyle }}>{profile.sc ?? '—'}</span>
       </div>
 
-      {/* LIGNE 2 - Employeur */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-        <span style={ICON_SM}><IconBuilding /></span>
-        <span style={{ fontSize: 13, color: '#1A1A1A' }}>{profile.co || '—'}</span>
+      {/* Ligne 2 - Employeur */}
+      <div style={{ fontSize: 11, color: '#aaa', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: 2 }}>
+        {profile.co || '—'}
       </div>
 
-      {/* LIGNE 3 - Ville */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-        <span style={ICON_SM}><IconMapPin /></span>
-        <span style={{ fontSize: 12, color: '#1A1A1A' }}>{profile.city || '—'}</span>
+      {/* Ligne 3 - Ville · Région */}
+      <div style={{ fontSize: 10, color: '#ccc', marginBottom: 8 }}>
+        {[profile.city, profile.region].filter(Boolean).join(' · ') || '—'}
       </div>
 
-      {/* LIGNE 4 - Région */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-        <span style={ICON_SM}><IconMap /></span>
-        <span style={{ fontSize: 12, color: '#1A1A1A' }}>{profile.region || '—'}</span>
+      {/* Ligne 4 - Badge maturité | Date */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
+        <span style={{ fontSize: 10, borderRadius: 20, padding: '2px 7px', fontWeight: 600, ...matStyle }}>
+          {profile.mat}
+        </span>
+        <span style={{ fontSize: 10, fontWeight: 600, color: dateColor }} title={eventTypeLabel || undefined}>
+          {stage === 'Recruté' ? 'Intégré ✓' : displayDate}
+        </span>
       </div>
 
-      {/* LIGNE 5 - Badge Source */}
-      {profile.src && (
-        <div style={{ marginBottom: 4 }}>
-          <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, background: '#F3F4F6', color: '#1A1A1A' }}>
-            {profile.src}
+      {/* Badge session si session_formation_id ou période renseignée */}
+      {sessionLabel && (
+        <div style={{ marginTop: 6 }}>
+          <span style={{ display: 'inline-block', background: '#f0fdf4', color: '#15803d', fontSize: 9, fontWeight: 600, padding: '2px 6px', borderRadius: 20 }}>
+            {sessionLabel}
           </span>
         </div>
       )}
 
-      {/* LIGNE 6 - Badge Maturité */}
-      <div style={{ marginBottom: 6 }}>
-        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, background: matColor.bg, color: matColor.text }}>
-          {profile.mat}
-        </span>
-      </div>
-
-      {/* LIGNE 7 - Intégration potentielle */}
-      {profile.integ && profile.integ !== '—' && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-          <span style={ICON_SM}><IconCalendar /></span>
-          <span style={{ fontSize: 12, color: '#1A1A1A' }}>{profile.integ}</span>
-        </div>
+      {ownerBadge && (
+        <span style={{ position: 'absolute', top: 10, right: 10, fontSize: 10, fontWeight: 600, width: 18, height: 18, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: ownerBadge.bg, color: ownerBadge.text }} title={profile.owner_full_name || profile.owner_email || ''}>{ownerBadge.initial}</span>
       )}
-
-      {/* LIGNE 8 - Footer */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: profile.integ && profile.integ !== '—' ? 0 : 2 }}>
-        <span style={{ fontSize: 11, color: '#1A1A1A' }}>
-          {profile.created_at
-            ? new Date(profile.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
-            : profile.dt || ''}
-        </span>
-        {stage !== 'Recruté' ? (
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation() }}
-            style={{
-              fontSize: 11,
-              padding: '3px 10px',
-              borderRadius: 6,
-              border: '1px solid #E5E0D8',
-              background: 'transparent',
-              cursor: 'pointer',
-              color: '#1A1A1A',
-            }}
-          >
-            + RDV
-          </button>
-        ) : (
-          <span style={{ fontSize: 10, color: '#1A1A1A' }}>Intégré ✓</span>
-        )}
-      </div>
     </div>
   )
 }
 
-function DroppableColumn({ stage, cards, onCardClick, selectedCardId, onDrop, showOwnerBadge }) {
-  const c = STAGE_COLORS[stage] || {}
+function hexWithOpacity(hex, opacity) {
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  return `rgba(${r},${g},${b},${opacity})`
+}
+
+function DroppableColumn({ stage, cards, onCardClick, selectedCardId, onDrop, showOwnerBadge, nextEventsByProfileId }) {
+  const stageColor = STAGE_BORDER_COLORS[stage] || '#94a3b8'
 
   return (
     <div
-      className="kcol w-[215px] shrink-0 flex flex-col gap-1.5"
+      className="kcol w-[215px] shrink-0 flex flex-col"
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
         e.preventDefault()
@@ -201,18 +236,40 @@ function DroppableColumn({ stage, cards, onCardClick, selectedCardId, onDrop, sh
         if (profileId) onDrop(profileId, stage)
       }}
     >
-      <div className="kch flex items-center justify-between py-2 px-3 rounded-lg text-xs font-semibold" style={{ background: c.bg, color: c.text }}>
-        <span>{stage}</span>
-        <span className="bg-white/60 py-0.5 px-1.5 rounded-[10px] text-[11px]">{cards.length}</span>
+      <div
+        style={{
+          background: '#ffffff',
+          borderRadius: 10,
+          borderTop: `3px solid ${stageColor}`,
+          padding: '8px 12px',
+          marginBottom: 12,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+        }}
+      >
+        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: stageColor }}>
+          {stage}
+        </span>
+        <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: hexWithOpacity(stageColor, 0.1), color: stageColor }}>
+          {cards.length}
+        </span>
       </div>
       <div className="flex flex-col gap-1.5 min-h-[80px]">
-        {cards.map((p) => {
-          const ownerBadge = showOwnerBadge && (p.owner_email || p.owner_id) ? {
-            initial: (p.owner_full_name?.trim()?.[0] || (p.owner_email || '').split('@')[0]?.[0] || '?').toUpperCase(),
-            ...hashToColor(p.owner_email || String(p.owner_id)),
-          } : null
-          return <KanbanCard key={p.id} profile={p} stage={stage} onClick={onCardClick} isSelected={p.id === selectedCardId} ownerBadge={ownerBadge} />
-        })}
+        {cards.length === 0 ? (
+          <div style={{ border: '1.5px dashed rgba(0,0,0,0.08)', borderRadius: 12, height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#ddd' }}>
+            Aucun profil
+          </div>
+        ) : (
+          cards.map((p) => {
+            const ownerBadge = showOwnerBadge && (p.owner_email || p.owner_id) ? {
+              initial: (p.owner_full_name?.trim()?.[0] || (p.owner_email || '').split('@')[0]?.[0] || '?').toUpperCase(),
+              ...hashToColor(p.owner_email || String(p.owner_id)),
+            } : null
+            return <KanbanCard key={p.id} profile={p} stage={stage} onClick={onCardClick} isSelected={p.id === selectedCardId} ownerBadge={ownerBadge} nextEvent={nextEventsByProfileId?.[p.id]} />
+          })
+        )}
       </div>
     </div>
   )
@@ -220,14 +277,26 @@ function DroppableColumn({ stage, cards, onCardClick, selectedCardId, onDrop, sh
 
 const NOTE_TEMPLATE_OPTS = ['Note libre', 'Récapitulatif R0', 'Récapitulatif R1', "Récapitulatif Point d'étape"]
 
+const ACCENT = '#173731'
+const GOLD = '#D2AB76'
+
+function formatSessionDate(dateStr) {
+  if (!dateStr) return '—'
+  const d = new Date(dateStr)
+  const s = d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+  return s.charAt(0).toUpperCase() + s.slice(1)
+}
+
 export default function Pipeline() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const stageFilter = searchParams.get('stage')
   const { user, userProfile, role } = useAuth()
   const { viewMode } = useViewMode()
-  const { filteredProfiles, changeStage, changeMaturity, changeInteg, changeSource, changeRegion, updateProfileField, updateProfile, showNotif, useSupabase, fetchProfiles } = useCRM()
+  const { filteredProfiles, changeStage, changeMaturity, changeSource, changeRegion, updateProfileField, updateProfile, showNotif, useSupabase, fetchProfiles } = useCRM()
   const isGlobalView = role === 'admin' && viewMode === 'global'
-  const pipeline = filteredProfiles.filter((p) => p.stg && p.stg !== 'Recruté' && p.mat !== 'Archivé')
-  const all = filteredProfiles.filter((p) => p.stg && p.mat !== 'Archivé')
+  const pipeline = filteredProfiles.filter((p) => p.stg && p.stg !== '' && p.stg !== 'Recruté' && p.mat !== 'Archivé' && p.mat !== 'Chute')
+  const all = filteredProfiles.filter((p) => p.stg && p.stg !== '' && p.mat !== 'Archivé' && p.mat !== 'Chute')
   const [modalProfile, setModalProfile] = useState(null)
   const [selectedCardId, setSelectedCardId] = useState(null)
   const [modalTab, setModalTab] = useState('notes')
@@ -252,16 +321,79 @@ export default function Pipeline() {
   const [confirmDeleteEvent, setConfirmDeleteEvent] = useState(null)
   const [editingField, setEditingField] = useState(null)
   const [editValue, setEditValue] = useState('')
-  const [integCustomMode, setIntegCustomMode] = useState(false)
+  const [availableSessions, setAvailableSessions] = useState([])
   const [expandedNoteId, setExpandedNoteId] = useState(null)
   const [expandedEventId, setExpandedEventId] = useState(null)
   const [enriching, setEnriching] = useState(false)
   const [scoreCorrectionOpen, setScoreCorrectionOpen] = useState(false)
   const [pendingStageChange, setPendingStageChange] = useState(null)
+  const [pendingSessions, setPendingSessions] = useState([])
+  const [pendingSessionId, setPendingSessionId] = useState('')
   const [stageChangeDate, setStageChangeDate] = useState('')
   const [stageChangeNotes, setStageChangeNotes] = useState('')
+  const [profileToAssign, setProfileToAssign] = useState(null)
+  const [showSessionModal, setShowSessionModal] = useState(false)
+  const [sessions, setSessions] = useState([])
+  const [sessionsWithCount, setSessionsWithCount] = useState([])
+  const [sessionsLoading, setSessionsLoading] = useState(false)
+  const [selectedSession, setSelectedSession] = useState('')
+  const [showCreateSession, setShowCreateSession] = useState(false)
+  const [newSession, setNewSession] = useState({
+    date_session: '',
+    lieu: '',
+    places_total: 6,
+    statut: 'planifiée',
+    notes: '',
+  })
+  const [chuteModalProfile, setChuteModalProfile] = useState(null)
+  const [showStadeDropdown, setShowStadeDropdown] = useState(false)
+  const [showMaturiteDropdown, setShowMaturiteDropdown] = useState(false)
+  const [showSourceDropdown, setShowSourceDropdown] = useState(false)
+  const [nextEventsByProfileId, setNextEventsByProfileId] = useState({})
 
   const displayProfile = modalProfile ? (filteredProfiles.find((p) => p.id === modalProfile.id) || modalProfile) : null
+
+  useEffect(() => {
+    const loadNextEvents = async () => {
+      const ids = all.map((p) => p.id).filter(Boolean)
+      if (ids.length === 0) { setNextEventsByProfileId({}); return }
+      const today = new Date().toISOString().split('T')[0]
+      const { data } = await supabase
+        .from('events')
+        .select('id, profile_id, event_date, event_type, date, content')
+        .in('profile_id', ids)
+      const eventsList = data || []
+      const byProfile = {}
+      eventsList.forEach((ev) => {
+        const d = ev.event_date || ev.date || ev.created_at
+        if (!d) return
+        const dateStr = typeof d === 'string' ? d.split('T')[0] : new Date(d).toISOString().split('T')[0]
+        if (dateStr < today) return
+        const pid = ev.profile_id
+        const current = byProfile[pid]
+        const currentStr = current ? (typeof (current.event_date || current.date) === 'string' ? (current.event_date || current.date).split('T')[0] : new Date(current.event_date || current.date).toISOString().split('T')[0]) : ''
+        if (!current || dateStr < currentStr) byProfile[pid] = ev
+      })
+      setNextEventsByProfileId(byProfile)
+    }
+    loadNextEvents()
+  }, [all.map((p) => p.id).sort().join(',')])
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.stade-dropdown')) setShowStadeDropdown(false)
+      if (!e.target.closest('.maturite-dropdown')) setShowMaturiteDropdown(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  useEffect(() => {
+    if (!modalProfile) {
+      setShowStadeDropdown(false)
+      setShowMaturiteDropdown(false)
+    }
+  }, [modalProfile])
 
   const MOIS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sept', 'Oct', 'Nov', 'Déc']
   const formatExperiencePeriod = (exp) => {
@@ -279,24 +411,6 @@ export default function Pipeline() {
     return `${startStr} - ${endStr} (${years} an${years > 1 ? 's' : ''})`
   }
 
-  const handleEnrichNetrows = async () => {
-    if (!displayProfile?.li) return
-    setEnriching(true)
-    try {
-      const result = await enrichProfileWithNetrows(displayProfile.li)
-      const { score } = scoreProfile(displayProfile, result.experiences)
-      updateProfile(displayProfile.id, { experiences: result.experiences, sc: score })
-      if (useSupabase) {
-        await supabase.from('profiles').update({ experiences: result.experiences, score }).eq('id', displayProfile.id)
-      }
-      showNotif('Profil enrichi ✓')
-    } catch (err) {
-      showNotif(`Erreur Netrows : ${err?.message}`)
-    } finally {
-      setEnriching(false)
-    }
-  }
-
   useEffect(() => {
     if (!modalProfile?.id) return
     setLoadingDetail(true)
@@ -312,20 +426,76 @@ export default function Pipeline() {
   }, [modalProfile?.id])
 
   useEffect(() => {
+    const loadSessions = async () => {
+      const today = new Date().toISOString().split('T')[0]
+      const { data } = await supabase
+        .from('sessions_formation')
+        .select('id, periode, annee, date_session, statut')
+        .gte('date_session', today)
+        .order('date_session', { ascending: true })
+      setAvailableSessions(data || [])
+    }
+    if (modalProfile) loadSessions()
+    else setAvailableSessions([])
+  }, [modalProfile])
+
+  useEffect(() => {
     setNoteContent(NOTE_TEMPLATES[noteTemplate] ?? '')
   }, [noteTemplate])
+
+  useEffect(() => {
+    if (!showSessionModal || !profileToAssign) return
+    const loadSessions = async () => {
+      setSessionsLoading(true)
+      const today = new Date().toISOString().split('T')[0]
+      const { data } = await supabase
+        .from('sessions_formation')
+        .select('*')
+        .gte('date_session', today)
+        .order('date_session', { ascending: true })
+      const list = data || []
+      setSessions(list)
+      const withCount = await Promise.all(
+        list.map(async (s) => {
+          const { count } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('session_formation_id', s.id)
+          return { ...s, inscrits: count ?? 0 }
+        })
+      )
+      setSessionsWithCount(withCount)
+      setSessionsLoading(false)
+      if (!list.length) setShowCreateSession(true)
+      else setShowCreateSession(false)
+      setSelectedSession(profileToAssign.session_formation_id || '')
+    }
+    loadSessions()
+  }, [showSessionModal, profileToAssign?.id, profileToAssign?.session_formation_id])
 
   useEffect(() => {
     if (!modalProfile) return
     const onKey = (e) => {
       if (e.key === 'Escape') {
-        if (editingField) { setEditingField(null); setEditValue(''); setIntegCustomMode(false) }
+        if (editingField) { setEditingField(null); setEditValue('') }
         else { setModalProfile(null); setSelectedCardId(null) }
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [modalProfile, editingField])
+
+  useEffect(() => {
+    if (pendingStageChange?.newStage === "Point d'étape téléphonique" || pendingStageChange?.newStage === "Point d'étape") {
+      const today = new Date().toISOString().split('T')[0]
+      supabase
+        .from('sessions_formation')
+        .select('id, periode, annee, date_session')
+        .gte('date_session', today)
+        .order('date_session', { ascending: true })
+        .then(({ data }) => setPendingSessions(data || []))
+    } else {
+      setPendingSessions([])
+      setPendingSessionId('')
+    }
+  }, [pendingStageChange?.newStage])
 
   const loadNotes = async () => {
     if (!modalProfile?.id) return
@@ -465,12 +635,22 @@ export default function Pipeline() {
     })
     const { data } = await supabase.from('activities').select('*').eq('profile_id', modalProfile.id).order('created_at', { ascending: false }).limit(10)
     setActivities(data || [])
+    if (v === 'Recruté') {
+      setModalProfile(null)
+      setSelectedCardId(null)
+      setProfileToAssign({ ...displayProfile, session_formation_id: displayProfile.session_formation_id, stg: 'Recruté' })
+      setShowSessionModal(true)
+    }
   }
 
   const handleChangeMaturity = async (v) => {
     if (!displayProfile?.id || !modalProfile?.id) return
     const oldValue = displayProfile.mat ?? '—'
     if (oldValue === v) return
+    if (v === 'Chute') {
+      setChuteModalProfile(displayProfile)
+      return
+    }
     changeMaturity(displayProfile.id, v)
     await supabase.from('activities').insert({
       profile_id: modalProfile.id,
@@ -484,9 +664,28 @@ export default function Pipeline() {
     setActivities(data || [])
   }
 
-  const handleDrop = (profileId, newStage) => {
+  const handleDrop = async (profileId, newStage) => {
     const profile = all.find((p) => String(p.id) === String(profileId))
     if (!profile || profile.stg === newStage) return
+    if (newStage === 'Recruté') {
+      const oldStage = profile.stg ?? '—'
+      changeStage(profileId, newStage)
+      if (useSupabase) {
+        await supabase.from('profiles').update({ stage: 'Recruté' }).eq('id', profile.id)
+        await supabase.from('activities').insert({
+          profile_id: profile.id,
+          type: 'stage_change',
+          note: `${oldStage} → Recruté`,
+          date: new Date().toISOString().split('T')[0],
+          icon: 'refresh',
+          source: 'manual',
+        })
+        fetchProfiles()
+      }
+      setProfileToAssign({ id: profile.id, fn: profile.fn, ln: profile.ln, session_formation_id: profile.session_formation_id, stg: 'Recruté' })
+      setShowSessionModal(true)
+      return
+    }
     setPendingStageChange({ profileId, profile, newStage })
     setStageChangeDate('')
     setStageChangeNotes('')
@@ -495,6 +694,28 @@ export default function Pipeline() {
   const handleConfirmStageChange = async () => {
     if (!pendingStageChange) return
     const { profileId, profile, newStage } = pendingStageChange
+    if (newStage === 'Recruté') {
+      const oldStage = profile.stg ?? '—'
+      changeStage(profileId, newStage)
+      if (useSupabase) {
+        await supabase.from('profiles').update({ stage: 'Recruté' }).eq('id', profile.id)
+        await supabase.from('activities').insert({
+          profile_id: profile.id,
+          type: 'stage_change',
+          note: `${oldStage} → Recruté`,
+          date: new Date().toISOString().split('T')[0],
+          icon: 'refresh',
+          source: 'manual',
+        })
+        fetchProfiles()
+      }
+      setPendingStageChange(null)
+      setStageChangeDate('')
+      setStageChangeNotes('')
+      setProfileToAssign({ id: profile.id, fn: profile.fn, ln: profile.ln, session_formation_id: profile.session_formation_id, stg: 'Recruté' })
+      setShowSessionModal(true)
+      return
+    }
     const oldStage = profile.stg ?? '—'
     changeStage(profileId, newStage)
     if (useSupabase) {
@@ -506,6 +727,16 @@ export default function Pipeline() {
         await supabase.from(EVENTS_TABLE).insert(eventRow)
         window.dispatchEvent(new CustomEvent('evolve:event-added'))
       }
+      if (pendingSessionId && (newStage === "Point d'étape téléphonique" || newStage === "Point d'étape")) {
+        const session = pendingSessions.find((s) => s.id === pendingSessionId)
+        await supabase.from('profiles').update({
+          session_formation_id: pendingSessionId,
+          integration_periode: session?.periode ?? null,
+          integration_annee: session?.annee ?? null,
+          integration_confirmed: false,
+        }).eq('id', profile.id)
+        updateProfile(profile.id, { session_formation_id: pendingSessionId, integration_periode: session?.periode, integration_annee: session?.annee, integration_confirmed: false })
+      }
       await supabase.from('activities').insert({
         profile_id: profile.id,
         type: 'stage_change',
@@ -516,18 +747,52 @@ export default function Pipeline() {
       })
       fetchProfiles()
     }
-    setPendingStageChange(null)
     setStageChangeDate('')
     setStageChangeNotes('')
+    setPendingSessionId('')
+    setPendingSessions([])
+    setPendingStageChange(null)
   }
 
   const handleSkipStageChangeDate = async () => {
     if (!pendingStageChange) return
     const { profileId, profile, newStage } = pendingStageChange
+    if (newStage === 'Recruté') {
+      const oldStage = profile.stg ?? '—'
+      changeStage(profileId, newStage)
+      if (useSupabase) {
+        await supabase.from('profiles').update({ stage: 'Recruté' }).eq('id', profile.id)
+        await supabase.from('activities').insert({
+          profile_id: profile.id,
+          type: 'stage_change',
+          note: `${oldStage} → Recruté`,
+          date: new Date().toISOString().split('T')[0],
+          icon: 'refresh',
+          source: 'manual',
+        })
+        fetchProfiles()
+      }
+      setPendingStageChange(null)
+      setStageChangeDate('')
+      setStageChangeNotes('')
+      setProfileToAssign({ id: profile.id, fn: profile.fn, ln: profile.ln, session_formation_id: profile.session_formation_id, stg: 'Recruté' })
+      setShowSessionModal(true)
+      return
+    }
     const oldStage = profile.stg ?? '—'
     changeStage(profileId, newStage)
     if (useSupabase) {
       await supabase.from('profiles').update({ stage: newStage }).eq('id', profile.id)
+      if (pendingSessionId && (newStage === "Point d'étape téléphonique" || newStage === "Point d'étape")) {
+        const session = pendingSessions.find((s) => s.id === pendingSessionId)
+        await supabase.from('profiles').update({
+          session_formation_id: pendingSessionId,
+          integration_periode: session?.periode ?? null,
+          integration_annee: session?.annee ?? null,
+          integration_confirmed: false,
+        }).eq('id', profile.id)
+        updateProfile(profile.id, { session_formation_id: pendingSessionId, integration_periode: session?.periode, integration_annee: session?.annee, integration_confirmed: false })
+      }
       await supabase.from('activities').insert({
         profile_id: profile.id,
         type: 'stage_change',
@@ -538,9 +803,11 @@ export default function Pipeline() {
       })
       fetchProfiles()
     }
-    setPendingStageChange(null)
     setStageChangeDate('')
     setStageChangeNotes('')
+    setPendingSessionId('')
+    setPendingSessions([])
+    setPendingStageChange(null)
   }
 
   const matColor = (m) => MATURITY_COLORS[m] || { bg: '#F3F4F6', text: '#6B7280' }
@@ -548,18 +815,23 @@ export default function Pipeline() {
   const stag = (s) => ({ background: stageColor(s).bg, color: stageColor(s).text })
   const matStyle = (m) => ({ background: matColor(m).bg, color: matColor(m).text })
 
+  const MODAL_MAT_STYLES = { Froid: { bg: '#f8fafc', color: '#94a3b8' }, Tiède: { bg: '#fff7ed', color: '#ea580c' }, Chaud: { bg: '#fff1f2', color: '#e11d48' }, 'Très chaud': { bg: '#fff1f2', color: '#e11d48' }, Chute: { bg: '#fff1f2', color: '#e11d48' }, Archivé: { bg: '#f8fafc', color: '#94a3b8' } }
+  const MODAL_STAGE_STYLES = { R0: { bg: '#eff6ff', color: '#1d4ed8' }, R1: { bg: '#f0fdf4', color: '#15803d' }, "Point d'étape": { bg: '#fefce8', color: '#a16207' }, "Point d'étape téléphonique": { bg: '#fefce8', color: '#a16207' }, 'R2 Amaury': { bg: '#fff7ed', color: '#c2410c' }, 'Point juridique': { bg: '#f5f3ff', color: '#6d28d9' }, 'Démission reconversion': { bg: '#fff7ed', color: '#ea580c' }, Intégration: { bg: '#f0fdf4', color: '#15803d' }, Recruté: { bg: '#f0fdf4', color: '#15803d' }, Démission: { bg: '#fff7ed', color: '#ea580c' } }
+  const MODAL_SOURCE_STYLES = { 'Chasse LinkedIn': { bg: '#eff6ff', color: '#1d4ed8' }, 'Chasse Mail': { bg: '#f0fdf4', color: '#15803d' }, Recommandation: { bg: '#fefce8', color: '#a16207' }, Ads: { bg: '#f5f3ff', color: '#6d28d9' }, 'Chasse externe': { bg: '#f8fafc', color: '#64748b' }, 'Inbound Marketing': { bg: '#f0fdf4', color: '#15803d' }, Autre: { bg: '#f8fafc', color: '#64748b' } }
+  const modalMatStyle = (m) => ({ ...MODAL_MAT_STYLES[m || 'Froid'], borderRadius: 20, fontSize: 10, fontWeight: 600, padding: '3px 9px' })
+  const modalStagStyle = (s) => ({ ...(MODAL_STAGE_STYLES[s] || { bg: '#f8fafc', color: '#64748b' }), borderRadius: 20, fontSize: 10, fontWeight: 600, padding: '3px 9px' })
+  const modalSourceStyle = (src) => src ? { ...(MODAL_SOURCE_STYLES[src] || { bg: '#f8fafc', color: '#64748b' }), borderRadius: 20, fontSize: 10, fontWeight: 600, padding: '3px 9px' } : null
+
   const startEditField = (field, currentVal) => {
     setEditingField(field)
-    const val = currentVal ?? ''
-    setEditValue(val)
-    setIntegCustomMode(field === 'integration_date' && val && !INTEG_OPTS.includes(val))
+    setEditValue(currentVal ?? '')
   }
 
   const handleSaveFieldEdit = async () => {
     if (!editingField || !displayProfile?.id) return
     const field = editingField
-    const newVal = field === 'region' || field === 'source' || field === 'integration_date' ? editValue : editValue.trim()
-    const profileField = field === 'source' ? 'src' : field === 'integration_date' ? 'integ' : field
+    const newVal = field === 'region' || field === 'source' ? editValue : editValue.trim()
+    const profileField = field === 'source' ? 'src' : field
     const oldVal = displayProfile[profileField] ?? '—'
 
     if (String(oldVal) === String(newVal)) {
@@ -570,12 +842,10 @@ export default function Pipeline() {
 
     if (field === 'region') changeRegion(displayProfile.id, newVal)
     else if (field === 'source') changeSource(displayProfile.id, newVal)
-    else if (field === 'integration_date') changeInteg(displayProfile.id, newVal || '—')
     else updateProfileField(displayProfile.id, profileField, newVal)
 
     setEditingField(null)
     setEditValue('')
-    setIntegCustomMode(false)
     await loadActivities()
   }
 
@@ -587,7 +857,7 @@ export default function Pipeline() {
         <button type="button" className="btn bp bsm py-1.5 px-2.5 text-xs ml-auto" onClick={() => window.dispatchEvent(new CustomEvent('open-new-profile'))}>+ Nouveau profil</button>
       </div>
       <div className="kb flex gap-3 py-3.5 px-5 pb-5 overflow-x-auto flex-1 items-start">
-          {STAGES.map((st) => {
+          {STAGES.filter((st) => !stageFilter || st === stageFilter).map((st) => {
             const cards = all.filter((p) => p.stg === st)
             return (
               <DroppableColumn
@@ -601,6 +871,7 @@ export default function Pipeline() {
                 selectedCardId={selectedCardId}
                 onDrop={handleDrop}
                 showOwnerBadge={isGlobalView}
+                nextEventsByProfileId={nextEventsByProfileId}
               />
             )
           })}
@@ -643,62 +914,104 @@ export default function Pipeline() {
                 right: 16,
                 fontSize: 20,
                 cursor: 'pointer',
-                zIndex: 10,
+                zIndex: 60,
                 background: 'none',
                 border: 'none',
               }}
             >
               <IconClose />
             </button>
+            {(showStadeDropdown || showMaturiteDropdown || showSourceDropdown) && (
+              <div
+                style={{ position: 'fixed', inset: 0, zIndex: 49 }}
+                onClick={() => { setShowStadeDropdown(false); setShowMaturiteDropdown(false); setShowSourceDropdown(false) }}
+                aria-hidden
+              />
+            )}
 
             {/* COLONNE GAUCHE */}
             <div
               style={{
-                width: 320,
+                width: 280,
                 flexShrink: 0,
-                background: '#F5F3EF',
-                padding: 24,
-                borderRight: '1px solid #E5E0D8',
+                background: '#f9f7f4',
+                padding: '24px 20px',
+                borderRight: '1px solid rgba(0,0,0,0.06)',
                 display: 'flex',
                 flexDirection: 'column',
+                overflowY: 'auto',
               }}
             >
-              <div
-                style={{
-                  width: 60,
-                  height: 60,
-                  borderRadius: '50%',
-                  background: '#173731',
-                  color: 'white',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 20,
-                  fontWeight: 600,
-                }}
-              >
+              <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#173731', color: '#D2AB76', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700 }}>
                 {(displayProfile.fn?.[0] || '') + (displayProfile.ln?.[0] || '')}
               </div>
-              <h2 style={{ fontSize: 20, fontWeight: 700, margin: '12px 0 4px', color: '#1A1A1A' }}>
+              <h2 style={{ fontSize: 16, fontWeight: 700, margin: '12px 0 4px', color: '#173731' }}>
                 {capFirst(displayProfile.fn)} {capFirst(displayProfile.ln)}
               </h2>
-              <p style={{ fontSize: 13, color: '#6B6B6B', margin: 0 }}>{displayProfile.co} · {displayProfile.ti}</p>
-              <p style={{ fontSize: 12, color: '#6B6B6B', margin: '4px 0 16px' }}>
-                {displayProfile.city}{displayProfile.region ? ` · ${displayProfile.region}` : ''}
+              <p style={{ fontSize: 12, color: '#aaa', margin: '0 0 12px' }}>
+                {displayProfile.co || '—'} · {displayProfile.ti || '—'} · {displayProfile.city || '—'}
               </p>
-              <div style={{ height: 1, background: '#E5E0D8', marginBottom: 16 }} />
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-                <InlineDropdown options={MATURITIES} value={displayProfile.mat} onChange={handleChangeMaturity} buttonStyle={matStyle} buttonClassName="tag tag-btn px-2 py-0.5 rounded-md text-xs" />
-                <InlineDropdown options={STAGES} value={displayProfile.stg} onChange={handleChangeStage} buttonStyle={stag} buttonClassName="tag tag-btn px-2 py-0.5 rounded-md text-xs" placeholder="—" />
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <InlineDropdown options={MATURITIES} value={displayProfile.mat} onChange={handleChangeMaturity} buttonStyle={modalMatStyle} buttonClassName="tag tag-btn" open={showMaturiteDropdown} onOpenChange={(v) => { setShowMaturiteDropdown(v); if (v) setShowStadeDropdown(false); }} containerClassName="maturite-dropdown" />
+                <InlineDropdown options={STAGES} value={displayProfile.stg} onChange={handleChangeStage} buttonStyle={modalStagStyle} buttonClassName="tag tag-btn" placeholder="—" open={showStadeDropdown} onOpenChange={(v) => { setShowStadeDropdown(v); if (v) setShowMaturiteDropdown(false); }} containerClassName="stade-dropdown" />
+                {displayProfile.src && (
+                  <InlineDropdown options={SOURCES} value={displayProfile.src} onChange={(v) => { changeSource(displayProfile.id, v); setShowSourceDropdown(false); loadActivities(); }} buttonStyle={(v) => modalSourceStyle(v || displayProfile.src)} buttonClassName="tag tag-btn" open={showSourceDropdown} onOpenChange={(v) => { setShowSourceDropdown(v); if (v) { setShowStadeDropdown(false); setShowMaturiteDropdown(false); } }} containerClassName="source-dropdown" />
+                )}
               </div>
-              <div style={{ height: 1, background: '#E5E0D8', marginBottom: 16 }} />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, color: '#6B6B6B', fontSize: 13 }}>
-                {/* Email */}
+              <div style={{ background: '#ffffff', borderRadius: 10, border: '1px solid rgba(0,0,0,0.08)', padding: '10px 14px', marginTop: 8, display: 'flex', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#aaa', marginBottom: 2 }}>Score IA</div>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: '#173731' }}>{displayProfile.sc ?? '—'}</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#aaa', marginBottom: 2 }}>Priorité</div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: (displayProfile.sc ?? 0) >= 70 ? '#15803d' : (displayProfile.sc ?? 0) >= 50 ? '#a16207' : '#94a3b8' }}>
+                    {(displayProfile.sc ?? 0) >= 70 ? 'Prioritaire' : (displayProfile.sc ?? 0) >= 50 ? 'À travailler' : 'À écarter'}
+                  </div>
+                </div>
+              </div>
+              <button type="button" onClick={() => setScoreCorrectionOpen(true)} style={{ marginTop: 6, fontSize: 11, color: '#ea580c', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left' }} title="Signaler un score inexact">
+                Signaler un score inexact
+              </button>
+              {displayProfile.session_formation_id && (
+                <div style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 4, background: '#f0fdf4', color: '#15803d', fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 20 }}>
+                  <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+                  {[displayProfile.integration_periode, displayProfile.integration_annee].filter(Boolean).join(' ') || availableSessions.find((s) => s.id === displayProfile.session_formation_id)?.date_session || 'Session assignée'}
+                </div>
+              )}
+              {SESSION_CIBLE_STAGES.includes(displayProfile.stg) && !displayProfile.session_formation_id && (
+                <div style={{ marginTop: 8 }}>
+                  <select
+                    value={displayProfile?.session_formation_id || ''}
+                    onChange={async (e) => {
+                      const sessionId = e.target.value || null
+                      const session = availableSessions.find((s) => s.id === sessionId)
+                      if (!displayProfile?.id || !useSupabase) return
+                      await supabase.from('profiles').update({
+                        session_formation_id: sessionId,
+                        integration_periode: session?.periode ?? null,
+                        integration_annee: session?.annee ?? null,
+                        integration_confirmed: false,
+                      }).eq('id', displayProfile.id)
+                      updateProfile(displayProfile.id, { session_formation_id: sessionId, integration_periode: session?.periode, integration_annee: session?.annee, integration_confirmed: false })
+                      fetchProfiles?.()
+                    }}
+                    style={{ width: '100%', padding: '6px 10px', fontSize: 12, border: '1px solid rgba(0,0,0,0.1)', borderRadius: 8, background: 'white', cursor: 'pointer' }}
+                  >
+                    <option value="">— Pas encore défini</option>
+                    {availableSessions.map((s) => (
+                      <option key={s.id} value={s.id}>{[s.periode, s.annee].filter(Boolean).join(' ') || s.date_session || '—'}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div style={{ height: 1, background: 'rgba(0,0,0,0.06)', margin: '16px 0' }} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 12, color: '#555' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ color: '#6B6B6B', flexShrink: 0 }}><IconEnvelope /></span>
+                  <span style={{ flexShrink: 0, width: 14, height: 14, display: 'flex' }}><IconEnvelope /></span>
                   {editingField === 'mail' ? (
                     <div style={{ display: 'flex', gap: 6, flex: 1, minWidth: 0 }}>
-                      <input type="email" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSaveFieldEdit()} autoFocus style={{ flex: 1, padding: '4px 8px', fontSize: 13, border: '2px solid #173731', borderRadius: 6, outline: 'none' }} />
+                      <input type="email" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSaveFieldEdit()} autoFocus style={{ flex: 1, padding: '4px 8px', fontSize: 12, border: '2px solid #173731', borderRadius: 6, outline: 'none' }} />
                       <button type="button" onClick={handleSaveFieldEdit} style={{ padding: '4px 10px', background: '#173731', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>✓</button>
                     </div>
                   ) : (
@@ -706,144 +1019,38 @@ export default function Pipeline() {
                   )}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ color: '#6B6B6B', flexShrink: 0 }}><IconLink /></span>
+                  <span style={{ flexShrink: 0, width: 14, height: 14, display: 'flex' }}><IconLink /></span>
                   <a href={displayProfile.li?.startsWith('http') ? displayProfile.li : `https://${displayProfile.li}`} target="_blank" rel="noopener noreferrer" style={{ color: '#173731', textDecoration: 'underline' }}>{displayProfile.li || '—'}</a>
                 </div>
-                {/* Ville */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ color: '#6B6B6B', flexShrink: 0, width: 14, height: 14, display: 'flex' }}><IconMapPin /></span>
+                  <span style={{ flexShrink: 0, width: 14, height: 14, display: 'flex' }}><IconMapPin /></span>
                   {editingField === 'city' ? (
                     <div style={{ display: 'flex', gap: 6, flex: 1, minWidth: 0 }}>
-                      <input type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSaveFieldEdit()} autoFocus style={{ flex: 1, padding: '4px 8px', fontSize: 13, border: '2px solid #173731', borderRadius: 6, outline: 'none' }} />
+                      <input type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSaveFieldEdit()} autoFocus style={{ flex: 1, padding: '4px 8px', fontSize: 12, border: '2px solid #173731', borderRadius: 6, outline: 'none' }} />
                       <button type="button" onClick={handleSaveFieldEdit} style={{ padding: '4px 10px', background: '#173731', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>✓</button>
                     </div>
                   ) : (
                     <span onClick={() => startEditField('city', displayProfile.city)} style={{ cursor: 'pointer' }}>{displayProfile.city || '—'}</span>
                   )}
                 </div>
-                {/* Région */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ color: '#6B6B6B', flexShrink: 0, width: 14, height: 14, display: 'flex' }}><IconMap /></span>
-                  {editingField === 'region' ? (
-                    <div style={{ display: 'flex', gap: 6, flex: 1, minWidth: 0 }}>
-                      <select value={editValue} onChange={(e) => setEditValue(e.target.value)} autoFocus style={{ flex: 1, padding: '4px 8px', fontSize: 13, border: '2px solid #173731', borderRadius: 6, outline: 'none' }}>
-                        <option value="">—</option>
-                        {REGIONS.map((r) => <option key={r} value={r}>{r}</option>)}
-                      </select>
-                      <button type="button" onClick={handleSaveFieldEdit} style={{ padding: '4px 10px', background: '#173731', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>✓</button>
-                    </div>
-                  ) : (
-                    <span onClick={() => startEditField('region', displayProfile.region)} style={{ cursor: 'pointer' }}>{displayProfile.region || '—'}</span>
-                  )}
-                </div>
-                {/* Source */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ color: '#6B6B6B', flexShrink: 0 }}><IconTag /></span>
-                  {editingField === 'source' ? (
-                    <div style={{ display: 'flex', gap: 6, flex: 1, minWidth: 0 }}>
-                      <select value={editValue} onChange={(e) => setEditValue(e.target.value)} autoFocus style={{ flex: 1, padding: '4px 8px', fontSize: 13, border: '2px solid #173731', borderRadius: 6, outline: 'none' }}>
-                        {SOURCES.map((s) => <option key={s} value={s}>{s}</option>)}
-                      </select>
-                      <button type="button" onClick={handleSaveFieldEdit} style={{ padding: '4px 10px', background: '#173731', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>✓</button>
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flex: 1 }}>
-                      <span onClick={() => startEditField('source', displayProfile.src)} style={{ cursor: 'pointer' }}>{displayProfile.src || '—'}</span>
-                      {displayProfile.sequence_lemlist && (
-                        <span style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, background: '#FFF7ED', color: '#F97316', fontWeight: 500 }}>Lemlist : {displayProfile.sequence_lemlist}</span>
-                      )}
-                    </div>
-                  )}
-                </div>
-                <div className="score-row" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ color: '#6B6B6B', flexShrink: 0 }}><IconStar /></span>
-                  <span style={{ fontWeight: 600 }}>{displayProfile.sc ?? '—'}</span>
-                  <button
-                    type="button"
-                    onClick={() => setScoreCorrectionOpen(true)}
-                    className="score-inexact-btn"
-                    style={{ fontSize: 12, color: '#F97316', background: 'transparent', border: 'none', cursor: 'pointer', opacity: 0, transition: 'opacity 0.15s', padding: '0 4px' }}
-                    title="Signaler un score inexact"
-                  >
-                    ⚠ Score inexact
-                  </button>
-                </div>
-                {/* Intégration potentielle */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ color: '#6B6B6B', flexShrink: 0 }}><IconCalendar /></span>
-                  {editingField === 'integration_date' ? (
-                    <div style={{ display: 'flex', gap: 6, flex: 1, minWidth: 0, flexDirection: 'column' }}>
-                      {integCustomMode ? (
-                        <>
-                          <input type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)} placeholder="ex: Mars 2027" autoFocus style={{ padding: '4px 8px', fontSize: 13, border: '2px solid #173731', borderRadius: 6, outline: 'none' }} />
-                          <div style={{ display: 'flex', gap: 6 }}>
-                            <button type="button" onClick={() => { if (editValue.trim()) handleSaveFieldEdit(); }} style={{ padding: '4px 10px', background: '#173731', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>✓</button>
-                            <button type="button" onClick={() => { setIntegCustomMode(false); setEditValue(displayProfile.integ || ''); }} style={{ padding: '4px 10px', background: 'none', border: '1px solid #E5E0D8', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>Annuler</button>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <select value={editValue} onChange={(e) => { const v = e.target.value; if (v === INTEG_ADD_DATE) { setIntegCustomMode(true); setEditValue(''); } else setEditValue(v); }} autoFocus style={{ flex: 1, padding: '4px 8px', fontSize: 13, border: '2px solid #173731', borderRadius: 6, outline: 'none' }}>
-                            {INTEG_OPTS.map((o) => <option key={o} value={o}>{o}</option>)}
-                            <option value={INTEG_ADD_DATE}>{INTEG_ADD_DATE}</option>
-                          </select>
-                          <div style={{ display: 'flex', gap: 6 }}>
-                            <button type="button" onClick={handleSaveFieldEdit} style={{ padding: '4px 10px', background: '#173731', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>✓</button>
-                            <button type="button" onClick={() => { setEditingField(null); setEditValue(''); setIntegCustomMode(false); }} style={{ padding: '4px 10px', background: 'none', border: '1px solid #E5E0D8', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>Annuler</button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  ) : (
-                    <span onClick={() => startEditField('integration_date', displayProfile.integ)} style={{ cursor: 'pointer' }}>{displayProfile.integ || '—'}</span>
-                  )}
-                </div>
               </div>
-              {displayProfile.li && (
-                <div style={{ marginTop: 16 }}>
-                  <button
-                    type="button"
-                    onClick={handleEnrichNetrows}
-                    disabled={enriching}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      padding: '10px 14px',
-                      background: '#fff',
-                      border: '1px solid #173731',
-                      borderRadius: 8,
-                      color: '#173731',
-                      fontSize: 13,
-                      cursor: enriching ? 'not-allowed' : 'pointer',
-                      opacity: enriching ? 0.7 : 1,
-                      width: '100%',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <IconLinkedIn />
-                    {enriching ? 'Enrichissement…' : 'Enrichir via Netrows'}
-                  </button>
-                </div>
-              )}
               {Array.isArray(displayProfile.experiences) && displayProfile.experiences.length > 0 && (
                 <div style={{ marginTop: 16 }}>
-                  <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#6B6B6B', marginBottom: 10 }}>Parcours professionnel</div>
-                  <div style={{ position: 'relative', paddingLeft: 16 }}>
-                    <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 2, background: '#173731', borderRadius: 1 }} />
+                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#bbb', marginBottom: 8 }}>Parcours professionnel</div>
+                  <div style={{ overflowY: 'auto', maxHeight: 180 }}>
                     {displayProfile.experiences.map((exp, i) => {
                       const badge = getExperienceBadge(exp)
+                      const tagStyle = badge === 'cabinet' ? { bg: '#f0fdf4', color: '#15803d' } : badge === 'banque' ? { bg: '#eff6ff', color: '#1d4ed8' } : badge === 'assurance' ? { bg: '#fff7ed', color: '#a16207' } : null
                       return (
-                        <div key={i} style={{ position: 'relative', paddingBottom: 14 }}>
-                          <div style={{ position: 'absolute', left: -20, top: 4, width: 8, height: 8, borderRadius: '50%', background: '#fff', border: '2px solid #173731' }} />
-                          <div style={{ fontWeight: 600, fontSize: 13, color: '#1A1A1A' }}>{exp.company || '—'}</div>
-                          <div style={{ fontSize: 12, color: '#6B6B6B', marginTop: 2 }}>{exp.title || '—'}</div>
-                          <div style={{ fontSize: 11, color: '#6B6B6B', marginTop: 2 }}>{formatExperiencePeriod(exp)}</div>
-                          <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
-                            {badge === 'cabinet' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#D4EDE1', color: '#1A7A4A', fontWeight: 500 }}>Cabinet CGP</span>}
-                            {badge === 'banque' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#EFF6FF', color: '#1D4ED8', fontWeight: 500 }}>Banque</span>}
-                            {badge === 'assurance' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#ECFDF5', color: '#065F46', fontWeight: 500 }}>Assurance</span>}
-                          </div>
+                        <div key={i} style={{ paddingBottom: 12, marginBottom: 12, borderBottom: i < displayProfile.experiences.length - 1 ? '1px solid rgba(0,0,0,0.06)' : 'none' }}>
+                          <div style={{ fontWeight: 600, fontSize: 12, color: '#173731' }}>{exp.company || '—'}</div>
+                          <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{exp.title || '—'}</div>
+                          <div style={{ fontSize: 10, color: '#bbb', marginTop: 2 }}>{formatExperiencePeriod(exp)}</div>
+                          {tagStyle && (
+                            <span style={{ display: 'inline-block', marginTop: 4, fontSize: 9, fontWeight: 600, padding: '2px 6px', borderRadius: 20, background: tagStyle.bg, color: tagStyle.color }}>
+                              {badge === 'cabinet' ? 'CGP' : badge === 'banque' ? 'Banque' : 'Assurance'}
+                            </span>
+                          )}
                         </div>
                       )
                     })}
@@ -854,43 +1061,33 @@ export default function Pipeline() {
               <button
                 type="button"
                 onClick={() => { setModalProfile(null); navigate(`/profiles/${displayProfile.id}`) }}
-                style={{
-                  width: '100%',
-                  padding: 10,
-                  borderRadius: 8,
-                  background: '#173731',
-                  color: 'white',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontSize: 14,
-                  fontWeight: 500,
-                }}
+                style={{ width: '100%', marginTop: 'auto', padding: 10, borderRadius: 10, background: '#173731', color: '#D2AB76', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
               >
                 Ouvrir la fiche complète →
               </button>
             </div>
 
             {/* COLONNE DROITE */}
-            <div style={{ flex: 1, minHeight: 0, background: 'white', padding: 24, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', gap: 24, marginBottom: 20, borderBottom: '1px solid #E5E0D8' }}>
-                {['notes', 'events', 'activity'].map((tab) => (
+            <div style={{ flex: 1, minHeight: 0, background: '#ffffff', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              <div style={{ display: 'flex', gap: 8, padding: '0 24px', borderBottom: '1px solid rgba(0,0,0,0.06)', flexShrink: 0 }}>
+                {['notes', 'events', 'activity', 'grille'].map((tab) => (
                   <button
                     key={tab}
                     type="button"
                     onClick={() => setModalTab(tab)}
                     style={{
-                      padding: '8px 0',
-                      fontSize: 14,
+                      padding: '12px 16px',
+                      fontSize: 12,
                       fontWeight: 500,
                       background: 'none',
                       border: 'none',
                       borderBottom: modalTab === tab ? '2px solid #173731' : '2px solid transparent',
-                      color: modalTab === tab ? '#173731' : '#6B6B6B',
+                      color: modalTab === tab ? '#173731' : '#aaa',
                       cursor: 'pointer',
                       transition: 'all 0.15s',
                     }}
                   >
-                    {tab === 'notes' ? 'Notes' : tab === 'events' ? 'Événements' : 'Activité'}
+                    {tab === 'notes' ? 'Notes' : tab === 'events' ? 'Événements' : tab === 'activity' ? 'Activité' : 'Grille de notation'}
                   </button>
                 ))}
               </div>
@@ -898,7 +1095,7 @@ export default function Pipeline() {
               {loadingDetail ? (
                 <div style={{ padding: 40, textAlign: 'center', color: '#6B6B6B' }}>Chargement...</div>
               ) : modalTab === 'notes' ? (
-                <div>
+                <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
                     {!showNoteForm && (
                       <button
@@ -919,6 +1116,13 @@ export default function Pipeline() {
                       </button>
                     )}
                   </div>
+                  {!showNoteForm && notes.length === 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 48, gap: 12 }}>
+                      <span style={{ width: 48, height: 48, display: 'flex', color: '#bbb' }}><IconDocument /></span>
+                      <div style={{ fontSize: 13, color: '#bbb' }}>Aucune note pour ce profil</div>
+                      <div style={{ fontSize: 12, color: '#ddd' }}>Cliquez sur + Nouvelle note</div>
+                    </div>
+                  )}
                   {showNoteForm && (
                     <div style={{ background: '#F8F5F1', padding: 16, borderRadius: 10, marginBottom: 16 }}>
                       <select
@@ -994,7 +1198,7 @@ export default function Pipeline() {
                   ))}
                 </div>
               ) : modalTab === 'activity' ? (
-                <div style={{ position: 'relative', paddingLeft: 24 }}>
+                <div style={{ flex: 1, overflowY: 'auto', padding: 24, position: 'relative', paddingLeft: 24 }}>
                   <div style={{ position: 'absolute', left: 5, top: 0, bottom: 0, width: 2, background: '#173731' }} />
                   {activities.length === 0 ? (
                     <div style={{ color: '#6B6B6B', fontSize: 13 }}>Aucune activité</div>
@@ -1013,8 +1217,12 @@ export default function Pipeline() {
                     ))
                   )}
                 </div>
+              ) : modalTab === 'grille' ? (
+                <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
+                  <GrilleNotationTab profile={displayProfile} updateProfile={updateProfile} useSupabase={useSupabase} />
+                </div>
               ) : (
-                <div>
+                <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
                     {!showEventForm && (
                       <button
@@ -1133,7 +1341,7 @@ export default function Pipeline() {
           </div>
         </div>
       )}
-      {pendingStageChange && (
+      {pendingStageChange && pendingStageChange.newStage !== 'Recruté' && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setPendingStageChange(null)}>
           <div style={{ background: 'white', padding: 24, borderRadius: 12, boxShadow: '0 4px 20px rgba(0,0,0,0.15)', minWidth: 360, maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
             <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8, color: '#173731' }}>Planifier l'étape {pendingStageChange.newStage}</div>
@@ -1159,6 +1367,29 @@ export default function Pipeline() {
                 style={{ width: '100%', padding: 10, fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, resize: 'vertical' }}
               />
             </div>
+            {(pendingStageChange.newStage === "Point d'étape téléphonique" || pendingStageChange.newStage === "Point d'étape") && (
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ fontSize: 13, color: '#666', display: 'block', marginBottom: 6 }}>
+                  Session cible (optionnel)
+                </label>
+                <select
+                  value={pendingSessionId}
+                  onChange={(e) => setPendingSessionId(e.target.value)}
+                  style={{
+                    width: '100%', padding: '10px 12px', fontSize: 13,
+                    border: '1px solid #e5e0d8', borderRadius: 8,
+                    background: 'white', color: '#173731',
+                  }}
+                >
+                  <option value="">— Pas encore défini</option>
+                  {pendingSessions.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {[s.periode, s.annee].filter(Boolean).join(' ') || s.date_session || '—'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
               <button type="button" onClick={() => setPendingStageChange(null)} style={{ padding: '8px 16px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, background: 'white', cursor: 'pointer', color: '#6B6B6B' }}>Annuler</button>
               <button type="button" onClick={handleSkipStageChangeDate} style={{ padding: '8px 16px', fontSize: 13, border: '1px solid #173731', borderRadius: 6, background: 'white', cursor: 'pointer', color: '#173731' }}>Passer sans date</button>
@@ -1180,8 +1411,84 @@ export default function Pipeline() {
         </div>
       )}
 
+      {chuteModalProfile && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setChuteModalProfile(null)}>
+          <ChuteModal
+            profile={chuteModalProfile}
+            onClose={() => setChuteModalProfile(null)}
+            onSaved={async (chuteType, chuteDetail) => {
+              const oldMat = chuteModalProfile.mat ?? '—'
+              await supabase.from('profiles').update({
+                maturity: 'Chute',
+                chute_stade: chuteModalProfile.stg ?? null,
+                chute_type: chuteType,
+                chute_detail: chuteDetail || null,
+                chute_date: new Date().toISOString(),
+              }).eq('id', chuteModalProfile.id)
+              changeMaturity(chuteModalProfile.id, 'Chute')
+              await supabase.from('activities').insert({
+                profile_id: chuteModalProfile.id,
+                type: 'maturity_change',
+                note: `${oldMat} → Chute`,
+                date: new Date().toISOString().split('T')[0],
+                icon: 'refresh',
+                source: 'manual',
+              })
+              setChuteModalProfile(null)
+              if (modalProfile?.id === chuteModalProfile.id) {
+                setModalProfile(null)
+                setSelectedCardId(null)
+              }
+              fetchProfiles()
+            }}
+          />
+        </div>
+      )}
+      {showSessionModal && profileToAssign && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => { setShowSessionModal(false); setProfileToAssign(null); setShowCreateSession(false); setNewSession({ date_session: '', lieu: '', places_total: 6, statut: 'planifiée', notes: '' }); }}>
+          <div style={{ background: '#F5F0E8', borderRadius: 12, boxShadow: '0 4px 20px rgba(0,0,0,0.15)', minWidth: 400, maxWidth: 480, overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ background: ACCENT, padding: '20px 24px' }}>
+              <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 20, fontWeight: 600, color: 'white' }}>Félicitations ! {[profileToAssign?.fn || profileToAssign?.first_name, profileToAssign?.ln || profileToAssign?.last_name].filter(Boolean).join(' ') || '—'} est recruté</div>
+              <div style={{ fontSize: 14, color: GOLD, marginTop: 4 }}>Assignez ce profil à une session de formation</div>
+            </div>
+            <div style={{ padding: 24 }}>
+              {showCreateSession ? (
+                <div>
+                  {sessions.length > 0 && <button type="button" onClick={() => setShowCreateSession(false)} style={{ marginBottom: 16, padding: 0, background: 'none', border: 'none', fontSize: 12, color: '#666', cursor: 'pointer', textDecoration: 'underline' }}>Retour à la liste des sessions</button>}
+                  <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, color: ACCENT }}>Créer une nouvelle session</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div><label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 4 }}>Date</label><input type="date" value={newSession.date_session} onChange={(e) => setNewSession((s) => ({ ...s, date_session: e.target.value }))} required style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6 }} /></div>
+                    <div><label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 4 }}>Lieu</label><input type="text" value={newSession.lieu} onChange={(e) => setNewSession((s) => ({ ...s, lieu: e.target.value }))} placeholder="Lieu" style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6 }} /></div>
+                    <div><label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 4 }}>Nombre de places</label><input type="number" value={newSession.places_total} onChange={(e) => setNewSession((s) => ({ ...s, places_total: parseInt(e.target.value, 10) || 6 }))} min={1} style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6 }} /></div>
+                    <div><label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 4 }}>Statut</label><select value={newSession.statut} onChange={(e) => setNewSession((s) => ({ ...s, statut: e.target.value }))} style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6 }}><option value="planifiée">Planifiée</option><option value="confirmée">Confirmée</option></select></div>
+                    <div><label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 4 }}>Notes (optionnel)</label><textarea value={newSession.notes} onChange={(e) => setNewSession((s) => ({ ...s, notes: e.target.value }))} rows={2} style={{ width: '100%', padding: 8, fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, resize: 'vertical' }} /></div>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <div style={{ fontSize: 13, color: '#444', marginBottom: 12 }}>Assigner à une session de formation</div>
+                  <select value={selectedSession} onChange={(e) => setSelectedSession(e.target.value)} style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, marginBottom: 12 }} disabled={sessionsLoading}>
+                    <option value="">Sélectionner une session</option>
+                    {sessionsWithCount.map((s) => <option key={s.id} value={s.id}>{[s.periode, s.annee].filter(Boolean).join(' ') || formatSessionDate(s.date_session)} · {s.lieu || '—'} · {s.inscrits}/{s.places_total || 6} inscrits</option>)}
+                  </select>
+                    <button type="button" onClick={() => setShowCreateSession(true)} style={{ marginBottom: 16, padding: 0, background: 'none', border: 'none', fontSize: 13, color: ACCENT, cursor: 'pointer', textDecoration: 'underline' }}>Créer une nouvelle session</button>
+                </div>
+              )}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 12, marginTop: 20, paddingTop: 16, paddingLeft: 24, paddingRight: 24, paddingBottom: 24, borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+              {showCreateSession ? (
+                <button type="button" onClick={async () => { if (!newSession.date_session || !profileToAssign?.id) return; const { data: newSess } = await supabase.from('sessions_formation').insert({ date_session: newSession.date_session, lieu: newSession.lieu || null, places_total: newSession.places_total, statut: newSession.statut, notes: newSession.notes || null }).select().single(); if (newSess?.id) { await supabase.from('profiles').update({ session_formation_id: newSess.id, integration_confirmed: true }).eq('id', profileToAssign.id); setShowSessionModal(false); setProfileToAssign(null); setShowCreateSession(false); setNewSession({ date_session: '', lieu: '', places_total: 6, statut: 'planifiée', notes: '' }); fetchProfiles(); window.dispatchEvent(new CustomEvent('evolve:session-updated')); } }} disabled={!newSession.date_session} style={{ padding: '10px 16px', fontSize: 13, border: 'none', borderRadius: 6, background: ACCENT, color: 'white', cursor: 'pointer', opacity: newSession.date_session ? 1 : 0.6 }}>Créer et assigner</button>
+              ) : (
+                <button type="button" onClick={async () => { if (!selectedSession || !profileToAssign?.id) return; await supabase.from('profiles').update({ session_formation_id: selectedSession, integration_confirmed: true }).eq('id', profileToAssign.id); setShowSessionModal(false); setProfileToAssign(null); fetchProfiles(); window.dispatchEvent(new CustomEvent('evolve:session-updated')); }} disabled={!selectedSession} style={{ padding: '10px 16px', fontSize: 13, border: 'none', borderRadius: 6, background: ACCENT, color: 'white', cursor: 'pointer', opacity: selectedSession ? 1 : 0.6 }}>Assigner à cette session</button>
+              )}
+              <button type="button" onClick={() => { setShowSessionModal(false); setProfileToAssign(null); setShowCreateSession(false); fetchProfiles(); }} style={{ padding: '10px 16px', fontSize: 13, border: `1px solid ${ACCENT}`, borderRadius: 6, background: 'transparent', color: ACCENT, cursor: 'pointer' }}>Passer sans assigner</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style>{`
-        .kanban-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.12) !important; }
+        .kanban-card:not(.selected):hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); transform: translateY(-1px); }
         .score-row:hover .score-inexact-btn { opacity: 1 !important; }
       `}</style>
     </div>
