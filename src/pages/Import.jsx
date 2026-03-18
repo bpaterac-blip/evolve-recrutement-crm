@@ -78,7 +78,7 @@ import { enrichProfileWithNetrows } from '../lib/netrows'
 import { supabase } from '../lib/supabase'
 import { detectDoublon } from '../lib/detectDoublon'
 import { notifyScoringFeedbackUpdated, fetchScoringInstructions } from '../lib/scoringInstructions'
-import { IconLink, IconDot, IconUpload } from '../components/Icons'
+import { IconLink, IconDot, IconUpload, IconDocument } from '../components/Icons'
 
 const IMPORT_STORAGE_KEYS = {
   profiles: 'import_profiles',
@@ -896,42 +896,71 @@ export default function Import() {
           <input ref={csvInputRef} type="file" accept=".csv" className="hidden" onChange={handleCSVFile} />
           <input ref={pdfInputRef} type="file" accept=".pdf" className="hidden" onChange={handlePDFFile} />
           <div className="grid grid-cols-2 gap-3.5 mb-5">
-            <div>
-              <div className="font-semibold text-[13.5px] mb-2">📄 Import CSV Sales Navigator</div>
+            <div style={{ background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+              <div style={{ padding: 16, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: '#E8F5EE', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#1A7A4A' }}>
+                  <IconDocument />
+                </div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Import CSV</div>
+                  <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: 2 }}>Sales Navigator, Waalaxy, Lemlist</div>
+                </div>
+              </div>
               <div
-                className="dz border-2 border-dashed border-[var(--b2)] rounded-xl py-9 text-center cursor-pointer transition-all hover:border-[var(--accent)] hover:bg-[var(--accent)]/5"
+                style={{ margin: '0 16px 16px', padding: 28, border: '1.5px dashed var(--border)', borderRadius: 12, background: 'var(--s2)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, cursor: 'pointer' }}
                 onClick={() => csvInputRef.current?.click()}
               >
-                {loading ? <div className="text-3xl mb-2">…</div> : <div className="text-3xl mb-2">⇪</div>}
-                <div className="text-sm font-semibold mb-1">Cliquer ou glisser-déposer un .csv</div>
-                <div className="text-xs text-[var(--t3)]">Export Sales Navigator ou Waalaxy</div>
+                {loading ? (
+                  <div style={{ fontSize: 12, color: 'var(--t3)' }}>…</div>
+                ) : (
+                  <>
+                    <span style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--t3)' }}><IconUpload /></span>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>Glisser-déposer ou</div>
+                    <button type="button" onClick={(e) => { e.stopPropagation(); csvInputRef.current?.click(); }} style={{ padding: '8px 16px', borderRadius: 8, background: '#173731', color: '#E7E0D0', border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>Choisir un fichier</button>
+                  </>
+                )}
               </div>
-              <div className="bg-[var(--s2)] rounded-lg py-2.5 px-3.5 text-xs text-[var(--t3)] mt-2">
-                Formats supportés : <strong>Lemlist</strong> (firstName, lastName, email, linkedinUrl, companyName, jobTitle, location, campaigns, leadStatus, lastContactedDate) · <strong>Waalaxy</strong> (firstName, lastName, occupation, job_title, location, company_name, linkedinUrl) · <strong>Sales Navigator</strong> (First Name, Last Name, Job Title, Company Name)
+              <div style={{ padding: '0 16px 16px' }}>
+                <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--t3)', marginBottom: 8 }}>Formats détectés</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {['Lemlist', 'Waalaxy', 'Sales Navigator'].map((f) => (
+                    <span key={f} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 20, background: 'var(--s2)', color: 'var(--t2)', border: '1px solid var(--border)', fontWeight: 500 }}>{f}</span>
+                  ))}
+                </div>
               </div>
             </div>
-            <div>
-              <div className="font-semibold text-[13.5px] mb-2">📑 Import PDF LinkedIn</div>
+            <div style={{ background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+              <div style={{ padding: 16, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: '#E8F1FB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#1E5FA0' }}>
+                  <IconDocument />
+                </div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Import PDF LinkedIn</div>
+                  <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: 2 }}>Profil exporté en PDF</div>
+                </div>
+              </div>
               <div
-                className="dz border-2 border-dashed border-[#AEC8F0] rounded-xl py-9 text-center cursor-pointer bg-[#F5F9FF] transition-all hover:border-[var(--accent)]"
+                style={{ margin: '0 16px 16px', padding: 28, border: '1.5px dashed var(--border)', borderRadius: 12, background: 'var(--s2)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, cursor: 'pointer' }}
                 onClick={() => pdfInputRef.current?.click()}
               >
-                {loading ? <div className="text-3xl mb-2">…</div> : <div className="text-3xl mb-2">📑</div>}
-                <div className="text-sm font-semibold mb-1">
-                  {loading && pdfAnalyzing ? 'Analyse du PDF en cours...' : 'Cliquer ou glisser-déposer un .pdf'}
+                {loading && pdfAnalyzing ? (
+                  <div style={{ fontSize: 12, color: 'var(--t3)' }}>Analyse du PDF en cours…</div>
+                ) : (
+                  <>
+                    <span style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--t3)' }}><IconUpload /></span>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>Glisser-déposer ou</div>
+                    <button type="button" onClick={(e) => { e.stopPropagation(); pdfInputRef.current?.click(); }} style={{ padding: '8px 16px', borderRadius: 8, background: '#173731', color: '#E7E0D0', border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>Choisir un fichier</button>
+                  </>
+                )}
+              </div>
+              <div style={{ padding: '0 16px 16px' }}>
+                <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--t3)', marginBottom: 8 }}>Extraction automatique</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {['Nom', 'Employeur', 'Poste', 'Ville', 'Expériences'].map((f) => (
+                    <span key={f} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 20, background: 'var(--s2)', color: 'var(--t2)', border: '1px solid var(--border)', fontWeight: 500 }}>{f}</span>
+                  ))}
                 </div>
-                <div className="text-xs text-[var(--t3)]">Profil LinkedIn exporté en PDF</div>
               </div>
-              <div className="bg-[#EEF4FD] rounded-lg py-2.5 px-3.5 text-xs text-[#4A6FA0] mt-2">
-                Extraction automatique : nom, employeur, poste, ville, expériences — puis scoring du profil.
-              </div>
-            </div>
-          </div>
-          <div className="bg-[var(--lbg)] border border-[#FFD5C0] rounded-[10px] py-3.5 px-4 flex items-center gap-3.5">
-            <span className="inline-flex items-center justify-center text-[var(--lemlist)]"><IconLink /></span>
-            <div>
-              <div className="font-semibold text-[13.5px] text-[var(--lemlist)]">Intégration Lemlist</div>
-              <div className="text-xs text-[var(--t2)] mt-0.5">Les profils poussés dans une séquence Lemlist apparaîtront automatiquement via webhook.</div>
             </div>
           </div>
         </>

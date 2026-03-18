@@ -58,6 +58,16 @@ const IconWarning = () => (
   </svg>
 )
 
+const IconDocumentGreen = () => (
+  <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#15803d" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <polyline points="14 2 14 8 20 8" />
+    <line x1="16" y1="13" x2="8" y2="13" />
+    <line x1="16" y1="17" x2="8" y2="17" />
+    <polyline points="10 9 9 9 8 9" />
+  </svg>
+)
+
 const IconEmpty = () => (
   <svg width={48} height={48} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.4 }}>
     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -412,8 +422,27 @@ Analyse ces corrections et réponds UNIQUEMENT en JSON valide (pas de markdown, 
     }
   }
 
-  const fmt = (s) => (s ? new Date(s).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—')
+  const fmt = (s) => {
+    if (!s) return '—'
+    const d = new Date(s)
+    const date = d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })
+    const time = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+    return `${date} · ${time}`
+  }
   const fmtModal = (s) => (s ? new Date(s).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—')
+
+  const abbreviateAuthor = (a) => {
+    if (!a || typeof a !== 'string') return '—'
+    const trimmed = a.trim()
+    if (trimmed.includes('@')) return (trimmed.split('@')[0] || trimmed).slice(0, 12)
+    const parts = trimmed.split(/\s+/)
+    if (parts.length >= 2) {
+      const first = parts[0]
+      const last = parts[parts.length - 1]
+      return `${first} ${last[0]}.`
+    }
+    return trimmed.length > 12 ? `${trimmed.slice(0, 12)}…` : trimmed
+  }
 
   const cardStyle = { background: '#ffffff', borderRadius: 12, border: '1px solid rgba(0,0,0,0.07)', padding: 24, marginBottom: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }
 
@@ -426,7 +455,22 @@ Analyse ces corrections et réponds UNIQUEMENT en JSON valide (pas de markdown, 
 
       {/* Instructions permanentes */}
       <div style={cardStyle}>
-        <div className="text-[11.5px] text-[var(--t3)] uppercase tracking-wider mb-2">Instructions permanentes pour le scoring</div>
+        <div className="flex items-center gap-3 mb-4" style={{ paddingBottom: 12, borderBottom: '1px solid rgba(0,0,0,0.07)' }}>
+          <div style={{ width: 32, height: 32, borderRadius: 8, background: '#D4EDE1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <IconDocumentGreen />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="font-semibold text-[13px]" style={{ color: 'var(--text)' }}>Instructions permanentes</div>
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              {instructions.trim() ? (
+                <span className="inline-flex px-2 py-0.5 rounded-md text-[11px] font-semibold" style={{ backgroundColor: '#D4EDE1', color: '#15803d' }}>Actif</span>
+              ) : (
+                <span className="inline-flex px-2 py-0.5 rounded-md text-[11px]" style={{ backgroundColor: 'var(--s2)', color: 'var(--t3)' }}>Aucune instruction</span>
+              )}
+              <span className="text-[11px] text-[var(--t3)]">{instructions.length} / 2000 caractères</span>
+            </div>
+          </div>
+        </div>
         <textarea
           value={instructions}
           onChange={(e) => setInstructions(e.target.value)}
@@ -437,44 +481,80 @@ Analyse ces corrections et réponds UNIQUEMENT en JSON valide (pas de markdown, 
           className="w-full mb-3 resize-y"
           style={{ maxWidth: '100%', minHeight: 96, borderRadius: 8, border: '1px solid rgba(0,0,0,0.12)', padding: '12px 14px', fontSize: 14 }}
         />
-        <div className="flex flex-wrap items-center gap-3 mb-3">
+        <div className="flex justify-end items-center gap-3">
+          {saveSuccess && <span className="text-[12px] font-medium" style={{ color: '#15803d' }}>Enregistré</span>}
           <button
             type="button"
             onClick={handleSaveInstructions}
             disabled={instructionsSaving || !instructionsLoaded}
             className="py-2 px-4 rounded-lg text-[13px] font-medium disabled:opacity-50"
-            style={{ backgroundColor: GOLD, color: ACCENT }}
+            style={{ backgroundColor: '#173731', color: '#E7E0D0', border: 'none' }}
           >
-            {instructionsSaving ? 'Enregistrement…' : 'Enregistrer les instructions'}
+            {instructionsSaving ? 'Enregistrement…' : 'Enregistrer'}
           </button>
-          {saveSuccess && (
-            <span className="text-[13px] font-medium" style={{ color: '#15803d' }}>Instructions enregistrées</span>
-          )}
-          {instructionsUpdatedAt && (
-            <span className="text-[12px] text-[var(--t3)]">Dernière modification : {fmt(instructionsUpdatedAt)}</span>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-3 text-[12px]">
-          {instructions.trim() ? (
-            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md" style={{ backgroundColor: '#D4EDE1', color: '#1A7A4A', fontWeight: 600 }}>Actif</span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md" style={{ backgroundColor: 'var(--s2)', color: 'var(--t3)' }}>Aucune instruction</span>
-          )}
-          <span className="text-[var(--t3)]">Ces instructions sont injectées dans tous les appels IA du scoring</span>
-          <span className="text-[var(--t3)]">{instructions.length} / 2000 caractères max</span>
         </div>
       </div>
 
-      {topReasons.length > 0 && (
+      <div className="grid grid-cols-2 gap-4 mb-5">
         <div style={cardStyle}>
-          <div className="text-[11.5px] text-[var(--t3)] uppercase tracking-wider mb-2">Top 3 raisons de correction</div>
-          <ol className="list-decimal list-inside space-y-1 text-[13px]">
-            {topReasons.map(([r, n], i) => (
-              <li key={i}>{r}… <span className="text-[var(--t3)]">({n}x)</span></li>
-            ))}
-          </ol>
+          <div className="flex items-center gap-2 mb-3" style={{ paddingBottom: 12, borderBottom: '1px solid rgba(0,0,0,0.07)' }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(59,130,246,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1d4ed8' }}>
+              <IconCheck />
+            </div>
+            <span className="font-semibold text-[13px]" style={{ color: 'var(--text)' }}>Top raisons</span>
+          </div>
+          {topReasons.length > 0 ? (
+            <ol className="list-decimal list-inside space-y-1 text-[13px]">
+              {topReasons.map(([r, n], i) => (
+                <li key={i}>{r}… <span className="text-[var(--t3)]">({n}x)</span></li>
+              ))}
+            </ol>
+          ) : (
+            <div className="text-[13px] text-[var(--t3)]">Aucune correction enregistrée</div>
+          )}
         </div>
-      )}
+        <div style={{ ...cardStyle, minHeight: 200 }}>
+          <div className="flex items-center gap-2 mb-3" style={{ paddingBottom: 12, borderBottom: '1px solid rgba(0,0,0,0.07)' }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(59,130,246,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
+            </div>
+            <span className="font-semibold text-[13px]" style={{ color: 'var(--text)' }}>Chat apprentissage</span>
+          </div>
+          <div className="text-[12px] text-[var(--t3)] mb-3">Ex: « Comment améliorer la détection des banques captives ? »</div>
+          <div className="flex-1 flex flex-col" style={{ minHeight: 0 }}>
+            <div className="flex-1 overflow-y-auto py-4 px-0 flex flex-col gap-3" style={{ maxHeight: 280 }}>
+              {chatMessages.map((m, i) => (
+                <div key={i} className={`flex gap-2.5 max-w-[85%] items-start ${m.role === 'u' ? 'flex-row-reverse self-end' : ''}`}>
+                  <div className={`w-[28px] h-[28px] rounded-full flex items-center justify-center text-xs font-semibold shrink-0 ${m.role === 'ai' ? 'bg-[var(--accent)] text-white' : 'bg-[var(--s2)] text-[var(--t2)]'}`}>{m.role === 'ai' ? 'IA' : 'Vous'}</div>
+                  <div className={`py-2 px-3 rounded-xl text-[13px] ${m.role === 'ai' ? 'bg-[var(--s2)] border' : 'bg-[var(--accent)] text-white'}`} style={m.role === 'ai' ? { borderColor: 'var(--border)' } : {}}>
+                    {typeof m.content === 'string' && m.content.includes('<') ? <span dangerouslySetInnerHTML={{ __html: m.content }} /> : m.content}
+                  </div>
+                </div>
+              ))}
+              {chatLoading && (
+                <div className="flex gap-2.5 items-start">
+                  <div className="w-[28px] h-[28px] rounded-full flex items-center justify-center text-xs font-semibold shrink-0 bg-[var(--accent)] text-white">IA</div>
+                  <div className="py-2 px-3 rounded-xl text-[13px] text-[var(--t3)]">…</div>
+                </div>
+              )}
+              <div ref={chatEndRef} />
+            </div>
+            <div className="flex gap-2 items-center mt-3 shrink-0">
+              <input
+                type="text"
+                className="flex-1 border rounded-lg py-2 px-3 text-[13px] outline-none"
+                style={{ borderColor: 'var(--border)' }}
+                placeholder="Question sur le scoring CGP…"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleChatSend())}
+                disabled={chatLoading}
+              />
+              <button type="button" onClick={handleChatSend} disabled={chatLoading || !chatInput.trim()} className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 disabled:opacity-50" style={{ backgroundColor: '#173731', color: '#E7E0D0', border: 'none' }}>→</button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Instructions & corrections actives */}
       <div style={cardStyle}>
@@ -490,11 +570,17 @@ Analyse ces corrections et réponds UNIQUEMENT en JSON valide (pas de markdown, 
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse min-w-[500px]">
+            <table className="w-full border-collapse" style={{ tableLayout: 'fixed' }}>
+              <colgroup>
+                <col style={{ width: '20%' }} />
+                <col style={{ width: '40%' }} />
+                <col style={{ width: '20%' }} />
+                <col style={{ width: '15%' }} />
+                <col style={{ width: 48 }} />
+              </colgroup>
               <thead>
                 <tr style={{ backgroundColor: 'var(--s2)' }}>
                   <th className="text-left text-[11px] font-medium uppercase tracking-wider text-[var(--t3)] py-2 px-4 border-b" style={{ borderColor: 'var(--border)' }}>Type</th>
-                  <th className="text-left text-[11px] font-medium uppercase tracking-wider text-[var(--t3)] py-2 px-4 border-b" style={{ borderColor: 'var(--border)' }}>Profil</th>
                   <th className="text-left text-[11px] font-medium uppercase tracking-wider text-[var(--t3)] py-2 px-4 border-b" style={{ borderColor: 'var(--border)' }}>Détail</th>
                   <th className="text-left text-[11px] font-medium uppercase tracking-wider text-[var(--t3)] py-2 px-4 border-b" style={{ borderColor: 'var(--border)' }}>
                     <button type="button" onClick={() => setSortBy((s) => ({ col: 'created_at', asc: s.col === 'created_at' ? !s.asc : false }))} className="flex items-center gap-1 hover:text-[var(--accent)]">
@@ -502,7 +588,7 @@ Analyse ces corrections et réponds UNIQUEMENT en JSON valide (pas de markdown, 
                     </button>
                   </th>
                   <th className="text-left text-[11px] font-medium uppercase tracking-wider text-[var(--t3)] py-2 px-4 border-b" style={{ borderColor: 'var(--border)' }}>Auteur</th>
-                  <th className="w-20 py-2 px-4 border-b" style={{ borderColor: 'var(--border)' }}>Actions</th>
+                  <th className="py-2 px-4 border-b" style={{ borderColor: 'var(--border)' }} />
                 </tr>
               </thead>
               <tbody>
@@ -510,15 +596,15 @@ Analyse ces corrections et réponds UNIQUEMENT en JSON valide (pas de markdown, 
                   const name = getProfileName(f)
                   const reason = f.reason || f.feedback_note || '—'
                   const typeLabel = f.profile_id == null ? 'Instruction' : 'Correction profil'
+                  const detailText = f.profile_id == null ? reason : `${name} — ${reason}`
                   return (
                     <tr key={f.id} className="border-b cursor-pointer hover:bg-[#F8F5F1]" style={{ borderColor: 'var(--border)' }} onClick={() => openDetailModal(f)}>
                       <td className="py-2.5 px-4">
                         <span className="inline-flex px-2 py-0.5 rounded-md text-[11px] font-semibold" style={{ backgroundColor: f.profile_id == null ? 'rgba(210,171,118,0.2)' : 'rgba(23,55,49,0.1)', color: f.profile_id == null ? GOLD : ACCENT }}>{typeLabel}</span>
                       </td>
-                      <td className="py-2.5 px-4 text-[13.5px]">{name}</td>
-                      <td className="py-2.5 px-4 text-[12px] max-w-[320px] truncate" title={reason}>{reason.length > 80 ? `${reason.slice(0, 80)}...` : reason}</td>
+                      <td className="py-2.5 px-4 text-[12px] truncate" title={detailText}>{detailText.length > 80 ? `${detailText.slice(0, 80)}...` : detailText}</td>
                       <td className="py-2.5 px-4 text-[12px]" style={{ color: 'var(--t2)' }}>{fmt(f.created_at)}</td>
-                      <td className="py-2.5 px-4 text-[12px]">{f.author || '—'}</td>
+                      <td className="py-2.5 px-4 text-[12px]">{abbreviateAuthor(f.author)}</td>
                       <td className="py-2.5 px-4">
                         {isAdmin && (
                           <div className="flex items-center gap-1">
@@ -591,49 +677,6 @@ Analyse ces corrections et réponds UNIQUEMENT en JSON valide (pas de markdown, 
           )}
         </div>
       )}
-
-      {/* Chat Apprentissage */}
-      <div style={{ ...cardStyle, overflow: 'hidden' }}>
-        <div className="py-3 px-4 border-b" style={{ borderColor: 'rgba(0,0,0,0.07)' }}>
-          <span className="font-semibold text-sm" style={{ color: ACCENT }}>Chat Apprentissage</span>
-          <span className="text-[var(--t3)] text-[12px] ml-2">— Questions uniquement sur le scoring et les critères CGP</span>
-        </div>
-        <div className="flex flex-col" style={{ maxHeight: 400 }}>
-          <div className="flex-1 overflow-y-auto py-4 px-4 flex flex-col gap-3" style={{ maxHeight: 400 }}>
-            {chatMessages.length === 0 && (
-              <div className="text-[13px] text-[var(--t3)]">Posez une question sur le scoring, les critères CGP et l'affinement des règles. Ex: « Comment améliorer la détection des banques captives ? »</div>
-            )}
-            {chatMessages.map((m, i) => (
-              <div key={i} className={`flex gap-2.5 max-w-[85%] items-start ${m.role === 'u' ? 'flex-row-reverse self-end' : ''}`}>
-                <div className={`w-[28px] h-[28px] rounded-full flex items-center justify-center text-xs font-semibold shrink-0 ${m.role === 'ai' ? 'bg-[var(--accent)] text-white' : 'bg-[var(--s2)] text-[var(--t2)]'}`}>{m.role === 'ai' ? 'IA' : 'Vous'}</div>
-                <div className={`py-2 px-3 rounded-xl text-[13px] ${m.role === 'ai' ? 'bg-[var(--s2)] border' : 'bg-[var(--accent)] text-white'}`} style={m.role === 'ai' ? { borderColor: 'var(--border)' } : {}}>
-                  {typeof m.content === 'string' && m.content.includes('<') ? <span dangerouslySetInnerHTML={{ __html: m.content }} /> : m.content}
-                </div>
-              </div>
-            ))}
-            {chatLoading && (
-              <div className="flex gap-2.5 items-start">
-                <div className="w-[28px] h-[28px] rounded-full flex items-center justify-center text-xs font-semibold shrink-0 bg-[var(--accent)] text-white">IA</div>
-                <div className="py-2 px-3 rounded-xl text-[13px] text-[var(--t3)]">…</div>
-              </div>
-            )}
-            <div ref={chatEndRef} />
-          </div>
-          <div className="py-3 px-4 border-t flex gap-2 items-end shrink-0" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg)' }}>
-            <textarea
-              className="flex-1 border rounded-lg py-2 px-3 text-[13px] resize-none outline-none max-h-[100px]"
-              style={{ borderColor: 'var(--border)' }}
-              placeholder="Question sur le scoring CGP…"
-              rows={2}
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleChatSend())}
-              disabled={chatLoading}
-            />
-            <button type="button" onClick={handleChatSend} disabled={chatLoading || !chatInput.trim()} className="py-2 px-4 rounded-lg text-[13px] font-medium shrink-0" style={{ backgroundColor: ACCENT, color: 'white' }}>Envoyer</button>
-          </div>
-        </div>
-      </div>
 
       </div>
 

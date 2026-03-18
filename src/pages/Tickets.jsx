@@ -6,9 +6,14 @@ const ACCENT = '#173731'
 const GOLD = '#D2AB76'
 
 const STATUT_STYLE = {
-  Ouvert: { backgroundColor: 'rgba(220,38,38,0.15)', color: '#b91c1c' },
-  'En cours': { backgroundColor: 'rgba(234,88,12,0.2)', color: '#c2410c' },
-  Résolu: { backgroundColor: 'rgba(34,197,94,0.15)', color: '#15803d' },
+  Ouvert: { backgroundColor: 'rgba(234,88,12,0.2)', color: '#c2410c', border: '1px solid rgba(234,88,12,0.4)' },
+  'En cours': { backgroundColor: 'rgba(59,130,246,0.15)', color: '#1d4ed8', border: '1px solid rgba(59,130,246,0.4)' },
+  Résolu: { backgroundColor: 'rgba(34,197,94,0.15)', color: '#15803d', border: '1px solid rgba(34,197,94,0.4)' },
+}
+
+const PRIORITE_STYLE = {
+  Urgente: { backgroundColor: 'rgba(234,88,12,0.2)', color: '#c2410c', border: '1px solid rgba(234,88,12,0.4)' },
+  Normale: { backgroundColor: 'var(--s2)', color: 'var(--t2)', border: '1px solid var(--border)' },
 }
 
 export default function Tickets() {
@@ -90,8 +95,16 @@ export default function Tickets() {
 
   const fmt = (s) => {
     if (!s) return '—'
-    return new Date(s).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    const d = new Date(s)
+    const date = d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })
+    const time = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+    return `${date} · ${time}`
   }
+
+  const totalCount = tickets.length
+  const ouvertsCount = tickets.filter((t) => t.statut === 'Ouvert').length
+  const enCoursCount = tickets.filter((t) => t.statut === 'En cours').length
+  const resolusCount = tickets.filter((t) => t.statut === 'Résolu').length
 
   return (
     <div className="page h-full overflow-y-auto p-[22px]" style={{ color: 'var(--text)' }}>
@@ -103,8 +116,8 @@ export default function Tickets() {
         <button
           type="button"
           onClick={() => { setModalOpen(true); setError(null); setEmailFeedback(null); }}
-          className="py-2 px-4 rounded-lg text-[13px] font-medium text-white cursor-pointer"
-          style={{ backgroundColor: GOLD }}
+          className="py-2 px-4 rounded-lg text-[13px] font-medium cursor-pointer"
+          style={{ backgroundColor: '#173731', color: '#E7E0D0', border: 'none' }}
         >
           Signaler un problème
         </button>
@@ -207,6 +220,25 @@ export default function Tickets() {
         </div>
       )}
 
+      <div className="grid grid-cols-4 gap-3 mb-5">
+        <div className="rounded-[10px] border p-4" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--surface)' }}>
+          <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--t3)] mb-1">Total</div>
+          <div className="text-[22px] font-semibold" style={{ color: 'var(--text)' }}>{totalCount}</div>
+        </div>
+        <div className="rounded-[10px] border p-4" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--surface)' }}>
+          <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--t3)] mb-1">Ouverts</div>
+          <div className="text-[22px] font-semibold" style={{ color: '#c2410c' }}>{ouvertsCount}</div>
+        </div>
+        <div className="rounded-[10px] border p-4" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--surface)' }}>
+          <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--t3)] mb-1">En cours</div>
+          <div className="text-[22px] font-semibold" style={{ color: '#1d4ed8' }}>{enCoursCount}</div>
+        </div>
+        <div className="rounded-[10px] border p-4" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--surface)' }}>
+          <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--t3)] mb-1">Résolus</div>
+          <div className="text-[22px] font-semibold" style={{ color: '#15803d' }}>{resolusCount}</div>
+        </div>
+      </div>
+
       <div className="rounded-[10px] border overflow-hidden" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--surface)' }}>
         <div className="py-3 px-4 border-b" style={{ borderColor: 'var(--border)' }}>
           <span className="font-semibold text-sm">Mes tickets</span>
@@ -229,14 +261,19 @@ export default function Tickets() {
             <tbody>
               {tickets.map((t) => (
                 <tr key={t.id} className="border-b last:border-b-0 hover:bg-[#F8F5F1]" style={{ borderColor: 'var(--border)' }}>
-                  <td className="py-2.5 px-4 text-[13.5px] font-medium">{t.titre}</td>
                   <td className="py-2.5 px-4">
-                    <span className="text-xs py-0.5 px-2 rounded-full font-medium" style={{ backgroundColor: t.priorite === 'Urgente' ? 'rgba(220,38,38,0.15)' : 'var(--s2)', color: t.priorite === 'Urgente' ? '#b91c1c' : 'var(--t2)' }}>
+                    <div>
+                      <div className="text-[13.5px] font-medium">{t.titre}</div>
+                      {t.description && <div className="text-[11px] text-[var(--t3)] mt-0.5 truncate max-w-[280px]">{t.description}</div>}
+                    </div>
+                  </td>
+                  <td className="py-2.5 px-4">
+                    <span className="text-xs py-0.5 px-2.5 font-medium" style={{ borderRadius: 20, ...(PRIORITE_STYLE[t.priorite] || PRIORITE_STYLE.Normale) }}>
                       {t.priorite}
                     </span>
                   </td>
                   <td className="py-2.5 px-4">
-                    <span className="text-xs py-0.5 px-2 rounded-full font-medium" style={STATUT_STYLE[t.statut] || STATUT_STYLE.Ouvert}>
+                    <span className="text-xs py-0.5 px-2.5 font-medium" style={{ borderRadius: 20, ...(STATUT_STYLE[t.statut] || STATUT_STYLE.Ouvert) }}>
                       {t.statut}
                     </span>
                   </td>

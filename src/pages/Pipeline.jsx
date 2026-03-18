@@ -333,6 +333,8 @@ export default function Pipeline() {
   const [pendingSessions, setPendingSessions] = useState([])
   const [pendingSessionId, setPendingSessionId] = useState('')
   const [stageChangeDate, setStageChangeDate] = useState('')
+  const [stageChangeTime, setStageChangeTime] = useState('')
+  const [stageChangeRdType, setStageChangeRdType] = useState('Google Meet')
   const [stageChangeNotes, setStageChangeNotes] = useState('')
   const [profileToAssign, setProfileToAssign] = useState(null)
   const [showSessionModal, setShowSessionModal] = useState(false)
@@ -696,6 +698,8 @@ export default function Pipeline() {
     }
     setPendingStageChange({ profileId, profile, newStage })
     setStageChangeDate('')
+    setStageChangeTime('')
+    setStageChangeRdType('Google Meet')
     setStageChangeNotes('')
   }
 
@@ -728,9 +732,10 @@ export default function Pipeline() {
     changeStage(profileId, newStage)
     if (useSupabase) {
       await supabase.from('profiles').update({ stage: newStage }).eq('id', profile.id)
-      const eventDateVal = stageChangeDate ? (stageChangeDate.includes('T') ? stageChangeDate : stageChangeDate + 'T12:00:00') : null
+      const timeVal = stageChangeTime || '12:00'
+      const eventDateVal = stageChangeDate ? (stageChangeDate.includes('T') ? stageChangeDate : `${stageChangeDate}T${timeVal}${timeVal.length === 5 ? ':00' : ''}`) : null
       if (eventDateVal) {
-        const eventRow = { profile_id: profile.id, event_type: newStage, event_date: eventDateVal, description: stageChangeNotes || newStage }
+        const eventRow = { profile_id: profile.id, event_type: stageChangeRdType, event_date: eventDateVal, description: stageChangeNotes || newStage }
         if (user?.id) eventRow.owner_id = user.id
         await supabase.from(EVENTS_TABLE).insert(eventRow)
         window.dispatchEvent(new CustomEvent('evolve:event-added'))
@@ -756,6 +761,8 @@ export default function Pipeline() {
       fetchProfiles()
     }
     setStageChangeDate('')
+    setStageChangeTime('')
+    setStageChangeRdType('Google Meet')
     setStageChangeNotes('')
     setPendingSessionId('')
     setPendingSessions([])
@@ -782,6 +789,8 @@ export default function Pipeline() {
       }
       setPendingStageChange(null)
       setStageChangeDate('')
+      setStageChangeTime('')
+      setStageChangeRdType('Google Meet')
       setStageChangeNotes('')
       setProfileToAssign({ id: profile.id, fn: profile.fn, ln: profile.ln, session_formation_id: profile.session_formation_id, stg: 'Recruté' })
       setShowSessionModal(true)
@@ -812,6 +821,8 @@ export default function Pipeline() {
       fetchProfiles()
     }
     setStageChangeDate('')
+    setStageChangeTime('')
+    setStageChangeRdType('Google Meet')
     setStageChangeNotes('')
     setPendingSessionId('')
     setPendingSessions([])
@@ -1374,63 +1385,108 @@ export default function Pipeline() {
           </div>
         </div>
       )}
-      {pendingStageChange && pendingStageChange.newStage !== 'Recruté' && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setPendingStageChange(null)}>
-          <div style={{ background: 'white', padding: 24, borderRadius: 12, boxShadow: '0 4px 20px rgba(0,0,0,0.15)', minWidth: 360, maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8, color: '#173731' }}>Planifier l'étape {pendingStageChange.newStage}</div>
-            <div style={{ fontSize: 13, color: '#666', marginBottom: 16 }}>{pendingStageChange.profile.fn} {pendingStageChange.profile.ln}</div>
-            <p style={{ fontSize: 13, color: '#444', marginBottom: 12 }}>Renseignez la date prévue pour cette étape</p>
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 4 }}>Date de l'événement</label>
-              <input
-                type="datetime-local"
-                required
-                value={stageChangeDate}
-                onChange={(e) => setStageChangeDate(e.target.value)}
-                style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6 }}
-              />
-            </div>
-            <div style={{ marginBottom: 20 }}>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 4 }}>Notes (optionnel)</label>
-              <textarea
-                value={stageChangeNotes}
-                onChange={(e) => setStageChangeNotes(e.target.value)}
-                placeholder="Notes…"
-                rows={3}
-                style={{ width: '100%', padding: 10, fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, resize: 'vertical' }}
-              />
-            </div>
-            {(pendingStageChange.newStage === "Point d'étape téléphonique" || pendingStageChange.newStage === "Point d'étape") && (
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ fontSize: 13, color: '#666', display: 'block', marginBottom: 6 }}>
-                  Session cible (optionnel)
-                </label>
-                <select
-                  value={pendingSessionId}
-                  onChange={(e) => setPendingSessionId(e.target.value)}
-                  style={{
-                    width: '100%', padding: '10px 12px', fontSize: 13,
-                    border: '1px solid #e5e0d8', borderRadius: 8,
-                    background: 'white', color: '#173731',
-                  }}
-                >
-                  <option value="">— Pas encore défini</option>
-                  {pendingSessions.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {[s.periode, s.annee].filter(Boolean).join(' ') || s.date_session || '—'}
-                    </option>
-                  ))}
-                </select>
+      {pendingStageChange && pendingStageChange.newStage !== 'Recruté' && (() => {
+        const TIME_SLOTS = Array.from({ length: 19 }, (_, i) => {
+          const h = 9 + Math.floor(i / 2)
+          const m = (i % 2) * 30
+          return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+        })
+        const RDV_TYPES = ['Google Meet', 'Téléphone', 'Présentiel']
+        const { profile, newStage } = pendingStageChange
+        const currentStage = profile.stg || 'R0'
+        return (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setPendingStageChange(null)}>
+            <div style={{ background: 'white', borderRadius: 12, boxShadow: '0 4px 20px rgba(0,0,0,0.15)', minWidth: 380, maxWidth: 440, overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
+              <div style={{ background: '#173731', padding: '16px 20px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', color: '#D2AB76', padding: '4px 10px', borderRadius: 20, border: '1px solid rgba(210,171,118,0.5)' }}>Pipeline</span>
+                </div>
+                <div style={{ fontFamily: 'Palatino, "Palatino Linotype", "Book Antiqua", serif', fontSize: 18, fontWeight: 600, color: '#E7E0D0' }}>Passage en {newStage}</div>
+                <div style={{ fontSize: 13, color: 'rgba(231,224,208,0.9)', marginTop: 4 }}>{profile.fn} {profile.ln} · {profile.co || '—'}</div>
               </div>
-            )}
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
-              <button type="button" onClick={() => setPendingStageChange(null)} style={{ padding: '8px 16px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, background: 'white', cursor: 'pointer', color: '#6B6B6B' }}>Annuler</button>
-              <button type="button" onClick={handleSkipStageChangeDate} style={{ padding: '8px 16px', fontSize: 13, border: '1px solid #173731', borderRadius: 6, background: 'white', cursor: 'pointer', color: '#173731' }}>Passer sans date</button>
-              <button type="button" onClick={handleConfirmStageChange} disabled={!stageChangeDate.trim()} style={{ padding: '8px 16px', fontSize: 13, border: 'none', borderRadius: 6, background: '#173731', color: 'white', cursor: 'pointer', opacity: stageChangeDate.trim() ? 1 : 0.5 }}>Confirmer</button>
+              <div style={{ padding: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#E5E0D8', border: '2px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }} />
+                    <span style={{ fontSize: 10, fontWeight: 500, color: '#666', textAlign: 'center', maxWidth: 70 }}>{currentStage === "Point d'étape téléphonique" ? "Point d'étape" : currentStage}</span>
+                  </div>
+                  <div style={{ flex: 1, height: 2, background: '#E5E0D8' }} />
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#D2AB76', border: '2px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }} />
+                    <span style={{ fontSize: 10, fontWeight: 500, color: '#D2AB76', textAlign: 'center', maxWidth: 70 }}>{newStage === "Point d'étape téléphonique" ? "Point d'étape" : newStage}</span>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 4 }}>Date</label>
+                    <input
+                      type="date"
+                      value={stageChangeDate}
+                      onChange={(e) => setStageChangeDate(e.target.value)}
+                      style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6 }}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 4 }}>Heure</label>
+                    <select
+                      value={stageChangeTime}
+                      onChange={(e) => setStageChangeTime(e.target.value)}
+                      style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, background: 'white' }}
+                    >
+                      <option value="">—</option>
+                      {TIME_SLOTS.map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div style={{ marginBottom: 12 }}>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 4 }}>Type de RDV</label>
+                  <select
+                    value={stageChangeRdType}
+                    onChange={(e) => setStageChangeRdType(e.target.value)}
+                    style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, background: 'white' }}
+                  >
+                    {RDV_TYPES.map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 4 }}>Notes (optionnel)</label>
+                  <textarea
+                    value={stageChangeNotes}
+                    onChange={(e) => setStageChangeNotes(e.target.value)}
+                    placeholder="Notes…"
+                    rows={3}
+                    style={{ width: '100%', padding: 10, fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, resize: 'vertical' }}
+                  />
+                </div>
+                {(newStage === "Point d'étape téléphonique" || newStage === "Point d'étape") && (
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ fontSize: 12, fontWeight: 500, color: '#666', display: 'block', marginBottom: 4 }}>Session cible (optionnel)</label>
+                    <select
+                      value={pendingSessionId}
+                      onChange={(e) => setPendingSessionId(e.target.value)}
+                      style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, background: 'white' }}
+                    >
+                      <option value="">— Pas encore défini</option>
+                      {pendingSessions.map((s) => (
+                        <option key={s.id} value={s.id}>{[s.periode, s.annee].filter(Boolean).join(' ') || s.date_session || '—'}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', alignItems: 'center' }}>
+                  <button type="button" onClick={() => setPendingStageChange(null)} style={{ padding: '8px 16px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, background: 'white', cursor: 'pointer', color: '#6B6B6B' }}>Annuler</button>
+                  <button type="button" onClick={handleSkipStageChangeDate} style={{ padding: '6px 12px', fontSize: 12, border: 'none', background: 'transparent', cursor: 'pointer', color: '#9CA3AF' }}>Sans date</button>
+                  <button type="button" onClick={handleConfirmStageChange} disabled={!stageChangeDate.trim() || !stageChangeTime} style={{ padding: '8px 16px', fontSize: 13, border: 'none', borderRadius: 6, background: '#173731', color: '#E7E0D0', cursor: 'pointer', opacity: (stageChangeDate.trim() && stageChangeTime) ? 1 : 0.5 }}>Confirmer →</button>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {confirmDeleteEvent && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setConfirmDeleteEvent(null)}>

@@ -16,7 +16,7 @@ const RECRUITED_GREEN = '#16a34a'
 
 const ANALYTICS_SOURCES = ['Chasse LinkedIn', 'Chasse Mail', 'Recommandation', 'Ads', 'Chasse externe', 'Inbound Marketing', 'Autre']
 
-const ANALYTICS_STAGES = ['R0', 'R1', "Point d'étape téléphonique", 'R2 Amaury', 'Point juridique', 'Démission reconversion', 'Intégration', 'Recruté']
+const ANALYTICS_STAGES = ['R0', 'R1', "Point d'étape", 'R2 Amaury', 'Point juridique', 'Démission reconversion', 'Recruté']
 
 const CHUTE_STAGES = ['Avant pipeline', 'R0', 'R1', "Point d'étape téléphonique", 'R2 Amaury', 'Point juridique', 'Démission reconversion']
 
@@ -143,7 +143,7 @@ function filterByPeriod(profiles, period) {
 
 function getFunnelBarColor(stage) {
   if (['R0', 'R1'].includes(stage)) return ACCENT
-  if (['Intégration', 'Recruté'].includes(stage)) return RECRUITED_GREEN
+  if (stage === 'Recruté') return RECRUITED_GREEN
   return GOLD
 }
 
@@ -470,6 +470,7 @@ export default function Analytics() {
     const chuteProfiles = forAlways.filter((p) => p.mat === 'Chute' || p.mat === 'Pas intéressé')
 
     const countInStage = (stg) => {
+      if (stg === "Point d'étape") return forFunnel.filter((p) => normalizeStageForMatch(p.stg) === "Point d'étape téléphonique").length
       if (stg === "Point d'étape téléphonique") return forFunnel.filter((p) => normalizeStageForMatch(p.stg) === stg).length
       return forFunnel.filter((p) => p.stg === stg).length
     }
@@ -490,7 +491,12 @@ export default function Analytics() {
     }
     const profileCreated = {}
     forAlways.forEach((p) => { profileCreated[p.id] = new Date(p.created_at || 0).getTime() })
-    stageOrder.forEach((stage) => { stageDurations[stage] = [] })
+    const stageDataKey = (s) => (s === "Point d'étape" ? "Point d'étape téléphonique" : s)
+    stageOrder.forEach((stage) => {
+      stageDurations[stage] = []
+      const dk = stageDataKey(stage)
+      if (dk !== stage) stageDurations[dk] = stageDurations[dk] ?? []
+    })
     for (const p of forAlways) {
       const acts = actsByProfile[p.id] || []
       const created = profileCreated[p.id] || 0
@@ -511,7 +517,7 @@ export default function Analytics() {
     }
     const avgByStage = {}
     stageOrder.forEach((s) => {
-      const arr = stageDurations[s] || []
+      const arr = stageDurations[stageDataKey(s)] || []
       avgByStage[s] = arr.length > 0 ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : null
     })
 
@@ -580,7 +586,7 @@ export default function Analytics() {
       .filter((d) => d > 0)
     const avgDelay = r0ToIntegDelay.length > 0 ? Math.round(r0ToIntegDelay.reduce((a, b) => a + b, 0) / r0ToIntegDelay.length) : null
 
-    const integresProfiles = forAlways.filter((p) => p.stg === 'Intégration' || p.stg === 'Recruté')
+    const integresProfiles = forAlways.filter((p) => p.stg === 'Recruté')
     const scoresIntegres = integresProfiles.map((p) => p.sc ?? 0).filter((s) => s > 0)
     const scoresAll = forAlways.map((p) => p.sc ?? 0).filter((s) => s > 0)
     const avgScoreIntegres = scoresIntegres.length > 0 ? Math.round(scoresIntegres.reduce((a, b) => a + b, 0) / scoresIntegres.length) : null
