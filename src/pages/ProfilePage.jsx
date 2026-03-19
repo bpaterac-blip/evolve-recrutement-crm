@@ -14,7 +14,6 @@ import {
   NOTE_TEMPLATES,
   EVENT_TYPES,
   EVENT_FORM_TYPES,
-  NEXT_EVENT_LABELS,
 } from '../lib/data'
 
 const SESSION_CIBLE_STAGES = ['Point Business Plan', "Point d'étape téléphonique", "Point d'étape", 'R2 Amaury', 'Démission reconversion', 'Point juridique', 'Intégration', 'Recruté']
@@ -764,7 +763,7 @@ export default function ProfilePage() {
                 style={{ flex: 1, padding: '6px 10px', fontSize: 13, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6 }}
               >
                 <option value="">—</option>
-                {NEXT_EVENT_LABELS.map((opt) => (
+                {['Téléphone', 'Google Meet', 'Présentiel', 'Visioconférence', 'Autre'].map((opt) => (
                   <option key={opt} value={opt}>{opt}</option>
                 ))}
               </select>

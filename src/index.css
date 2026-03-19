@@ -69,3 +69,13 @@ html, body {
 /* font-family for logo */
 .logo-word { font-family: 'DM Serif Display', serif; }
 .tbar-ttl { font-family: 'DM Serif Display', serif; }
+
+/* Boutons : cliquabilité sur toute la surface */
+button:not(:disabled) {
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
+}
+button:not(:disabled) > * {
+  pointer-events: none;
+}

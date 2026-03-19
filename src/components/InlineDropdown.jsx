@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 
 const DROPDOWN_Z = 9999
 
@@ -24,51 +25,69 @@ export default function InlineDropdown({ options, value, onChange, buttonStyle =
   }
   const [rect, setRect] = useState(null)
   const buttonRef = useRef(null)
+  const containerRef = useRef(null)
 
   const resolvedStyle = typeof buttonStyle === 'function' ? buttonStyle(value) : buttonStyle
 
   useEffect(() => {
-    if (!open || !buttonRef.current) return
-    const r = buttonRef.current.getBoundingClientRect()
-    setRect({ left: r.left, bottom: r.bottom, width: Math.max(r.width, 140) })
-  }, [open])
-
-  useEffect(() => {
     if (!open || isControlled) return
-    const close = () => setOpen(false)
-    window.addEventListener('click', close)
-    return () => window.removeEventListener('click', close)
+    const handleClickOutside = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [open, isControlled])
 
   return (
-    <div className={containerClassName} style={{ position: 'relative', display: 'inline-block' }}>
+    <div ref={containerRef} className={containerClassName} style={{ position: 'relative', display: 'inline-block' }}>
       <button
         ref={buttonRef}
         type="button"
         className={buttonClassName}
         style={{ cursor: 'pointer', padding: '6px 10px', fontSize: 13, borderRadius: 6, border: 'none', ...resolvedStyle }}
-        onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+        onClick={(e) => {
+          e.stopPropagation()
+          if (buttonRef.current) {
+            const r = buttonRef.current.getBoundingClientRect()
+            setRect({ left: r.left, bottom: r.bottom, width: Math.max(r.width, 140) })
+          }
+          setOpen((o) => !o)
+        }}
       >
         {(formatDisplay ? formatDisplay(value) : (value || placeholder)).toString().trim() || placeholder} ▾
       </button>
-      {open && rect && (
-        <div
-          className="ddrop bg-[var(--surface)] border border-[var(--border)] rounded-lg shadow-lg p-1 min-w-[140px] max-h-[280px] overflow-y-auto"
-          style={{ position: 'fixed', left: rect.left, top: rect.bottom + 4, width: rect.width, zIndex: DROPDOWN_Z }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {options.map((opt) => (
-            <div
-              key={opt}
-              className="ddi py-1.5 px-2.5 rounded-md text-[13px] cursor-pointer hover:bg-[var(--s2)]"
-              style={value === opt ? { fontWeight: 600 } : {}}
-              onClick={() => { onChange(opt); setOpen(false); }}
-            >
-              {opt}
-            </div>
-          ))}
-        </div>
-      )}
+      {open && rect &&
+        createPortal(
+          <div
+            className="ddrop p-1 max-h-[280px] overflow-y-auto"
+            style={{
+              position: 'fixed',
+              top: rect.bottom + 4,
+              left: rect.left,
+              zIndex: DROPDOWN_Z,
+              background: 'white',
+              border: '0.5px solid var(--border)',
+              borderRadius: 8,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+              minWidth: 180,
+              width: Math.max(rect.width, 180),
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {options.map((opt) => (
+              <div
+                key={opt}
+                className="ddi py-1.5 px-2.5 rounded-md text-[13px] cursor-pointer hover:bg-[var(--s2)]"
+                style={value === opt ? { fontWeight: 600 } : {}}
+                onClick={() => { onChange(opt); setOpen(false); }}
+              >
+                {opt}
+              </div>
+            ))}
+          </div>,
+          document.body
+        )
+      }
     </div>
   )
 }

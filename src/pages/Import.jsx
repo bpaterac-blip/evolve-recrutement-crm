@@ -882,10 +882,10 @@ export default function Import() {
                 {enriching ? 'Enrichissement…' : `Enrichir via Netrows (${netrowsEligibleCount} profils)`}
               </button>
             )}
-            <button type="button" onClick={pushToCRM} disabled={pushing || rowsToPush.length === 0} style={{ padding: '8px 16px', borderRadius: 8, background: ACCENT, color: GOLD, fontWeight: 500, fontSize: 13, cursor: pushing || rowsToPush.length === 0 ? 'not-allowed' : 'pointer', opacity: pushing || rowsToPush.length === 0 ? 0.6 : 1 }}>
+            <button type="button" onClick={pushToCRM} disabled={pushing || rowsToPush.length === 0} style={{ position: 'relative', zIndex: 1, padding: '8px 16px', borderRadius: 8, background: ACCENT, color: GOLD, fontWeight: 500, fontSize: 13, cursor: pushing || rowsToPush.length === 0 ? 'not-allowed' : 'pointer', opacity: pushing || rowsToPush.length === 0 ? 0.6 : 1 }}>
               {pushing ? 'En cours…' : `Pousser ${rowsToPush.length} profil(s) dans le CRM`}
             </button>
-            <button type="button" onClick={() => exportToLemlistCsv(rowsToPush)} disabled={rowsToPush.length === 0} style={{ padding: '8px 16px', borderRadius: 8, background: GOLD, color: ACCENT, fontWeight: 500, fontSize: 13, cursor: rowsToPush.length === 0 ? 'not-allowed' : 'pointer', opacity: rowsToPush.length === 0 ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <button type="button" onClick={() => exportToLemlistCsv(rowsToPush)} disabled={rowsToPush.length === 0} style={{ position: 'relative', zIndex: 1, padding: '8px 16px', borderRadius: 8, background: GOLD, color: ACCENT, fontWeight: 500, fontSize: 13, cursor: rowsToPush.length === 0 ? 'not-allowed' : 'pointer', opacity: rowsToPush.length === 0 ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 6 }}>
               <IconUpload />
               Exporter vers Lemlist
             </button>

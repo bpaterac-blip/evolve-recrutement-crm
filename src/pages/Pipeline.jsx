@@ -133,15 +133,21 @@ function formatShortDate(dateStr) {
   return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
 }
 
+function formatDateWithYear(dateStr) {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+}
+
 function KanbanCard({ profile, stage, onClick, isSelected, ownerBadge, nextEvent }) {
   const handleClick = () => onClick?.(profile)
 
-  const hasUpcomingEvent = nextEvent && (nextEvent.event_date || nextEvent.date)
-  const displayDate = hasUpcomingEvent
-    ? formatShortDate(nextEvent.event_date || nextEvent.date)
+  const hasNextEventDate = profile.next_event_date
+  const displayDate = hasNextEventDate
+    ? formatShortDate(profile.next_event_date)
     : (profile.created_at ? formatShortDate(profile.created_at) : profile.dt || '')
-  const dateColor = hasUpcomingEvent ? '#D2AB76' : '#ccc'
-  const eventTypeLabel = hasUpcomingEvent && (nextEvent.event_type || (nextEvent.content || '').split(' — ')[0]) ? (nextEvent.event_type || (nextEvent.content || '').split(' — ')[0]) : ''
+  const dateColor = hasNextEventDate ? '#D2AB76' : '#ccc'
+  const dateTitle = hasNextEventDate ? `Prochain événement : ${formatDateWithYear(profile.next_event_date)}` : undefined
 
   const borderColor = STAGE_BORDER_COLORS[stage] || '#94a3b8'
   const matStyle = MATURITY_BADGE_STYLES[profile.mat] || { backgroundColor: '#f8fafc', color: '#94a3b8' }
@@ -237,7 +243,7 @@ function KanbanCard({ profile, stage, onClick, isSelected, ownerBadge, nextEvent
         <span style={{ fontSize: 10, borderRadius: 20, padding: '2px 7px', fontWeight: 600, ...matStyle }}>
           {profile.mat}
         </span>
-        <span style={{ fontSize: 10, fontWeight: 600, color: dateColor }} title={eventTypeLabel || undefined}>
+        <span style={{ fontSize: 10, fontWeight: 600, color: dateColor }} title={dateTitle}>
           {stage === 'Recruté' ? 'Intégré ✓' : displayDate}
         </span>
       </div>
@@ -437,6 +443,7 @@ export default function Pipeline() {
     const handleClickOutside = (e) => {
       if (!e.target.closest('.stade-dropdown')) setShowStadeDropdown(false)
       if (!e.target.closest('.maturite-dropdown')) setShowMaturiteDropdown(false)
+      if (!e.target.closest('.source-dropdown')) setShowSourceDropdown(false)
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
@@ -446,6 +453,7 @@ export default function Pipeline() {
     if (!modalProfile) {
       setShowStadeDropdown(false)
       setShowMaturiteDropdown(false)
+      setShowSourceDropdown(false)
     }
   }, [modalProfile])
 
@@ -771,7 +779,8 @@ export default function Pipeline() {
       const oldStage = profile.stg ?? '—'
       changeStage(profileId, newStage)
       if (useSupabase) {
-        await supabase.from('profiles').update({ stage: 'Recruté' }).eq('id', profile.id)
+        const recruteUpdates = { stage: 'Recruté', integration_confirmed: true }
+        await supabase.from('profiles').update(recruteUpdates).eq('id', profile.id)
         await supabase.from('activities').insert({
           profile_id: profile.id,
           type: 'stage_change',
@@ -792,17 +801,33 @@ export default function Pipeline() {
     const oldStage = profile.stg ?? '—'
     changeStage(profileId, newStage)
     if (useSupabase) {
+      const timeVal = stageChangeTime || '12:00'
+      const eventDateVal = stageChangeDate ? (stageChangeDate.includes('T') ? stageChangeDate : `${stageChangeDate}T${timeVal}${timeVal.length === 5 ? ':00' : ''}`) : null
       const updates = { stage: newStage }
       if (stageChangeSkipStep && newStage === 'Point Business Plan') updates.skip_business_plan = true
       if (stageChangeSkipStep && newStage === 'Démission reconversion') updates.skip_demission = true
-      await supabase.from('profiles').update(updates).eq('id', profile.id)
-      const timeVal = stageChangeTime || '12:00'
-      const eventDateVal = stageChangeDate ? (stageChangeDate.includes('T') ? stageChangeDate : `${stageChangeDate}T${timeVal}${timeVal.length === 5 ? ':00' : ''}`) : null
       if (eventDateVal) {
-        const eventRow = { profile_id: profile.id, event_type: stageChangeRdType, event_date: eventDateVal, description: stageChangeNotes || newStage }
-        if (user?.id) eventRow.owner_id = user.id
-        await supabase.from(EVENTS_TABLE).insert(eventRow)
+        updates.next_event_date = stageChangeDate.split('T')[0]
+        updates.next_event_label = newStage
+        const nouvelleEtape = newStage
+        const dateChoisie = eventDateVal
+        const typeRdv = stageChangeRdType || null
+        const notes = stageChangeNotes?.trim() || ''
+        const description = typeRdv ? typeRdv + (notes ? ' · ' + notes : '') : (notes || '')
+        console.log('Insert event:', { profile_id: profile.id, event_type: nouvelleEtape, event_date: dateChoisie })
+        const { error } = await supabase.from('events').insert({
+          profile_id: profile.id,
+          event_type: nouvelleEtape,
+          event_date: dateChoisie,
+          description: description || null,
+          created_at: new Date().toISOString(),
+        })
+        if (error) console.error('Erreur insert event:', error)
         window.dispatchEvent(new CustomEvent('evolve:event-added'))
+      }
+      await supabase.from('profiles').update(updates).eq('id', profile.id)
+      if (eventDateVal) {
+        updateProfile(profile.id, { next_event_date: stageChangeDate.split('T')[0], next_event_label: newStage })
       }
       if (pendingSessionId && INTEG_MODAL_STAGES.includes(newStage)) {
         const session = pendingSessions.find((s) => s.id === pendingSessionId)
@@ -841,7 +866,8 @@ export default function Pipeline() {
       const oldStage = profile.stg ?? '—'
       changeStage(profileId, newStage)
       if (useSupabase) {
-        await supabase.from('profiles').update({ stage: 'Recruté' }).eq('id', profile.id)
+        const recruteUpdates = { stage: 'Recruté', integration_confirmed: true }
+        await supabase.from('profiles').update(recruteUpdates).eq('id', profile.id)
         await supabase.from('activities').insert({
           profile_id: profile.id,
           type: 'stage_change',
@@ -1606,7 +1632,7 @@ export default function Pipeline() {
                 )}
                 {INTEG_MODAL_STAGES.includes(newStage) && (
                   <div style={{ marginBottom: 16 }}>
-                    <label style={{ fontSize: 12, fontWeight: 500, color: '#666', display: 'block', marginBottom: 4 }}>Session de formation (optionnel)</label>
+                    <label style={{ fontSize: 12, fontWeight: 500, color: '#666', display: 'block', marginBottom: 4 }}>Session cible (optionnel)</label>
                     <select
                       value={pendingSessionId}
                       onChange={(e) => setPendingSessionId(e.target.value)}
@@ -1743,7 +1769,7 @@ export default function Pipeline() {
               {showCreateSession ? (
                 <button type="button" onClick={async () => { if (!newSession.date_session || !profileToAssign?.id) return; const { data: newSess } = await supabase.from('sessions_formation').insert({ date_session: newSession.date_session, lieu: newSession.lieu || null, places_total: newSession.places_total, statut: newSession.statut, notes: newSession.notes || null }).select().single(); if (newSess?.id) { await supabase.from('profiles').update({ session_formation_id: newSess.id, integration_confirmed: true }).eq('id', profileToAssign.id); setShowSessionModal(false); setProfileToAssign(null); setShowCreateSession(false); setNewSession({ date_session: '', lieu: '', places_total: 6, statut: 'planifiée', notes: '' }); fetchProfiles(); window.dispatchEvent(new CustomEvent('evolve:session-updated')); } }} disabled={!newSession.date_session} style={{ padding: '10px 16px', fontSize: 13, border: 'none', borderRadius: 6, background: ACCENT, color: 'white', cursor: 'pointer', opacity: newSession.date_session ? 1 : 0.6 }}>Créer et assigner</button>
               ) : (
-                <button type="button" onClick={async () => { if (!selectedSession || !profileToAssign?.id) return; await supabase.from('profiles').update({ session_formation_id: selectedSession, integration_confirmed: true }).eq('id', profileToAssign.id); setShowSessionModal(false); setProfileToAssign(null); fetchProfiles(); window.dispatchEvent(new CustomEvent('evolve:session-updated')); }} disabled={!selectedSession} style={{ padding: '10px 16px', fontSize: 13, border: 'none', borderRadius: 6, background: ACCENT, color: 'white', cursor: 'pointer', opacity: selectedSession ? 1 : 0.6 }}>Assigner à cette session</button>
+                <button type="button" onClick={async () => { if (!selectedSession || !profileToAssign?.id) return; const sess = sessionsWithCount.find((s) => s.id === selectedSession); const updates = { integration_confirmed: true }; if (!profileToAssign.session_formation_id) { updates.session_formation_id = selectedSession; updates.integration_periode = sess?.periode ?? null; updates.integration_annee = sess?.annee ?? null; } await supabase.from('profiles').update(updates).eq('id', profileToAssign.id); setShowSessionModal(false); setProfileToAssign(null); fetchProfiles(); window.dispatchEvent(new CustomEvent('evolve:session-updated')); }} disabled={!selectedSession} style={{ padding: '10px 16px', fontSize: 13, border: 'none', borderRadius: 6, background: ACCENT, color: 'white', cursor: 'pointer', opacity: selectedSession ? 1 : 0.6 }}>Assigner à cette session</button>
               )}
               <button type="button" onClick={() => { setShowSessionModal(false); setProfileToAssign(null); setShowCreateSession(false); fetchProfiles(); }} style={{ padding: '10px 16px', fontSize: 13, border: `1px solid ${ACCENT}`, borderRadius: 6, background: 'transparent', color: ACCENT, cursor: 'pointer' }}>Passer sans assigner</button>
             </div>

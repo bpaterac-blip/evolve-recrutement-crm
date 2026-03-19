@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useCRM } from '../context/CRMContext'
 import { STAGES, MATURITIES, INTEG_OPTS, INTEG_ADD_DATE, STAGE_COLORS, REGIONS } from '../lib/data'
 import { ActivityIcon, IconCalendar, IconArrowUp, IconPencil, IconSave, IconClose } from '../components/Icons'
 
 const SRC_TAG = { 'Chasse LinkedIn': 'tb', 'Chasse Mail': 'tt', 'Recommandation': 'tp', 'Inbound': 'tg', 'Ads': 'ta', 'Direct contact': 'tx' }
+const DROPDOWN_Z = 9999
 
 export default function ProfileModal({ profile: initialProfile, onClose }) {
   const {
@@ -29,6 +30,14 @@ export default function ProfileModal({ profile: initialProfile, onClose }) {
   const [ddMat, setDdMat] = useState(false)
   const [ddInteg, setDdInteg] = useState(false)
   const [ddRegion, setDdRegion] = useState(false)
+  const [ddRegionPos, setDdRegionPos] = useState(null)
+  const [ddMatPos, setDdMatPos] = useState(null)
+  const [ddStagePos, setDdStagePos] = useState(null)
+  const [ddIntegPos, setDdIntegPos] = useState(null)
+  const regionRef = useRef(null)
+  const matRef = useRef(null)
+  const stageRef = useRef(null)
+  const integRef = useRef(null)
   const [integCustomMode, setIntegCustomMode] = useState(false)
   const [integCustomValue, setIntegCustomValue] = useState('')
   const [scoreEdit, setScoreEdit] = useState(false)
@@ -45,6 +54,63 @@ export default function ProfileModal({ profile: initialProfile, onClose }) {
       })
     }
   }, [profile?.id, profileNotes])
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (regionRef.current && !regionRef.current.contains(e.target)) setDdRegion(false)
+      if (matRef.current && !matRef.current.contains(e.target)) setDdMat(false)
+      if (stageRef.current && !stageRef.current.contains(e.target)) setDdStage(false)
+      if (integRef.current && !integRef.current.contains(e.target)) setDdInteg(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const toggleRegion = () => {
+    if (ddRegion) { setDdRegion(false); return }
+    const el = regionRef.current?.querySelector('button')
+    if (el) {
+      const rect = el.getBoundingClientRect()
+      setDdRegionPos({ top: rect.bottom + 4, left: rect.left })
+    }
+    setDdRegion(true)
+    setDdStage(false)
+    setDdMat(false)
+    setDdInteg(false)
+  }
+  const toggleMat = () => {
+    if (ddMat) { setDdMat(false); return }
+    const el = matRef.current?.querySelector('button')
+    if (el) {
+      const rect = el.getBoundingClientRect()
+      setDdMatPos({ top: rect.bottom + 4, left: rect.left })
+    }
+    setDdMat(true)
+    setDdStage(false)
+  }
+  const toggleStage = () => {
+    if (ddStage) { setDdStage(false); return }
+    const el = stageRef.current?.querySelector('button')
+    if (el) {
+      const rect = el.getBoundingClientRect()
+      setDdStagePos({ top: rect.bottom + 4, left: rect.left })
+    }
+    setDdStage(true)
+    setDdMat(false)
+  }
+  const toggleInteg = () => {
+    if (ddInteg) { setDdInteg(false); return }
+    const el = integRef.current?.querySelector('button')
+    if (el) {
+      const rect = el.getBoundingClientRect()
+      setDdIntegPos({ top: rect.bottom + 4, left: rect.left })
+    }
+    setDdInteg(true)
+    setDdStage(false)
+    setDdMat(false)
+    setIntegCustomMode(false)
+    setIntegCustomValue('')
+  }
 
   if (!profile) return null
 
@@ -79,10 +145,10 @@ export default function ProfileModal({ profile: initialProfile, onClose }) {
           <div className="dr flex items-start gap-2.5 mb-2 text-[13.5px]"><span className="dk text-[var(--t3)] w-[120px] shrink-0 pt-0.5">LinkedIn</span><span className="text-[var(--accent)] text-xs">{profile.li}</span></div>
           <div className="dr flex items-start gap-2.5 mb-2 relative">
             <span className="dk text-[var(--t3)] w-[120px] shrink-0 pt-0.5">Région</span>
-            <div className="relative">
-              <button type="button" className="tag tag-btn px-2 py-0.5 rounded-md text-[13px] bg-[var(--s2)] text-[var(--t2)] border border-[var(--border)]" onClick={() => { setDdRegion(!ddRegion); setDdStage(false); setDdMat(false); setDdInteg(false); }}>{(profile.region || '—')} ▾</button>
-              {ddRegion && (
-                <div className="ddrop absolute top-full left-0 mt-1 bg-[var(--surface)] border border-[var(--border)] rounded-lg shadow-lg z-[100] min-w-[220px] max-h-[260px] overflow-y-auto p-1">
+            <div ref={regionRef} className="relative">
+              <button type="button" className="tag tag-btn px-2 py-0.5 rounded-md text-[13px] bg-[var(--s2)] text-[var(--t2)] border border-[var(--border)]" onClick={toggleRegion}>{(profile.region || '—')} ▾</button>
+              {ddRegion && ddRegionPos && (
+                <div className="ddrop bg-[var(--surface)] border border-[var(--border)] rounded-lg shadow-lg min-w-[220px] max-h-[260px] overflow-y-auto p-1" style={{ position: 'fixed', top: ddRegionPos.top, left: ddRegionPos.left, zIndex: DROPDOWN_Z }}>
                   <div className="ddi py-1.5 px-2.5 rounded-md text-[13px] cursor-pointer hover:bg-[var(--s2)]" onClick={() => { changeRegion(profile.id, ''); setDdRegion(false); }}>—</div>
                   {REGIONS.map((r) => <div key={r} className={`ddi py-1.5 px-2.5 rounded-md text-[13px] cursor-pointer hover:bg-[var(--s2)] ${(profile.region || '') === r ? 'font-semibold' : ''}`} onClick={() => { changeRegion(profile.id, r); setDdRegion(false); }}>{r}</div>)}
                 </div>
@@ -107,28 +173,32 @@ export default function ProfileModal({ profile: initialProfile, onClose }) {
           </div>
           <div className="dr flex items-start gap-2.5 mb-2 relative">
             <span className="dk text-[var(--t3)] w-[120px] shrink-0 pt-0.5">Maturité</span>
-            <div className="relative">
-              <button type="button" className={`tag tag-btn ${mattag(profile.mat)}`} onClick={() => { setDdMat(!ddMat); setDdStage(false); }}>{profile.mat} ▾</button>
-              {ddMat && <div className="ddrop absolute top-full left-0 mt-1 bg-[var(--surface)] border border-[var(--border)] rounded-lg shadow-lg z-[100] min-w-[170px] p-1">
-                {MATURITIES.map((m) => <div key={m} className={`ddi py-1.5 px-2.5 rounded-md text-[13px] cursor-pointer hover:bg-[var(--s2)] ${m === profile.mat ? 'font-semibold' : ''}`} onClick={() => { changeMaturity(profile.id, m); setDdMat(false); }}>{m}</div>)}
-              </div>}
+            <div ref={matRef} className="relative">
+              <button type="button" className={`tag tag-btn ${mattag(profile.mat)}`} onClick={toggleMat}>{profile.mat} ▾</button>
+              {ddMat && ddMatPos && (
+                <div className="ddrop bg-[var(--surface)] border border-[var(--border)] rounded-lg shadow-lg min-w-[170px] p-1" style={{ position: 'fixed', top: ddMatPos.top, left: ddMatPos.left, zIndex: DROPDOWN_Z }}>
+                  {MATURITIES.map((m) => <div key={m} className={`ddi py-1.5 px-2.5 rounded-md text-[13px] cursor-pointer hover:bg-[var(--s2)] ${m === profile.mat ? 'font-semibold' : ''}`} onClick={() => { changeMaturity(profile.id, m); setDdMat(false); }}>{m}</div>)}
+                </div>
+              )}
             </div>
           </div>
           <div className="dr flex items-start gap-2.5 mb-2 relative">
             <span className="dk text-[var(--t3)] w-[120px] shrink-0 pt-0.5">Stade</span>
-            <div className="relative">
-              <button type="button" className="tag tag-btn" style={{ background: STAGE_COLORS[profile.stg]?.bg || '#E5E0D8', color: STAGE_COLORS[profile.stg]?.text || '#6B6B6B' }} onClick={() => { setDdStage(!ddStage); setDdMat(false); }}>{(profile.stg || '—')} ▾</button>
-              {ddStage && <div className="ddrop absolute top-full left-0 mt-1 bg-[var(--surface)] border border-[var(--border)] rounded-lg shadow-lg z-[100] min-w-[170px] p-1">
-                {STAGES.map((s) => <div key={s} className={`ddi py-1.5 px-2.5 rounded-md text-[13px] cursor-pointer hover:bg-[var(--s2)] ${s === profile.stg ? 'font-semibold' : ''}`} onClick={() => { changeStage(profile.id, s); setDdStage(false); }}>{s}</div>)}
-              </div>}
+            <div ref={stageRef} className="relative">
+              <button type="button" className="tag tag-btn" style={{ background: STAGE_COLORS[profile.stg]?.bg || '#E5E0D8', color: STAGE_COLORS[profile.stg]?.text || '#6B6B6B' }} onClick={toggleStage}>{(profile.stg || '—')} ▾</button>
+              {ddStage && ddStagePos && (
+                <div className="ddrop bg-[var(--surface)] border border-[var(--border)] rounded-lg shadow-lg min-w-[170px] p-1" style={{ position: 'fixed', top: ddStagePos.top, left: ddStagePos.left, zIndex: DROPDOWN_Z }}>
+                  {STAGES.map((s) => <div key={s} className={`ddi py-1.5 px-2.5 rounded-md text-[13px] cursor-pointer hover:bg-[var(--s2)] ${s === profile.stg ? 'font-semibold' : ''}`} onClick={() => { changeStage(profile.id, s); setDdStage(false); }}>{s}</div>)}
+                </div>
+              )}
             </div>
           </div>
           <div className="dr flex items-start gap-2.5 mb-2 relative">
             <span className="dk text-[var(--t3)] w-[120px] shrink-0 pt-0.5">Intégration pot.</span>
-            <div className="relative">
-              <button type="button" className="tag tag-btn" style={{ background: '#D4EDE1', color: '#1A7A4A' }} onClick={() => { setDdInteg(!ddInteg); setDdStage(false); setDdMat(false); setIntegCustomMode(false); setIntegCustomValue(''); }}>{(profile.integ || '—')} ▾</button>
-              {ddInteg && (
-                <div className="ddrop absolute top-full left-0 mt-1 bg-[var(--surface)] border border-[var(--border)] rounded-lg shadow-lg z-[100] min-w-[200px] p-1">
+            <div ref={integRef} className="relative">
+              <button type="button" className="tag tag-btn" style={{ background: '#D4EDE1', color: '#1A7A4A' }} onClick={toggleInteg}>{(profile.integ || '—')} ▾</button>
+              {ddInteg && ddIntegPos && (
+                <div className="ddrop bg-[var(--surface)] border border-[var(--border)] rounded-lg shadow-lg min-w-[200px] p-1" style={{ position: 'fixed', top: ddIntegPos.top, left: ddIntegPos.left, zIndex: DROPDOWN_Z }}>
                   {integCustomMode ? (
                     <div className="p-2 space-y-2">
                       <input type="text" className="inlin-input w-full py-1.5 px-2 text-[13px]" placeholder="ex: Mars 2027" value={integCustomValue} onChange={(e) => setIntegCustomValue(e.target.value)} autoFocus />

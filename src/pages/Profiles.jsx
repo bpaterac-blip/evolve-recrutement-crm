@@ -121,12 +121,17 @@ export default function Profiles() {
 
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (!e.target.closest('.source-dropdown') && !e.target.closest('.maturite-dropdown')) {
+      const isInsideDropdown =
+        e.target.closest('.source-dropdown') ||
+        e.target.closest('.maturite-dropdown') ||
+        e.target.closest('.ddrop') ||
+        e.target.closest('[class*="ddrop"]')
+      if (!isInsideDropdown) {
         setOpenDropdownId(null)
       }
     }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    document.addEventListener('mousedown', handleClickOutside, true)
+    return () => document.removeEventListener('mousedown', handleClickOutside, true)
   }, [])
 
   const P = filteredProfiles.filter((p) => {
@@ -232,6 +237,7 @@ export default function Profiles() {
     padding: '14px 20px',
     borderBottom: '1px solid rgba(0,0,0,0.04)',
     transition: 'background 0.12s',
+    overflow: 'visible',
   }
 
   return (
@@ -271,9 +277,9 @@ export default function Profiles() {
           </div>
         </div>
 
-        <div style={{ overflowX: 'auto' }}>
+        <div style={{ overflowX: 'auto', position: 'relative', zIndex: 0 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
+          <thead style={{ position: 'relative', zIndex: 1 }}>
             <tr>
               <th style={{ ...headerCellStyle, width: 100, textAlign: 'left' }}>
                 <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} style={{ cursor: 'pointer' }} />
@@ -287,7 +293,7 @@ export default function Profiles() {
               <th style={{ ...headerCellStyle, textAlign: 'left' }}>Ajouté</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody style={{ position: 'relative', zIndex: 2 }}>
             {loading ? (
               <tr>
                 <td colSpan={8} style={{ ...rowStyle, padding: 48, textAlign: 'center', color: '#bbb' }}>Chargement…</td>
@@ -304,24 +310,23 @@ export default function Profiles() {
                 return (
                   <tr
                     key={p.id}
-                    style={{ ...rowStyle, cursor: 'pointer', background: selectedIds.has(p.id) ? 'rgba(210, 171, 118, 0.1)' : undefined }}
+                    style={{ ...rowStyle, background: selectedIds.has(p.id) ? 'rgba(210, 171, 118, 0.1)' : undefined }}
                     onMouseEnter={(e) => { if (!selectedIds.has(p.id)) e.currentTarget.style.background = '#faf9f7' }}
                     onMouseLeave={(e) => { if (!selectedIds.has(p.id)) e.currentTarget.style.background = '' }}
-                    onClick={() => { setOpenDropdownId(null); navigate(`/profiles/${p.id}`) }}
                   >
-                    <td style={rowStyle} onClick={(e) => e.stopPropagation()}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <input type="checkbox" checked={selectedIds.has(p.id)} onChange={() => toggleSelect(p.id)} style={{ cursor: 'pointer' }} onClick={(e) => e.stopPropagation()} />
+                    <td style={{ ...rowStyle, minWidth: 100, width: 100 }} onClick={(e) => e.stopPropagation()}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                        <input type="checkbox" checked={selectedIds.has(p.id)} onChange={() => toggleSelect(p.id)} style={{ cursor: 'pointer', flexShrink: 0 }} onClick={(e) => e.stopPropagation()} />
                         <button
                           type="button"
                           onClick={(e) => handleSendToR0(e, p)}
-                          style={{ fontSize: 11, padding: '3px 10px', borderRadius: 20, border: '1px solid #173731', color: '#173731', background: 'transparent', cursor: 'pointer' }}
+                          style={{ fontSize: 11, padding: '3px 10px', borderRadius: 20, border: '1px solid #173731', color: '#173731', background: 'transparent', cursor: 'pointer', position: 'relative', zIndex: 0, flexShrink: 0 }}
                         >
                           R0
                         </button>
                       </div>
                     </td>
-                    <td style={rowStyle}>
+                    <td style={{ ...rowStyle, cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); navigate(`/profiles/${p.id}`) }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                         <div style={{ width: 36, height: 36, borderRadius: '50%', background: ACCENT, color: GOLD, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
                           {ini(p.fn, p.ln)}
@@ -332,7 +337,7 @@ export default function Profiles() {
                         </div>
                       </div>
                     </td>
-                    <td style={rowStyle} onClick={(e) => e.stopPropagation()}>
+                    <td style={{ ...rowStyle, position: 'relative', zIndex: 3 }} onClick={(e) => e.stopPropagation()}>
                       <div className="source-dropdown" style={{ maxWidth: 130 }}>
                         <InlineDropdown
                           options={SOURCES}
@@ -352,7 +357,7 @@ export default function Profiles() {
                         {p.sc ?? '—'}
                       </span>
                     </td>
-                    <td style={rowStyle} onClick={(e) => e.stopPropagation()}>
+                    <td style={{ ...rowStyle, position: 'relative', zIndex: 3 }} onClick={(e) => e.stopPropagation()}>
                       <div className="maturite-dropdown">
                         <InlineDropdown
                           options={MATURITIES}

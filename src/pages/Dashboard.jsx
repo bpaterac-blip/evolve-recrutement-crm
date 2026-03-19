@@ -85,6 +85,8 @@ export default function Dashboard() {
   const [profileModalData, setProfileModalData] = useState(null)
   const [ownerFilter, setOwnerFilter] = useState('all')
   const [stageCounts, setStageCounts] = useState([])
+  const [r1CetteSemaine, setR1CetteSemaine] = useState([])
+  const [r1Loading, setR1Loading] = useState(true)
   const [pointsEtapeCetteSemaine, setPointsEtapeCetteSemaine] = useState([])
   const [pointsEtapeLoading, setPointsEtapeLoading] = useState(true)
   const [contactesCeMois, setContactesCeMois] = useState(null)
@@ -107,14 +109,6 @@ export default function Dashboard() {
   const sunday = new Date(monday)
   sunday.setDate(monday.getDate() + 6)
   sunday.setHours(23, 59, 59, 999)
-
-  const r1CetteSemaine = P.filter((p) => {
-    if (p.stg !== 'R1') return false
-    const d = p.updated_at || p.created_at
-    if (!d) return false
-    const dt = new Date(d)
-    return dt >= monday && dt <= sunday
-  }).sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at))
 
   const ini = (a, b) => (a?.[0] || '') + (b?.[0] || '')
   const stag = (s) => (STAGE_COLORS[s] ? { backgroundColor: STAGE_COLORS[s].bg, color: STAGE_COLORS[s].text } : {})
@@ -148,62 +142,95 @@ export default function Dashboard() {
   }, [])
 
   useEffect(() => {
+    const loadR1CetteSemaine = async () => {
+      setR1Loading(true)
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const inSevenDays = new Date(today)
+      inSevenDays.setDate(today.getDate() + 7)
+      const todayStr = today.toISOString().split('T')[0]
+      const inSevenDaysStr = inSevenDays.toISOString().split('T')[0]
+      const profileIds = P.map((p) => p.id).filter(Boolean)
+      const items = []
+      if (profileIds.length > 0) {
+        const { data: events } = await supabase
+          .from('events')
+          .select('id, profile_id, event_date, event_type, date')
+          .or('event_type.ilike.%R1%')
+          .gte('event_date', todayStr)
+          .lte('event_date', inSevenDaysStr)
+          .in('profile_id', profileIds)
+        if (events?.length) {
+          events.forEach((e) => {
+            const p = P.find((pr) => String(pr.id) === String(e.profile_id))
+            if (!p) return
+            const eventDate = e.event_date || e.date
+            items.push({ id: `e-${e.id}`, profile_id: e.profile_id, fn: p.fn ?? '', ln: p.ln ?? '', co: p.co ?? '—', event_date: eventDate })
+          })
+        }
+      }
+      const fromProfiles = P.filter((p) => {
+        if (p.stg !== 'R1') return false
+        const d = p.next_event_date
+        if (!d) return false
+        const dStr = typeof d === 'string' ? d.split('T')[0] : new Date(d).toISOString().split('T')[0]
+        return dStr >= todayStr && dStr <= inSevenDaysStr
+      })
+      fromProfiles.forEach((p) => {
+        if (items.some((i) => String(i.profile_id) === String(p.id))) return
+        const d = p.next_event_date
+        items.push({ id: `p-${p.id}`, profile_id: p.id, fn: p.fn ?? '', ln: p.ln ?? '', co: p.co ?? '—', event_date: d })
+      })
+      items.sort((a, b) => new Date(a.event_date) - new Date(b.event_date))
+      setR1CetteSemaine(items)
+      setR1Loading(false)
+    }
+    loadR1CetteSemaine()
+  }, [P.map((p) => p.id).filter(Boolean).join(','), ownerFilter, P])
+
+  useEffect(() => {
     const loadPointsEtape = async () => {
       setPointsEtapeLoading(true)
       const today = new Date()
-      const dayOfWeek = today.getDay()
-      const monday = new Date(today)
-      monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1))
-      monday.setHours(0, 0, 0, 0)
-      const sunday = new Date(monday)
-      sunday.setDate(monday.getDate() + 6)
-      sunday.setHours(23, 59, 59, 999)
-      const mondayStr = monday.toISOString().split('T')[0]
-      const sundayStr = sunday.toISOString().split('T')[0]
+      today.setHours(0, 0, 0, 0)
+      const inSevenDays = new Date(today)
+      inSevenDays.setDate(today.getDate() + 7)
+      const todayStr = today.toISOString().split('T')[0]
+      const inSevenDaysStr = inSevenDays.toISOString().split('T')[0]
       const profileIds = P.map((p) => p.id).filter(Boolean)
-      if (profileIds.length === 0) {
-        setPointsEtapeCetteSemaine([])
-        setPointsEtapeLoading(false)
-        return
+      const items = []
+      if (profileIds.length > 0) {
+        const { data: events } = await supabase
+          .from('events')
+          .select('id, profile_id, event_date, event_type, date')
+          .or("event_type.ilike.%Point d'étape%")
+          .gte('event_date', todayStr)
+          .lte('event_date', inSevenDaysStr)
+          .in('profile_id', profileIds)
+        if (events?.length) {
+          events.forEach((e) => {
+            const p = P.find((pr) => String(pr.id) === String(e.profile_id))
+            if (!p) return
+            const eventDate = e.event_date || e.date
+            items.push({ id: `e-${e.id}`, profile_id: e.profile_id, fn: p.fn ?? '', ln: p.ln ?? '', co: p.co ?? '—', event_date: eventDate })
+          })
+        }
       }
-      const { data: events } = await supabase
-        .from('events')
-        .select('id, profile_id, event_date, event_type, date')
-        .eq('event_type', "Point d'étape téléphonique")
-        .gte('event_date', mondayStr)
-        .lte('event_date', sundayStr)
-        .in('profile_id', profileIds)
-      if (events && events.length > 0) {
-        const withProfile = events.map((e) => {
-          const p = P.find((pr) => String(pr.id) === String(e.profile_id))
-          const eventDate = e.event_date || e.date
-          return {
-            id: e.id,
-            profile_id: e.profile_id,
-            fn: p?.fn ?? '',
-            ln: p?.ln ?? '',
-            co: p?.co ?? '—',
-            event_date: eventDate,
-          }
-        }).filter((x) => x.profile_id)
-        setPointsEtapeCetteSemaine(withProfile)
-      } else {
-        const fallback = P.filter((p) => {
-          if (p.stg !== "Point d'étape téléphonique") return false
-          const d = p.updated_at || p.created_at
-          if (!d) return false
-          const dt = new Date(d)
-          return dt >= monday && dt <= sunday
-        }).map((p) => ({
-          id: `p-${p.id}`,
-          profile_id: p.id,
-          fn: p.fn ?? '',
-          ln: p.ln ?? '',
-          co: p.co ?? '—',
-          event_date: p.updated_at || p.created_at,
-        }))
-        setPointsEtapeCetteSemaine(fallback)
-      }
+      const pointEtapeStages = ["Point d'étape", "Point d'étape téléphonique"]
+      const fromProfiles = P.filter((p) => {
+        if (!pointEtapeStages.includes(p.stg)) return false
+        const d = p.next_event_date
+        if (!d) return false
+        const dStr = typeof d === 'string' ? d.split('T')[0] : new Date(d).toISOString().split('T')[0]
+        return dStr >= todayStr && dStr <= inSevenDaysStr
+      })
+      fromProfiles.forEach((p) => {
+        if (items.some((i) => String(i.profile_id) === String(p.id))) return
+        const d = p.next_event_date
+        items.push({ id: `p-${p.id}`, profile_id: p.id, fn: p.fn ?? '', ln: p.ln ?? '', co: p.co ?? '—', event_date: d })
+      })
+      items.sort((a, b) => new Date(a.event_date) - new Date(b.event_date))
+      setPointsEtapeCetteSemaine(items)
       setPointsEtapeLoading(false)
     }
     loadPointsEtape()
@@ -422,19 +449,25 @@ export default function Dashboard() {
           </div>
           <div style={cardStyle}>
             <div style={sectionTitleStyle}>R1 planifiés cette semaine</div>
-            <div style={{ ...valueStyle, fontWeight: 700 }}>{r1CetteSemaine.length}</div>
-            <div className="text-[12px] mt-1" style={{ color: '#888' }}>profils en R1 cette semaine</div>
-            {r1CetteSemaine.length === 0 ? (
-              <div className="text-[13px] mt-2" style={{ color: '#888' }}>Aucun</div>
+            {r1Loading ? (
+              <div className="text-[13px]" style={{ color: '#888' }}>Chargement…</div>
             ) : (
-              <ul className="space-y-2 mt-2">
-                {r1CetteSemaine.map((p) => (
-                  <li key={p.id} className="flex justify-between items-center cursor-pointer hover:opacity-80" onClick={() => navigate(`/profiles/${p.id}`)}>
-                    <span className="text-[12px]" style={{ color: '#555' }}>{p.fn} {p.ln} · {p.co}</span>
-                    <span className="text-[12px]" style={{ color: '#888' }}>{p.updated_at || p.created_at ? new Date(p.updated_at || p.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) : ''}</span>
-                  </li>
-                ))}
-              </ul>
+              <>
+                <div style={{ ...valueStyle, fontWeight: 700 }}>{r1CetteSemaine.length}</div>
+                <div className="text-[12px] mt-1" style={{ color: '#888' }}>profils en R1 cette semaine</div>
+                {r1CetteSemaine.length === 0 ? (
+                  <div className="text-[13px] mt-2" style={{ color: '#888' }}>Aucun</div>
+                ) : (
+                  <ul className="space-y-2 mt-2">
+                    {r1CetteSemaine.map((item) => (
+                      <li key={item.id} className="flex justify-between items-center cursor-pointer hover:opacity-80" onClick={() => navigate(`/profiles/${item.profile_id}`)}>
+                        <span className="text-[12px]" style={{ color: '#555' }}>{item.fn} {item.ln} · {item.co}</span>
+                        <span className="text-[12px]" style={{ color: '#888' }}>{item.event_date ? new Date(item.event_date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) : ''}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
             )}
           </div>
           <div style={cardStyle}>
