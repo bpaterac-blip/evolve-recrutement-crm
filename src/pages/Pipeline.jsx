@@ -18,6 +18,9 @@ import {
 } from '../lib/data'
 
 const SESSION_CIBLE_STAGES = ['Point Business Plan', "Point d'étape téléphonique", "Point d'étape", 'R2 Amaury', 'Démission reconversion', 'Point juridique', 'Intégration', 'Recruté']
+const INTEG_MODAL_STAGES = ["Point d'étape", "Point d'étape téléphonique", 'R2 Amaury', 'Démission reconversion', 'Point juridique', 'Recruté']
+const MOIS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
+const ANNEES = [2025, 2026, 2027]
 import InlineDropdown from '../components/InlineDropdown'
 import ScoreCorrectionModal from '../components/ScoreCorrectionModal'
 import ChuteModal from '../components/ChuteModal'
@@ -359,6 +362,11 @@ export default function Pipeline() {
   const [stageChangeRdType, setStageChangeRdType] = useState('Google Meet')
   const [stageChangeNotes, setStageChangeNotes] = useState('')
   const [stageChangeSkipStep, setStageChangeSkipStep] = useState(false)
+  const [stageChangeIntegPeriode, setStageChangeIntegPeriode] = useState('')
+  const [stageChangeIntegAnnee, setStageChangeIntegAnnee] = useState('')
+  const [editingInteg, setEditingInteg] = useState(false)
+  const [editIntegPeriode, setEditIntegPeriode] = useState('')
+  const [editIntegAnnee, setEditIntegAnnee] = useState('')
   const [profileToAssign, setProfileToAssign] = useState(null)
   const [showSessionModal, setShowSessionModal] = useState(false)
   const [sessions, setSessions] = useState([])
@@ -381,6 +389,10 @@ export default function Pipeline() {
   const [nextEventsByProfileId, setNextEventsByProfileId] = useState({})
 
   const displayProfile = modalProfile ? (filteredProfiles.find((p) => p.id === modalProfile.id) || modalProfile) : null
+
+  useEffect(() => {
+    if (!modalProfile) setEditingInteg(false)
+  }, [modalProfile])
 
   useEffect(() => {
     const loadNextEvents = async () => {
@@ -725,6 +737,8 @@ export default function Pipeline() {
     setStageChangeRdType('Google Meet')
     setStageChangeNotes('')
     setStageChangeSkipStep(false)
+    setStageChangeIntegPeriode(profile.integration_periode || '')
+    setStageChangeIntegAnnee(profile.integration_annee ? String(profile.integration_annee) : '')
   }
 
   const handleConfirmStageChange = async () => {
@@ -758,6 +772,10 @@ export default function Pipeline() {
       const updates = { stage: newStage }
       if (stageChangeSkipStep && newStage === 'Point Business Plan') updates.skip_business_plan = true
       if (stageChangeSkipStep && newStage === 'Démission reconversion') updates.skip_demission = true
+      if (INTEG_MODAL_STAGES.includes(newStage) && (stageChangeIntegPeriode || stageChangeIntegAnnee)) {
+        updates.integration_periode = stageChangeIntegPeriode || null
+        updates.integration_annee = stageChangeIntegAnnee || null
+      }
       await supabase.from('profiles').update(updates).eq('id', profile.id)
       const timeVal = stageChangeTime || '12:00'
       const eventDateVal = stageChangeDate ? (stageChangeDate.includes('T') ? stageChangeDate : `${stageChangeDate}T${timeVal}${timeVal.length === 5 ? ':00' : ''}`) : null
@@ -792,6 +810,8 @@ export default function Pipeline() {
     setStageChangeRdType('Google Meet')
     setStageChangeNotes('')
     setStageChangeSkipStep(false)
+    setStageChangeIntegPeriode('')
+    setStageChangeIntegAnnee('')
     setPendingSessionId('')
     setPendingSessions([])
     setPendingStageChange(null)
@@ -830,6 +850,10 @@ export default function Pipeline() {
       const updates = { stage: newStage }
       if (stageChangeSkipStep && newStage === 'Point Business Plan') updates.skip_business_plan = true
       if (stageChangeSkipStep && newStage === 'Démission reconversion') updates.skip_demission = true
+      if (INTEG_MODAL_STAGES.includes(newStage) && (stageChangeIntegPeriode || stageChangeIntegAnnee)) {
+        updates.integration_periode = stageChangeIntegPeriode || null
+        updates.integration_annee = stageChangeIntegAnnee || null
+      }
       await supabase.from('profiles').update(updates).eq('id', profile.id)
       if (pendingSessionId && (newStage === "Point d'étape téléphonique" || newStage === "Point d'étape")) {
         const session = pendingSessions.find((s) => s.id === pendingSessionId)
@@ -856,6 +880,8 @@ export default function Pipeline() {
     setStageChangeRdType('Google Meet')
     setStageChangeNotes('')
     setStageChangeSkipStep(false)
+    setStageChangeIntegPeriode('')
+    setStageChangeIntegAnnee('')
     setPendingSessionId('')
     setPendingSessions([])
     setPendingStageChange(null)
@@ -1045,6 +1071,78 @@ export default function Pipeline() {
                   </select>
                 </div>
               )}
+              {INTEG_MODAL_STAGES.includes(displayProfile.stg) && (
+                <div style={{ marginTop: 8 }}>
+                  {editingInteg ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <select
+                          value={editIntegPeriode}
+                          onChange={(e) => setEditIntegPeriode(e.target.value)}
+                          style={{ flex: 1, padding: '6px 10px', fontSize: 12, border: '1px solid rgba(0,0,0,0.1)', borderRadius: 8, background: 'white' }}
+                        >
+                          <option value="">— Mois</option>
+                          {MOIS.map((m) => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                        <select
+                          value={editIntegAnnee}
+                          onChange={(e) => setEditIntegAnnee(e.target.value)}
+                          style={{ flex: 1, padding: '6px 10px', fontSize: 12, border: '1px solid rgba(0,0,0,0.1)', borderRadius: 8, background: 'white' }}
+                        >
+                          <option value="">— Année</option>
+                          {ANNEES.map((a) => (
+                            <option key={a} value={String(a)}>{a}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!displayProfile?.id || !useSupabase) return
+                          const periode = editIntegPeriode || null
+                          const annee = editIntegAnnee || null
+                          await supabase.from('profiles').update({ integration_periode: periode, integration_annee: annee }).eq('id', displayProfile.id)
+                          const desc = `${periode || ''} ${annee || ''}`.trim() || 'Non définie'
+                          await supabase.from(EVENTS_TABLE).insert({
+                            profile_id: displayProfile.id,
+                            event_type: 'Modification intégration',
+                            event_date: new Date().toISOString(),
+                            description: `Date d'intégration → ${desc}`,
+                            ...(user?.id && { owner_id: user.id }),
+                          })
+                          updateProfile(displayProfile.id, { integration_periode: periode, integration_annee: annee })
+                          fetchProfiles?.()
+                          setEditingInteg(false)
+                          window.dispatchEvent(new CustomEvent('evolve:event-added'))
+                        }}
+                        style={{ padding: '6px 12px', fontSize: 12, background: '#173731', color: '#E7E0D0', border: 'none', borderRadius: 8, cursor: 'pointer', alignSelf: 'flex-start' }}
+                      >
+                        Enregistrer
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: 12, color: '#555' }}>
+                        Date d&apos;intégration : {[displayProfile.integration_periode, displayProfile.integration_annee].filter(Boolean).join(' ') || 'Non définie'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingInteg(true)
+                          setEditIntegPeriode(displayProfile.integration_periode || '')
+                          setEditIntegAnnee(displayProfile.integration_annee ? String(displayProfile.integration_annee) : '')
+                        }}
+                        style={{ padding: 4, background: 'none', border: 'none', cursor: 'pointer', display: 'flex' }}
+                        title="Modifier"
+                      >
+                        <IconPencil />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
               <div style={{ height: 1, background: 'rgba(0,0,0,0.06)', margin: '16px 0' }} />
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 12, color: '#555' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1074,29 +1172,6 @@ export default function Pipeline() {
                   )}
                 </div>
               </div>
-              {Array.isArray(displayProfile.experiences) && displayProfile.experiences.length > 0 && (
-                <div style={{ marginTop: 16 }}>
-                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#bbb', marginBottom: 8 }}>Parcours professionnel</div>
-                  <div style={{ overflowY: 'auto', maxHeight: 180 }}>
-                    {displayProfile.experiences.map((exp, i) => {
-                      const badge = getExperienceBadge(exp)
-                      const tagStyle = badge === 'cabinet' ? { bg: '#f0fdf4', color: '#15803d' } : badge === 'banque' ? { bg: '#eff6ff', color: '#1d4ed8' } : badge === 'assurance' ? { bg: '#fff7ed', color: '#a16207' } : null
-                      return (
-                        <div key={i} style={{ paddingBottom: 12, marginBottom: 12, borderBottom: i < displayProfile.experiences.length - 1 ? '1px solid rgba(0,0,0,0.06)' : 'none' }}>
-                          <div style={{ fontWeight: 600, fontSize: 12, color: '#173731' }}>{exp.company || '—'}</div>
-                          <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{exp.title || '—'}</div>
-                          <div style={{ fontSize: 10, color: '#bbb', marginTop: 2 }}>{formatExperiencePeriod(exp)}</div>
-                          {tagStyle && (
-                            <span style={{ display: 'inline-block', marginTop: 4, fontSize: 9, fontWeight: 600, padding: '2px 6px', borderRadius: 20, background: tagStyle.bg, color: tagStyle.color }}>
-                              {badge === 'cabinet' ? 'CGP' : badge === 'banque' ? 'Banque' : 'Assurance'}
-                            </span>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
               <div style={{ flex: 1, minHeight: 24 }} />
               <button
                 type="button"
@@ -1110,7 +1185,7 @@ export default function Pipeline() {
             {/* COLONNE DROITE */}
             <div style={{ flex: 1, minHeight: 0, background: '#ffffff', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '0 24px', borderBottom: '1px solid rgba(0,0,0,0.06)', flexShrink: 0 }}>
-                {['notes', 'events', 'activity', 'grille'].map((tab) => (
+                {['notes', 'events', 'activity', 'grille', 'parcours'].map((tab) => (
                   <button
                     key={tab}
                     type="button"
@@ -1127,7 +1202,7 @@ export default function Pipeline() {
                       transition: 'all 0.15s',
                     }}
                   >
-                    {tab === 'notes' ? 'Notes' : tab === 'events' ? 'Événements' : tab === 'activity' ? 'Activité' : 'Grille de notation'}
+                    {tab === 'notes' ? 'Notes' : tab === 'events' ? 'Événements' : tab === 'activity' ? 'Activité' : tab === 'grille' ? 'Grille de notation' : 'Parcours professionnel'}
                   </button>
                 ))}
                 <button
@@ -1290,6 +1365,54 @@ export default function Pipeline() {
               ) : modalTab === 'grille' ? (
                 <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
                   <GrilleNotationTab profile={displayProfile} updateProfile={updateProfile} useSupabase={useSupabase} />
+                </div>
+              ) : modalTab === 'parcours' ? (
+                <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
+                  {(() => {
+                    const exps = displayProfile.experiences || displayProfile.parsed_experiences || []
+                    const BORDER_TERTIARY = '#E5E0D8'
+                    const BG_SECONDARY = '#F9F7F4'
+                    if (!Array.isArray(exps) || exps.length === 0) {
+                      return <div style={{ fontSize: 13, color: '#6B6B6B', textAlign: 'center', padding: 24 }}>Aucun parcours disponible</div>
+                    }
+                    return (
+                      <div style={{ position: 'relative', paddingLeft: 32 }}>
+                        <div style={{ position: 'absolute', left: 9, top: 0, bottom: 0, width: 1, background: BORDER_TERTIARY }} />
+                        {exps.map((exp, i) => {
+                          const badge = getExperienceBadge(exp)
+                          const isCurrent = exp.isCurrent
+                          return (
+                            <div key={i} style={{ position: 'relative', marginBottom: 16 }}>
+                              <div style={{ position: 'absolute', left: -27, top: 14, width: 10, height: 10, borderRadius: '50%', background: isCurrent ? '#173731' : '#fff', border: isCurrent ? 'none' : `2px solid ${BORDER_TERTIARY}` }} />
+                              <div
+                                style={{
+                                  background: isCurrent ? '#F0F5F0' : BG_SECONDARY,
+                                  borderLeft: isCurrent ? '3px solid #173731' : 'none',
+                                  border: isCurrent ? 'none' : `0.5px solid ${BORDER_TERTIARY}`,
+                                  borderRadius: 8,
+                                  padding: '12px 14px',
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
+                                  <span style={{ fontWeight: 700, fontSize: 13, color: '#1A1A1A' }}>{exp.company || '—'}</span>
+                                  {isCurrent && <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 4, background: '#173731', color: '#E7E0D0' }}>Actuel</span>}
+                                </div>
+                                <div style={{ fontSize: 12, color: '#6B6B6B', marginBottom: 8 }}>{exp.title || '—'}</div>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                                  <span style={{ fontSize: 11, color: '#9CA3AF' }}>{formatExperiencePeriod(exp)}</span>
+                                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                    {badge === 'cabinet' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#D4EDE1', color: '#1A7A4A', fontWeight: 500 }}>Cabinet CGP</span>}
+                                    {badge === 'banque' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#EFF6FF', color: '#1D4ED8', fontWeight: 500 }}>Banque</span>}
+                                    {badge === 'assurance' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#ECFDF5', color: '#065F46', fontWeight: 500 }}>Assurance</span>}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  })()}
                 </div>
               ) : (
                 <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
@@ -1515,6 +1638,33 @@ export default function Pipeline() {
                         <option key={s.id} value={s.id}>{[s.periode, s.annee].filter(Boolean).join(' ') || s.date_session || '—'}</option>
                       ))}
                     </select>
+                  </div>
+                )}
+                {INTEG_MODAL_STAGES.includes(newStage) && (
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ fontSize: 12, fontWeight: 500, color: '#666', display: 'block', marginBottom: 4 }}>Date d&apos;intégration prévisionnelle (optionnel)</label>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <select
+                        value={stageChangeIntegPeriode}
+                        onChange={(e) => setStageChangeIntegPeriode(e.target.value)}
+                        style={{ flex: 1, padding: '8px 12px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, background: 'white' }}
+                      >
+                        <option value="">— Mois</option>
+                        {MOIS.map((m) => (
+                          <option key={m} value={m}>{m}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={stageChangeIntegAnnee}
+                        onChange={(e) => setStageChangeIntegAnnee(e.target.value)}
+                        style={{ flex: 1, padding: '8px 12px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, background: 'white' }}
+                      >
+                        <option value="">— Année</option>
+                        {ANNEES.map((a) => (
+                          <option key={a} value={String(a)}>{a}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 )}
                 <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', alignItems: 'center' }}>
