@@ -403,6 +403,16 @@ export default function ProfilePage() {
     navigate('/profiles')
   }
 
+  const openCV = async () => {
+    const path = profile.cv_url_path || profile.cv_url
+    const { data, error } = await supabase.storage
+      .from('cvs')
+      .createSignedUrl(path, 3600)
+    if (data?.signedUrl) {
+      window.open(data.signedUrl, '_blank')
+    }
+  }
+
   const handleExportPDF = () => {
     const doc = new jsPDF({ unit: 'mm', format: 'a4' })
     const margin = 18
@@ -764,6 +774,9 @@ export default function ProfilePage() {
           <div style={{ marginTop: 24, background: PAGE_STYLE.cardBg, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: PAGE_STYLE.radius, padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
             <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: PAGE_STYLE.textSecondary, marginBottom: 16 }}>Actions rapides</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {(profile.cv_url_path || profile.cv_url) && (
+                <button type="button" onClick={openCV} style={{ padding: '10px 14px', textAlign: 'left', borderRadius: 8, border: `1px solid ${PAGE_STYLE.border}`, background: 'none', cursor: 'pointer', fontSize: 13, transition: PAGE_STYLE.transition, display: 'flex', alignItems: 'center', gap: 8 }}><IconDocument /> Voir le CV</button>
+              )}
               <button type="button" onClick={handleExportPDF} style={{ padding: '10px 14px', textAlign: 'left', borderRadius: 8, border: `1px solid ${PAGE_STYLE.border}`, background: 'none', cursor: 'pointer', fontSize: 13, transition: PAGE_STYLE.transition, display: 'flex', alignItems: 'center', gap: 8 }}><IconUpload /> Exporter la fiche</button>
               <button type="button" onClick={handleDeleteProfile} style={{ padding: '10px 14px', textAlign: 'left', borderRadius: 8, border: '1px solid #e5c0c0', background: 'none', color: '#c0392b', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}><IconTrash /> Supprimer le profil</button>
             </div>

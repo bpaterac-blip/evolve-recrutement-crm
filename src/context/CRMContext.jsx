@@ -64,6 +64,8 @@ function mapRowToProfile(row) {
     grille_commentaires: row.grille_commentaires ?? null,
     skip_business_plan: row.skip_business_plan ?? false,
     skip_demission: row.skip_demission ?? false,
+    cv_url: row.cv_url || null,
+    cv_url_path: row.cv_url_path || null,
   }
 }
 
@@ -559,7 +561,7 @@ export function CRMProvider({ children }) {
           })
         }
       }
-      return newProfiles.length
+      return newProfiles
     }
     return 0
   }, [useSupabase, user?.id, user?.email, userProfile?.full_name])

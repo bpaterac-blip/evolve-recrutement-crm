@@ -549,6 +549,7 @@ export default function Import() {
   const [doublonsModalOpen, setDoublonsModalOpen] = useState(false)
   const csvInputRef = useRef(null)
   const pdfInputRef = useRef(null)
+  const pdfFileRef = useRef(null)
   const [pdfAnalyzing, setPdfAnalyzing] = useState(false)
 
   const scpill = (s) => s >= 70 ? 'sh' : s >= 50 ? 'sm2' : 'sl'
@@ -686,6 +687,7 @@ export default function Import() {
       setParsedRows([{ ...profile, sc: score, priority, signals }])
       setImportSource('pdf')
       setImportFilename(file.name || '')
+      pdfFileRef.current = file
       setTab('im')
       showNotif('📑 PDF analysé — 1 profil extrait ✓')
     } catch (err) {
@@ -737,8 +739,23 @@ export default function Import() {
           }
         }
         if (toInsert.length > 0) {
-          const n = await addProfilesBatch(toInsert)
+          const inserted = await addProfilesBatch(toInsert)
+          const n = Array.isArray(inserted) ? inserted.length : inserted
           showNotif(`✓ ${n} profils ajoutés au CRM`)
+          if (importSource === 'pdf' && pdfFileRef.current && inserted?.length > 0) {
+            const profileId = inserted[0].id
+            const file = pdfFileRef.current
+            const storagePath = `${profileId}/${file.name}`
+            const { error: uploadErr } = await supabase.storage.from('cvs').upload(storagePath, file, { contentType: 'application/pdf' })
+            if (!uploadErr) {
+              const { data: urlData } = await supabase.storage.from('cvs').createSignedUrl(storagePath, 60 * 60 * 24 * 365)
+              if (urlData?.signedUrl) {
+                await supabase.from('profiles').update({ cv_url: urlData.signedUrl, cv_url_path: storagePath }).eq('id', profileId)
+                fetchProfiles()
+              }
+            }
+            pdfFileRef.current = null
+          }
         }
         if (doublonsList.length > 0) {
           setDoublons(doublonsList)
@@ -1129,10 +1146,6 @@ export default function Import() {
             <div className="scard bg-[var(--surface)] border border-[var(--border)] rounded-[10px] p-4"><div className="slbl text-[11.5px] text-[var(--t3)] uppercase tracking-wider mb-1">Prioritaires ≥70</div><div className="sval text-[26px] font-semibold">{priorCount}</div></div>
             <div className="scard bg-[var(--surface)] border border-[var(--border)] rounded-[10px] p-4"><div className="slbl text-[11.5px] text-[var(--t3)] uppercase tracking-wider mb-1">À travailler</div><div className="sval text-[26px] font-semibold">{workCount}</div></div>
             <div className="scard bg-[var(--surface)] border border-[var(--border)] rounded-[10px] p-4"><div className="slbl text-[11.5px] text-[var(--t3)] uppercase tracking-wider mb-1">Score moyen</div><div className="sval text-[26px] font-semibold">{avgScore}</div></div>
-          </div>
-          <div className="bg-[var(--lbg)] border border-[#FFD5C0] rounded-lg py-2.5 px-4 mb-3.5 text-[12.5px] text-[var(--t2)] flex items-center gap-2.5">
-            <span className="inline-flex items-center justify-center text-[var(--lemlist)]"><IconLink /></span>
-            Les profils ont été ajoutés au CRM. Chaque profil exporté vers Lemlist apparaîtra dans son historique.
           </div>
           <div className="tw bg-[var(--surface)] border border-[var(--border)] rounded-[10px] overflow-hidden">
             <div className="thd py-3 px-4 border-b border-[var(--border)] flex items-center gap-2">

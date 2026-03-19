@@ -107,9 +107,9 @@ function formatAddedDate(p) {
 
 export default function Profiles() {
   const navigate = useNavigate()
-  const { role } = useAuth()
+  const { role, user } = useAuth()
   const { viewMode } = useViewMode()
-  const { profiles, filteredProfiles, changeStage, changeMaturity, changeSource, loading, fetchProfiles } = useCRM()
+  const { profiles, filteredProfiles, changeStage, changeMaturity, changeSource, loading, fetchProfiles, showNotif, useSupabase } = useCRM()
   const isGlobalView = role === 'admin' && viewMode === 'global'
   const [srcFilter, setSrcFilter] = useState('')
   const [stgFilter, setStgFilter] = useState('')
@@ -121,7 +121,7 @@ export default function Profiles() {
 
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (!e.target.closest('.source-dropdown') && !e.target.closest('.maturite-dropdown') && !e.target.closest('.stade-dropdown')) {
+      if (!e.target.closest('.source-dropdown') && !e.target.closest('.maturite-dropdown')) {
         setOpenDropdownId(null)
       }
     }
@@ -176,6 +176,18 @@ export default function Profiles() {
     setSelectedIds(new Set())
     setDeleteModalOpen(false)
     await fetchProfiles()
+  }
+
+  const handleSendToR0 = async (e, profile) => {
+    e.stopPropagation()
+    if (!useSupabase) return
+    await supabase.from('profiles').update({ stage: 'R0' }).eq('id', profile.id)
+    const eventRow = { profile_id: profile.id, event_type: 'Ajout pipeline', event_date: new Date().toISOString(), description: 'Ajouté en R0 depuis Tous les profils' }
+    if (user?.id) eventRow.owner_id = user.id
+    await supabase.from('events').insert(eventRow)
+    changeStage(profile.id, 'R0')
+    await fetchProfiles()
+    showNotif('Profil envoyé en R0')
   }
 
   const handleExportCsv = () => {
@@ -263,7 +275,7 @@ export default function Profiles() {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
-              <th style={{ ...headerCellStyle, width: 48, textAlign: 'left' }}>
+              <th style={{ ...headerCellStyle, width: 100, textAlign: 'left' }}>
                 <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} style={{ cursor: 'pointer' }} />
               </th>
               <th style={{ ...headerCellStyle, textAlign: 'left' }}>Profil</th>
@@ -298,7 +310,16 @@ export default function Profiles() {
                     onClick={() => { setOpenDropdownId(null); navigate(`/profiles/${p.id}`) }}
                   >
                     <td style={rowStyle} onClick={(e) => e.stopPropagation()}>
-                      <input type="checkbox" checked={selectedIds.has(p.id)} onChange={() => toggleSelect(p.id)} style={{ cursor: 'pointer' }} onClick={(e) => e.stopPropagation()} />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <input type="checkbox" checked={selectedIds.has(p.id)} onChange={() => toggleSelect(p.id)} style={{ cursor: 'pointer' }} onClick={(e) => e.stopPropagation()} />
+                        <button
+                          type="button"
+                          onClick={(e) => handleSendToR0(e, p)}
+                          style={{ fontSize: 11, padding: '3px 10px', borderRadius: 20, border: '1px solid #173731', color: '#173731', background: 'transparent', cursor: 'pointer' }}
+                        >
+                          R0
+                        </button>
+                      </div>
                     </td>
                     <td style={rowStyle}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -353,20 +374,10 @@ export default function Profiles() {
                         />
                       </div>
                     </td>
-                    <td style={rowStyle} onClick={(e) => e.stopPropagation()}>
-                      <div className="stade-dropdown">
-                        <InlineDropdown
-                          options={STAGES}
-                          value={p.stg}
-                          onChange={(v) => { changeStage(p.id, v); setOpenDropdownId(null) }}
-                          buttonStyle={(v) => ({ borderRadius: 20, padding: '3px 9px', fontSize: 11, border: 'none', cursor: 'pointer', ...(STAGE_STYLES[v] || { backgroundColor: '#f8fafc', color: '#94a3b8' }) })}
-                          buttonClassName=""
-                          placeholder="—"
-                          open={openDropdownId?.profileId === p.id && openDropdownId?.field === 'stade'}
-                          onOpenChange={(v) => { if (v) setOpenDropdownId({ profileId: p.id, field: 'stade' }); else setOpenDropdownId(null) }}
-                          containerClassName="stade-dropdown"
-                        />
-                      </div>
+                    <td style={rowStyle}>
+                      <span style={{ display: 'inline-block', borderRadius: 20, padding: '3px 9px', fontSize: 11, border: 'none', ...(STAGE_STYLES[p.stg] || { backgroundColor: '#f8fafc', color: '#94a3b8' }) }}>
+                        {p.stg || '—'}
+                      </span>
                     </td>
                     <td style={{ ...rowStyle, fontSize: 11, fontWeight: 500, color: sessionStr ? ACCENT : '#ddd' }}>
                       {sessionStr || '—'}

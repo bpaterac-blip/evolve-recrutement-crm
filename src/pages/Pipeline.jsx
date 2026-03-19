@@ -82,6 +82,18 @@ const MATURITY_BADGE_STYLES = {
   'Très chaud': { backgroundColor: '#fff1f2', color: '#e11d48' },
 }
 
+const SOURCE_STYLES = {
+  'Chasse LinkedIn': { backgroundColor: '#eff6ff', color: '#1d4ed8' },
+  Recommandation: { backgroundColor: '#fefce8', color: '#a16207' },
+  'Chasse Mail': { backgroundColor: '#f0fdf4', color: '#15803d' },
+  'Chasse externe': { backgroundColor: '#fff7ed', color: '#c2410c' },
+  'Inbound Marketing': { backgroundColor: '#faf5ff', color: '#7e22ce' },
+  Ads: { backgroundColor: '#fff1f2', color: '#e11d48' },
+  Autre: { backgroundColor: '#f8fafc', color: '#94a3b8' },
+  Inbound: { backgroundColor: '#faf5ff', color: '#7e22ce' },
+  'Direct contact': { backgroundColor: '#f8fafc', color: '#94a3b8' },
+}
+
 function getScoreBadgeStyle(score) {
   if (score == null) return { backgroundColor: '#f8fafc', color: '#94a3b8' }
   if (score >= 70) return { backgroundColor: '#dcfce7', color: '#15803d' }
@@ -184,15 +196,24 @@ function KanbanCard({ profile, stage, onClick, isSelected, ownerBadge, nextEvent
         <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 6, flexShrink: 0, ...scoreStyle }}>{profile.sc ?? '—'}</span>
       </div>
 
-      {/* Ligne 2 - Employeur */}
-      <div style={{ fontSize: 11, color: '#aaa', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: 2 }}>
-        {profile.co || '—'}
+      {/* Employeur + Ville · Région (bloc groupé) */}
+      <div style={{ background: 'var(--color-background-secondary)', borderRadius: 6, padding: '6px 10px', marginBottom: 8 }}>
+        <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-primary)', margin: '0 0 1px' }}>
+          {profile.co || profile.company || '—'}
+        </p>
+        <p style={{ fontSize: 11, color: 'var(--color-text-secondary)', margin: 0 }}>
+          {[profile.city, profile.region].filter(Boolean).join(' · ') || '—'}
+        </p>
       </div>
 
-      {/* Ligne 3 - Ville · Région */}
-      <div style={{ fontSize: 10, color: '#ccc', marginBottom: 8 }}>
-        {[profile.city, profile.region].filter(Boolean).join(' · ') || '—'}
-      </div>
+      {/* Badge source (même styles que Profiles.jsx) */}
+      {profile.src && (
+        <div style={{ marginBottom: 6 }}>
+          <span style={{ display: 'inline-block', borderRadius: 20, padding: '3px 7px', fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...(SOURCE_STYLES[profile.src] || { backgroundColor: '#f8fafc', color: '#94a3b8' }) }}>
+            {profile.src}
+          </span>
+        </div>
+      )}
 
       {/* Ligne 4 - Badge maturité | Date */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
