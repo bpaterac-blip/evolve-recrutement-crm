@@ -74,7 +74,7 @@ export async function getUnreadTicketResoluCount() {
 }
 
 /**
- * Compte les notifications "nouveau ticket" et "ticket_reponse_user" non lues (badge section Admin).
+ * Compte les notifications "nouveau ticket" non lues (badge section Admin).
  */
 export async function getUnreadNouveauTicketCount() {
   const { data: { user } } = await supabase.auth.getUser()
@@ -83,7 +83,7 @@ export async function getUnreadNouveauTicketCount() {
     .from('notifications')
     .select('*', { count: 'exact', head: true })
     .eq('user_id', user.id)
-    .in('type', ['nouveau_ticket', 'ticket_reponse_user'])
+    .eq('type', 'nouveau_ticket')
     .eq('read', false)
   if (error) return 0
   return count ?? 0
@@ -103,7 +103,7 @@ export async function markTicketResoluAsRead() {
 }
 
 /**
- * Marque les notifications "nouveau ticket" et "ticket_reponse_user" comme lues.
+ * Marque les notifications "nouveau ticket" comme lues.
  */
 export async function markNouveauTicketAsRead() {
   const { data: { user } } = await supabase.auth.getUser()
@@ -112,24 +112,7 @@ export async function markNouveauTicketAsRead() {
     .from('notifications')
     .update({ read: true })
     .eq('user_id', user.id)
-    .in('type', ['nouveau_ticket', 'ticket_reponse_user'])
-}
-
-/**
- * Supprime un ticket et ses notifications associées (admin uniquement, via RLS).
- * Ordre obligatoire : 1) notifications, 2) ticket (FK contrainte).
- */
-export async function deleteTicketForAdmin(ticketId) {
-  const { error: notifErr } = await supabase
-    .from('notifications')
-    .delete()
-    .eq('ticket_id', ticketId)
-  if (notifErr) throw notifErr
-  const { error } = await supabase
-    .from('tickets')
-    .delete()
-    .eq('id', ticketId)
-  if (error) throw error
+    .eq('type', 'nouveau_ticket')
 }
 
 /**
@@ -193,46 +176,6 @@ export async function insertTicketReponseNotificationForAdmin(ticket) {
     ticket_id: ticket.id,
     type: 'ticket_reponse',
   })
-}
-
-/**
- * Met à jour la réponse user sur un ticket (user uniquement, via RLS).
- * Remet le statut à "En cours" si il était "Résolu".
- */
-export async function updateTicketWithUserResponse(ticketId, userResponse) {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('Non connecté')
-  const { data: ticket } = await supabase.from('tickets').select('statut').eq('id', ticketId).eq('user_id', user.id).single()
-  if (!ticket) throw new Error('Ticket non trouvé')
-  const payload = {
-    user_response: userResponse?.trim() || null,
-    user_response_date: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  }
-  if (ticket.statut === 'Résolu') payload.statut = 'En cours'
-  const { error } = await supabase.from('tickets').update(payload).eq('id', ticketId).eq('user_id', user.id)
-  if (error) throw error
-}
-
-/**
- * Notifie tous les admins qu'un user a répondu sur un ticket.
- */
-export async function notifyAdminsOnUserResponse(ticket, currentUserEmail) {
-  const { data: admins } = await supabase
-    .from('user_roles')
-    .select('user_id')
-    .eq('role', 'admin')
-  if (!admins?.length) return
-  const title = ticket?.titre || ticket?.title || 'Sans titre'
-  const message = `Réponse de ${currentUserEmail || 'utilisateur'} sur le ticket "${title}"`
-  for (const admin of admins) {
-    await supabase.from('notifications').insert({
-      user_id: admin.user_id,
-      message,
-      ticket_id: ticket?.id,
-      type: 'ticket_reponse_user',
-    })
-  }
 }
 
 /**

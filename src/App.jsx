@@ -84,7 +84,7 @@ function AppContent() {
           <Route path="tickets" element={<Tickets />} />
           <Route path="admin/console" element={<AdminProtectedRoute><AdminConsole /></AdminProtectedRoute>} />
           <Route path="admin/tickets" element={<AdminProtectedRoute><AdminTickets /></AdminProtectedRoute>} />
-          <Route path="admin/scoring-learning" element={<AdminProtectedRoute><AdminScoringLearning /></AdminProtectedRoute>} />
+          <Route path="admin/scoring-learning" element={<AdminScoringLearning />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

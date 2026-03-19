@@ -117,27 +117,3 @@ export async function deleteUser(userId) {
   if (error) throw error
 }
 
-/**
- * Liste tous les tickets (admin).
- */
-export async function listAllTickets() {
-  const supabaseAdmin = getAdminClient()
-  const { data, error } = await supabaseAdmin
-    .from('tickets')
-    .select('*')
-    .order('created_at', { ascending: false })
-  if (error) throw error
-  return data ?? []
-}
-
-/**
- * Met à jour le statut d'un ticket (admin).
- */
-export async function updateTicketStatus(ticketId, statut) {
-  const supabaseAdmin = getAdminClient()
-  const { error } = await supabaseAdmin
-    .from('tickets')
-    .update({ statut, updated_at: new Date().toISOString() })
-    .eq('id', ticketId)
-  if (error) throw error
-}

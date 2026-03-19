@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
-import { getMyTickets, createTicket, uploadTicketScreenshot } from '../lib/tickets'
+import { useState, useEffect, Fragment } from 'react'
+import { supabase } from '../lib/supabase'
+import { getMyTickets, createTicket, uploadTicketScreenshot, notifyAdminsOnNewTicket, updateTicketWithUserResponse, notifyAdminsOnUserResponse } from '../lib/tickets'
 import { sendTicketNotificationEmail } from '../lib/ticketEmail'
 
 const ACCENT = '#173731'
@@ -29,6 +30,8 @@ export default function Tickets() {
   const [screenshotFile, setScreenshotFile] = useState(null)
   const [screenshotUrl, setScreenshotUrl] = useState(null)
   const [uploadingScreenshot, setUploadingScreenshot] = useState(false)
+  const [userReponseByTicket, setUserReponseByTicket] = useState({})
+  const [sendingReponseId, setSendingReponseId] = useState(null)
 
   const load = async () => {
     setLoading(true)
@@ -80,6 +83,8 @@ export default function Tickets() {
       setPriorite('Normale')
       setScreenshotFile(null)
       setScreenshotUrl(null)
+      const { data: { user } } = await supabase.auth.getUser()
+      notifyAdminsOnNewTicket(ticket, user?.email).catch(() => {})
       const emailResult = await sendTicketNotificationEmail(ticket)
       if (emailResult.success) {
         setEmailFeedback({ type: 'success', message: 'Ticket créé. Notification email envoyée.' })
@@ -90,6 +95,24 @@ export default function Tickets() {
       setError(e?.message || 'Erreur lors de l\'envoi')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const handleSendUserReponse = async (ticket) => {
+    const text = userReponseByTicket[ticket.id]?.trim()
+    if (!text) return
+    setSendingReponseId(ticket.id)
+    setError(null)
+    try {
+      await updateTicketWithUserResponse(ticket.id, text)
+      const { data: { user } } = await supabase.auth.getUser()
+      await notifyAdminsOnUserResponse(ticket, user?.email)
+      setTickets((prev) => prev.map((t) => (t.id === ticket.id ? { ...t, user_response: text, user_response_date: new Date().toISOString(), statut: t.statut === 'Résolu' ? 'En cours' : t.statut } : t)))
+      setUserReponseByTicket((prev) => ({ ...prev, [ticket.id]: '' }))
+    } catch (e) {
+      setError(e?.message || 'Erreur lors de l\'envoi')
+    } finally {
+      setSendingReponseId(null)
     }
   }
 
@@ -260,25 +283,65 @@ export default function Tickets() {
             </thead>
             <tbody>
               {tickets.map((t) => (
-                <tr key={t.id} className="border-b last:border-b-0 hover:bg-[#F8F5F1]" style={{ borderColor: 'var(--border)' }}>
-                  <td className="py-2.5 px-4">
-                    <div>
-                      <div className="text-[13.5px] font-medium">{t.titre}</div>
-                      {t.description && <div className="text-[11px] text-[var(--t3)] mt-0.5 truncate max-w-[280px]">{t.description}</div>}
-                    </div>
-                  </td>
+                <Fragment key={t.id}>
+                  <tr className="border-b last:border-b-0 hover:bg-[#F8F5F1]" style={{ borderColor: 'var(--border)' }}>
+                    <td className="py-2.5 px-4">
+                      <div>
+                        <div className="text-[13.5px] font-medium">{t.titre}</div>
+                        {t.description && <div className="text-[11px] text-[var(--t3)] mt-0.5 truncate max-w-[280px]">{t.description}</div>}
+                      </div>
+                    </td>
                   <td className="py-2.5 px-4">
                     <span className="text-xs py-0.5 px-2.5 font-medium" style={{ borderRadius: 20, ...(PRIORITE_STYLE[t.priorite] || PRIORITE_STYLE.Normale) }}>
                       {t.priorite}
                     </span>
                   </td>
                   <td className="py-2.5 px-4">
-                    <span className="text-xs py-0.5 px-2.5 font-medium" style={{ borderRadius: 20, ...(STATUT_STYLE[t.statut] || STATUT_STYLE.Ouvert) }}>
-                      {t.statut}
-                    </span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs py-0.5 px-2.5 font-medium" style={{ borderRadius: 20, ...(STATUT_STYLE[t.statut] || STATUT_STYLE.Ouvert) }}>
+                        {t.statut}
+                      </span>
+                      {t.statut === 'Résolu' && (
+                        <span className="text-xs py-0.5 px-2.5 font-medium rounded-full" style={{ backgroundColor: 'rgba(34,197,94,0.15)', color: '#15803d', border: '1px solid rgba(34,197,94,0.4)' }}>Résolu</span>
+                      )}
+                      {(t.admin_response || t.admin_reponse) && t.statut !== 'Résolu' && (
+                        <span className="text-xs py-0.5 px-2.5 font-medium rounded-full" style={{ backgroundColor: 'rgba(59,130,246,0.15)', color: '#1d4ed8', border: '1px solid rgba(59,130,246,0.4)' }}>Répondu</span>
+                      )}
+                    </div>
                   </td>
                   <td className="py-2.5 px-4 text-[13px]" style={{ color: 'var(--t2)' }}>{fmt(t.created_at)}</td>
                 </tr>
+                {(t.admin_response || t.admin_reponse) && (
+                  <tr key={`${t.id}-reponse`} className="border-b last:border-b-0" style={{ borderColor: 'var(--border)' }}>
+                    <td colSpan={4} className="p-0">
+                      <div className="px-4 py-3 mx-4 mb-3 rounded-lg" style={{ backgroundColor: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)' }}>
+                        <div className="text-[11px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: '#15803d' }}>Réponse de l'équipe Evolve</div>
+                        <div className="text-[13px] whitespace-pre-wrap mb-4" style={{ color: 'var(--text)' }}>{t.admin_response || t.admin_reponse}</div>
+                        <div>
+                          <label className="block text-[12px] font-medium text-[var(--t3)] mb-1.5">Votre réponse</label>
+                          <textarea
+                            value={userReponseByTicket[t.id] || ''}
+                            onChange={(e) => setUserReponseByTicket((prev) => ({ ...prev, [t.id]: e.target.value }))}
+                            placeholder="Répondre à l'équipe..."
+                            rows={3}
+                            className="w-full py-2 px-3 rounded-lg text-[13px] border resize-y mb-2"
+                            style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg)' }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleSendUserReponse(t)}
+                            disabled={sendingReponseId === t.id || !(userReponseByTicket[t.id] || '').trim()}
+                            className="py-1.5 px-3 rounded-lg text-[13px] font-medium disabled:opacity-50 cursor-pointer"
+                            style={{ backgroundColor: ACCENT, color: '#E7E0D0', border: 'none' }}
+                          >
+                            {sendingReponseId === t.id ? 'Envoi…' : 'Envoyer'}
+                          </button>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>

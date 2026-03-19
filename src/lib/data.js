@@ -1,4 +1,4 @@
-export const STAGES = ['R0', 'R1', 'Point Business Plan', "Point d'étape", 'R2 Amaury', 'Démission reconversion', 'Point juridique', 'Recruté']
+export const STAGES = ['R0', 'R1', 'Point Business Plan', "Point d'étape", 'Démission reconversion', 'R2 Amaury', 'Point juridique', 'Recruté']
 export const MATURITIES = ['Chaud', 'Tiède', 'Froid', 'Chute', 'Pas intéressé', 'Archivé']
 export const INTEG_OPTS = ['—', 'Janvier 2026', 'Avril 2026', 'Juin 2026', 'Juillet 2026', 'Septembre 2026', 'Novembre 2026', 'Janvier 2027', 'Avril 2027', 'Juin 2027', 'Septembre 2027', 'Novembre 2027', 'Intégré']
 export const INTEG_ADD_DATE = '+ Ajouter une date...'
@@ -42,9 +42,9 @@ Prochaine étape : `,
   'Note libre': '',
 }
 
-export const EVENT_TYPES = ['R0', 'R1', "Point d'étape", 'R2 Amaury', 'Démission reconversion', 'Point juridique', 'Intégration', 'Autre']
+export const EVENT_TYPES = ['R0', 'R1', "Point d'étape", 'Démission reconversion', 'R2 Amaury', 'Point juridique', 'Intégration', 'Autre']
 
-export const EVENT_FORM_TYPES = ['R1', 'R2 Amaury', 'R2 Baptiste', "Point d'étape téléphonique", 'Point juridique', 'Présentation Evolve', 'Formation', 'Démission reconversion', 'Autre']
+export const EVENT_FORM_TYPES = ['R1', 'Démission reconversion', 'R2 Amaury', 'R2 Baptiste', "Point d'étape téléphonique", 'Point juridique', 'Présentation Evolve', 'Formation', 'Autre']
 
 export const NEXT_EVENT_LABELS = ['R1', 'R2', 'Présentation Evolve', 'Point téléphonique', 'Formation', 'Autre']
 

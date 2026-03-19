@@ -17,9 +17,9 @@ import {
   REGIONS,
 } from '../lib/data'
 
-const SESSION_CIBLE_STAGES = ['Point Business Plan', "Point d'étape téléphonique", "Point d'étape", 'R2 Amaury', 'Démission reconversion', 'Point juridique', 'Intégration', 'Recruté']
-const INTEG_MODAL_STAGES = ["Point d'étape", "Point d'étape téléphonique", 'R2 Amaury', 'Démission reconversion', 'Point juridique', 'Recruté']
-const INTEG_DATE_STAGES = ["Point d'étape", "Point d'étape téléphonique", 'R2 Amaury', 'Démission reconversion', 'Point juridique', 'Intégration', 'Recruté']
+const SESSION_CIBLE_STAGES = ['Point Business Plan', "Point d'étape téléphonique", "Point d'étape", 'Démission reconversion', 'R2 Amaury', 'Point juridique', 'Intégration', 'Recruté']
+const INTEG_MODAL_STAGES = ["Point d'étape", "Point d'étape téléphonique", 'Démission reconversion', 'R2 Amaury', 'Point juridique', 'Recruté']
+const INTEG_DATE_STAGES = ["Point d'étape", "Point d'étape téléphonique", 'Démission reconversion', 'R2 Amaury', 'Point juridique', 'Intégration', 'Recruté']
 const MOIS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
 const ANNEES = [2025, 2026, 2027]
 import InlineDropdown from '../components/InlineDropdown'

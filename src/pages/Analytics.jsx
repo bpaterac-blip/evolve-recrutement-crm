@@ -16,9 +16,9 @@ const RECRUITED_GREEN = '#16a34a'
 
 const ANALYTICS_SOURCES = ['Chasse LinkedIn', 'Chasse Mail', 'Recommandation', 'Ads', 'Chasse externe', 'Inbound Marketing', 'Autre']
 
-const ANALYTICS_STAGES = ['R0', 'R1', 'Point Business Plan', "Point d'étape", 'R2 Amaury', 'Démission reconversion', 'Point juridique', 'Recruté']
+const ANALYTICS_STAGES = ['R0', 'R1', 'Point Business Plan', "Point d'étape", 'Démission reconversion', 'R2 Amaury', 'Point juridique', 'Recruté']
 
-const CHUTE_STAGES = ['Avant pipeline', 'R0', 'R1', 'Point Business Plan', "Point d'étape téléphonique", 'R2 Amaury', 'Démission reconversion', 'Point juridique']
+const CHUTE_STAGES = ['Avant pipeline', 'R0', 'R1', 'Point Business Plan', "Point d'étape téléphonique", 'Démission reconversion', 'R2 Amaury', 'Point juridique']
 
 const CHUTE_TYPES = ['Contraintes contractuelles', 'Situation personnelle', 'Offres concurrentes', 'Statut / réglementaire', 'Contact perdu', 'Autre']
 
