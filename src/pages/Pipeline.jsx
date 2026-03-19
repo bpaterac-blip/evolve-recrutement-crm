@@ -19,6 +19,7 @@ import {
 
 const SESSION_CIBLE_STAGES = ['Point Business Plan', "Point d'étape téléphonique", "Point d'étape", 'R2 Amaury', 'Démission reconversion', 'Point juridique', 'Intégration', 'Recruté']
 const INTEG_MODAL_STAGES = ["Point d'étape", "Point d'étape téléphonique", 'R2 Amaury', 'Démission reconversion', 'Point juridique', 'Recruté']
+const INTEG_DATE_STAGES = ["Point d'étape", "Point d'étape téléphonique", 'R2 Amaury', 'Démission reconversion', 'Point juridique', 'Intégration', 'Recruté']
 const MOIS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
 const ANNEES = [2025, 2026, 2027]
 import InlineDropdown from '../components/InlineDropdown'
@@ -52,6 +53,19 @@ function formatActivityDate(ts) {
   if (!ts) return ''
   const d = new Date(ts)
   return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) + ' à ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }).replace(':', 'h')
+}
+
+function formatSessionLabel(s) {
+  if (!s) return '—'
+  const base = [s.periode, s.annee].filter(Boolean).join(' ') || s.date_session || '—'
+  if (!s.date_debut) return base
+  const d = new Date(s.date_debut + 'T12:00:00')
+  const dayStart = d.getDate()
+  const friday = new Date(d)
+  friday.setDate(d.getDate() + 4)
+  const dayEnd = friday.getDate()
+  const month = d.toLocaleDateString('fr-FR', { month: 'long' })
+  return `${base} (${dayStart}-${dayEnd} ${month})`
 }
 
 function capFirst(str) {
@@ -362,11 +376,10 @@ export default function Pipeline() {
   const [stageChangeRdType, setStageChangeRdType] = useState('Google Meet')
   const [stageChangeNotes, setStageChangeNotes] = useState('')
   const [stageChangeSkipStep, setStageChangeSkipStep] = useState(false)
-  const [stageChangeIntegPeriode, setStageChangeIntegPeriode] = useState('')
-  const [stageChangeIntegAnnee, setStageChangeIntegAnnee] = useState('')
   const [editingInteg, setEditingInteg] = useState(false)
   const [editIntegPeriode, setEditIntegPeriode] = useState('')
   const [editIntegAnnee, setEditIntegAnnee] = useState('')
+  const [editSelectedSessionId, setEditSelectedSessionId] = useState('')
   const [profileToAssign, setProfileToAssign] = useState(null)
   const [showSessionModal, setShowSessionModal] = useState(false)
   const [sessions, setSessions] = useState([])
@@ -471,7 +484,7 @@ export default function Pipeline() {
       const today = new Date().toISOString().split('T')[0]
       const { data } = await supabase
         .from('sessions_formation')
-        .select('id, periode, annee, date_session, statut')
+        .select('id, periode, annee, date_session, date_debut, statut')
         .gte('date_session', today)
         .order('date_session', { ascending: true })
       setAvailableSessions(data || [])
@@ -479,6 +492,19 @@ export default function Pipeline() {
     if (modalProfile) loadSessions()
     else setAvailableSessions([])
   }, [modalProfile])
+
+  const [formationSessionsForRecrute, setFormationSessionsForRecrute] = useState([])
+  useEffect(() => {
+    const load = async () => {
+      const { data } = await supabase
+        .from('sessions_formation')
+        .select('id, periode, annee, date_debut')
+        .order('date_debut', { ascending: true })
+      setFormationSessionsForRecrute(data || [])
+    }
+    if (modalProfile?.stg === 'Recruté') load()
+    else setFormationSessionsForRecrute([])
+  }, [modalProfile?.id, modalProfile?.stg])
 
   useEffect(() => {
     setNoteContent(NOTE_TEMPLATES[noteTemplate] ?? '')
@@ -524,13 +550,11 @@ export default function Pipeline() {
   }, [modalProfile, editingField])
 
   useEffect(() => {
-    if (pendingStageChange?.newStage === "Point d'étape téléphonique" || pendingStageChange?.newStage === "Point d'étape") {
-      const today = new Date().toISOString().split('T')[0]
+    if (pendingStageChange && (pendingStageChange.newStage === "Point d'étape téléphonique" || pendingStageChange.newStage === "Point d'étape" || INTEG_MODAL_STAGES.includes(pendingStageChange.newStage))) {
       supabase
         .from('sessions_formation')
-        .select('id, periode, annee, date_session')
-        .gte('date_session', today)
-        .order('date_session', { ascending: true })
+        .select('id, periode, annee, date_debut')
+        .order('date_debut', { ascending: true })
         .then(({ data }) => setPendingSessions(data || []))
     } else {
       setPendingSessions([])
@@ -737,8 +761,7 @@ export default function Pipeline() {
     setStageChangeRdType('Google Meet')
     setStageChangeNotes('')
     setStageChangeSkipStep(false)
-    setStageChangeIntegPeriode(profile.integration_periode || '')
-    setStageChangeIntegAnnee(profile.integration_annee ? String(profile.integration_annee) : '')
+    setPendingSessionId(profile.session_formation_id || '')
   }
 
   const handleConfirmStageChange = async () => {
@@ -772,10 +795,6 @@ export default function Pipeline() {
       const updates = { stage: newStage }
       if (stageChangeSkipStep && newStage === 'Point Business Plan') updates.skip_business_plan = true
       if (stageChangeSkipStep && newStage === 'Démission reconversion') updates.skip_demission = true
-      if (INTEG_MODAL_STAGES.includes(newStage) && (stageChangeIntegPeriode || stageChangeIntegAnnee)) {
-        updates.integration_periode = stageChangeIntegPeriode || null
-        updates.integration_annee = stageChangeIntegAnnee || null
-      }
       await supabase.from('profiles').update(updates).eq('id', profile.id)
       const timeVal = stageChangeTime || '12:00'
       const eventDateVal = stageChangeDate ? (stageChangeDate.includes('T') ? stageChangeDate : `${stageChangeDate}T${timeVal}${timeVal.length === 5 ? ':00' : ''}`) : null
@@ -785,7 +804,7 @@ export default function Pipeline() {
         await supabase.from(EVENTS_TABLE).insert(eventRow)
         window.dispatchEvent(new CustomEvent('evolve:event-added'))
       }
-      if (pendingSessionId && (newStage === "Point d'étape téléphonique" || newStage === "Point d'étape")) {
+      if (pendingSessionId && INTEG_MODAL_STAGES.includes(newStage)) {
         const session = pendingSessions.find((s) => s.id === pendingSessionId)
         await supabase.from('profiles').update({
           session_formation_id: pendingSessionId,
@@ -810,8 +829,6 @@ export default function Pipeline() {
     setStageChangeRdType('Google Meet')
     setStageChangeNotes('')
     setStageChangeSkipStep(false)
-    setStageChangeIntegPeriode('')
-    setStageChangeIntegAnnee('')
     setPendingSessionId('')
     setPendingSessions([])
     setPendingStageChange(null)
@@ -850,12 +867,8 @@ export default function Pipeline() {
       const updates = { stage: newStage }
       if (stageChangeSkipStep && newStage === 'Point Business Plan') updates.skip_business_plan = true
       if (stageChangeSkipStep && newStage === 'Démission reconversion') updates.skip_demission = true
-      if (INTEG_MODAL_STAGES.includes(newStage) && (stageChangeIntegPeriode || stageChangeIntegAnnee)) {
-        updates.integration_periode = stageChangeIntegPeriode || null
-        updates.integration_annee = stageChangeIntegAnnee || null
-      }
       await supabase.from('profiles').update(updates).eq('id', profile.id)
-      if (pendingSessionId && (newStage === "Point d'étape téléphonique" || newStage === "Point d'étape")) {
+      if (pendingSessionId && INTEG_MODAL_STAGES.includes(newStage)) {
         const session = pendingSessions.find((s) => s.id === pendingSessionId)
         await supabase.from('profiles').update({
           session_formation_id: pendingSessionId,
@@ -880,8 +893,6 @@ export default function Pipeline() {
     setStageChangeRdType('Google Meet')
     setStageChangeNotes('')
     setStageChangeSkipStep(false)
-    setStageChangeIntegPeriode('')
-    setStageChangeIntegAnnee('')
     setPendingSessionId('')
     setPendingSessions([])
     setPendingStageChange(null)
@@ -1039,102 +1050,70 @@ export default function Pipeline() {
               <button type="button" onClick={() => setScoreCorrectionOpen(true)} style={{ marginTop: 6, fontSize: 11, color: '#ea580c', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left' }} title="Signaler un score inexact">
                 Signaler un score inexact
               </button>
-              {displayProfile.session_formation_id && (
-                <div style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 4, background: '#f0fdf4', color: '#15803d', fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 20 }}>
-                  <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
-                  {[displayProfile.integration_periode, displayProfile.integration_annee].filter(Boolean).join(' ') || availableSessions.find((s) => s.id === displayProfile.session_formation_id)?.date_session || 'Session assignée'}
-                </div>
-              )}
-              {SESSION_CIBLE_STAGES.includes(displayProfile.stg) && !displayProfile.session_formation_id && (
-                <div style={{ marginTop: 8 }}>
-                  <select
-                    value={displayProfile?.session_formation_id || ''}
-                    onChange={async (e) => {
-                      const sessionId = e.target.value || null
-                      const session = availableSessions.find((s) => s.id === sessionId)
-                      if (!displayProfile?.id || !useSupabase) return
-                      await supabase.from('profiles').update({
-                        session_formation_id: sessionId,
-                        integration_periode: session?.periode ?? null,
-                        integration_annee: session?.annee ?? null,
-                        integration_confirmed: false,
-                      }).eq('id', displayProfile.id)
-                      updateProfile(displayProfile.id, { session_formation_id: sessionId, integration_periode: session?.periode, integration_annee: session?.annee, integration_confirmed: false })
-                      fetchProfiles?.()
-                    }}
-                    style={{ width: '100%', padding: '6px 10px', fontSize: 12, border: '1px solid rgba(0,0,0,0.1)', borderRadius: 8, background: 'white', cursor: 'pointer' }}
-                  >
-                    <option value="">— Pas encore défini</option>
-                    {availableSessions.map((s) => (
-                      <option key={s.id} value={s.id}>{[s.periode, s.annee].filter(Boolean).join(' ') || s.date_session || '—'}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              {INTEG_MODAL_STAGES.includes(displayProfile.stg) && (
+              {displayProfile.stg === 'Recruté' && (
                 <div style={{ marginTop: 8 }}>
                   {editingInteg ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <select
-                          value={editIntegPeriode}
-                          onChange={(e) => setEditIntegPeriode(e.target.value)}
-                          style={{ flex: 1, padding: '6px 10px', fontSize: 12, border: '1px solid rgba(0,0,0,0.1)', borderRadius: 8, background: 'white' }}
-                        >
-                          <option value="">— Mois</option>
-                          {MOIS.map((m) => (
-                            <option key={m} value={m}>{m}</option>
-                          ))}
-                        </select>
-                        <select
-                          value={editIntegAnnee}
-                          onChange={(e) => setEditIntegAnnee(e.target.value)}
-                          style={{ flex: 1, padding: '6px 10px', fontSize: 12, border: '1px solid rgba(0,0,0,0.1)', borderRadius: 8, background: 'white' }}
-                        >
-                          <option value="">— Année</option>
-                          {ANNEES.map((a) => (
-                            <option key={a} value={String(a)}>{a}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          if (!displayProfile?.id || !useSupabase) return
-                          const periode = editIntegPeriode || null
-                          const annee = editIntegAnnee || null
-                          await supabase.from('profiles').update({ integration_periode: periode, integration_annee: annee }).eq('id', displayProfile.id)
-                          const desc = `${periode || ''} ${annee || ''}`.trim() || 'Non définie'
-                          await supabase.from(EVENTS_TABLE).insert({
-                            profile_id: displayProfile.id,
-                            event_type: 'Modification intégration',
-                            event_date: new Date().toISOString(),
-                            description: `Date d'intégration → ${desc}`,
-                            ...(user?.id && { owner_id: user.id }),
-                          })
-                          updateProfile(displayProfile.id, { integration_periode: periode, integration_annee: annee })
-                          fetchProfiles?.()
-                          setEditingInteg(false)
-                          window.dispatchEvent(new CustomEvent('evolve:event-added'))
-                        }}
-                        style={{ padding: '6px 12px', fontSize: 12, background: '#173731', color: '#E7E0D0', border: 'none', borderRadius: 8, cursor: 'pointer', alignSelf: 'flex-start' }}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <select
+                        value={editSelectedSessionId}
+                        onChange={(e) => setEditSelectedSessionId(e.target.value)}
+                        style={{ width: '100%', padding: '6px 10px', fontSize: 12, border: '1px solid rgba(0,0,0,0.1)', borderRadius: 8, background: 'white' }}
                       >
-                        Enregistrer
-                      </button>
+                        <option value="">— Aucune session</option>
+                        {formationSessionsForRecrute.map((s) => (
+                          <option key={s.id} value={s.id}>{formatSessionLabel(s)}</option>
+                        ))}
+                      </select>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!displayProfile?.id || !useSupabase) return
+                            const session = editSelectedSessionId ? formationSessionsForRecrute.find((s) => s.id === editSelectedSessionId) : null
+                            const updates = {
+                              session_formation_id: session?.id ?? null,
+                              integration_periode: session?.periode ?? null,
+                              integration_annee: session?.annee ?? null,
+                            }
+                            await supabase.from('profiles').update(updates).eq('id', displayProfile.id)
+                            const sessionLabel = session ? formatSessionLabel(session) : 'Aucune'
+                            await supabase.from(EVENTS_TABLE).insert({
+                              profile_id: displayProfile.id,
+                              event_type: 'Modification session',
+                              event_date: new Date().toISOString(),
+                              description: `Session modifiée → ${sessionLabel}`,
+                              ...(user?.id && { owner_id: user.id }),
+                            })
+                            updateProfile(displayProfile.id, updates)
+                            fetchProfiles?.()
+                            setEditingInteg(false)
+                            window.dispatchEvent(new CustomEvent('evolve:event-added'))
+                            window.dispatchEvent(new CustomEvent('evolve:session-updated'))
+                          }}
+                          style={{ padding: '6px 12px', fontSize: 12, background: '#173731', color: '#E7E0D0', border: 'none', borderRadius: 8, cursor: 'pointer' }}
+                        >
+                          Enregistrer
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setEditingInteg(false); setEditSelectedSessionId(displayProfile.session_formation_id || ''); }}
+                          style={{ padding: '6px 12px', fontSize: 12, background: 'transparent', color: '#173731', border: '1px solid #173731', borderRadius: 8, cursor: 'pointer' }}
+                        >
+                          Annuler
+                        </button>
+                      </div>
                     </div>
                   ) : (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontSize: 12, color: '#555' }}>
-                        Date d&apos;intégration : {[displayProfile.integration_periode, displayProfile.integration_annee].filter(Boolean).join(' ') || 'Non définie'}
-                      </span>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#f0fdf4', color: '#15803d', fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 20 }}>
+                      <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+                      <span>{formatSessionLabel(formationSessionsForRecrute.find((s) => s.id === displayProfile.session_formation_id)) || 'Non définie'}</span>
                       <button
                         type="button"
                         onClick={() => {
                           setEditingInteg(true)
-                          setEditIntegPeriode(displayProfile.integration_periode || '')
-                          setEditIntegAnnee(displayProfile.integration_annee ? String(displayProfile.integration_annee) : '')
+                          setEditSelectedSessionId(displayProfile.session_formation_id || '')
                         }}
-                        style={{ padding: 4, background: 'none', border: 'none', cursor: 'pointer', display: 'flex' }}
+                        style={{ padding: 2, background: 'none', border: 'none', cursor: 'pointer', display: 'flex', marginLeft: 2 }}
                         title="Modifier"
                       >
                         <IconPencil />
@@ -1625,9 +1604,9 @@ export default function Pipeline() {
                     </label>
                   </div>
                 )}
-                {(newStage === "Point d'étape téléphonique" || newStage === "Point d'étape") && (
+                {INTEG_MODAL_STAGES.includes(newStage) && (
                   <div style={{ marginBottom: 16 }}>
-                    <label style={{ fontSize: 12, fontWeight: 500, color: '#666', display: 'block', marginBottom: 4 }}>Session cible (optionnel)</label>
+                    <label style={{ fontSize: 12, fontWeight: 500, color: '#666', display: 'block', marginBottom: 4 }}>Session de formation (optionnel)</label>
                     <select
                       value={pendingSessionId}
                       onChange={(e) => setPendingSessionId(e.target.value)}
@@ -1635,36 +1614,9 @@ export default function Pipeline() {
                     >
                       <option value="">— Pas encore défini</option>
                       {pendingSessions.map((s) => (
-                        <option key={s.id} value={s.id}>{[s.periode, s.annee].filter(Boolean).join(' ') || s.date_session || '—'}</option>
+                        <option key={s.id} value={s.id}>{formatSessionLabel(s)}</option>
                       ))}
                     </select>
-                  </div>
-                )}
-                {INTEG_MODAL_STAGES.includes(newStage) && (
-                  <div style={{ marginBottom: 16 }}>
-                    <label style={{ fontSize: 12, fontWeight: 500, color: '#666', display: 'block', marginBottom: 4 }}>Date d&apos;intégration prévisionnelle (optionnel)</label>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <select
-                        value={stageChangeIntegPeriode}
-                        onChange={(e) => setStageChangeIntegPeriode(e.target.value)}
-                        style={{ flex: 1, padding: '8px 12px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, background: 'white' }}
-                      >
-                        <option value="">— Mois</option>
-                        {MOIS.map((m) => (
-                          <option key={m} value={m}>{m}</option>
-                        ))}
-                      </select>
-                      <select
-                        value={stageChangeIntegAnnee}
-                        onChange={(e) => setStageChangeIntegAnnee(e.target.value)}
-                        style={{ flex: 1, padding: '8px 12px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, background: 'white' }}
-                      >
-                        <option value="">— Année</option>
-                        {ANNEES.map((a) => (
-                          <option key={a} value={String(a)}>{a}</option>
-                        ))}
-                      </select>
-                    </div>
                   </div>
                 )}
                 <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', alignItems: 'center' }}>

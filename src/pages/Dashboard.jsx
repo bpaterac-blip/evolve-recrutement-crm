@@ -566,7 +566,8 @@ function SessionFormationCard({ session, goal, sessionProfilsRefresh, onAssign, 
   const [editDateValue, setEditDateValue] = useState('')
   useEffect(() => {
     const load = async () => {
-      const { data } = await supabase.from('profiles').select('id, first_name, last_name, company, city, region, stage, score, linkedin_url, title, integration_confirmed, maturity').eq('session_formation_id', session.id)
+      const cols = 'id, first_name, last_name, company, city, region, stage, score, linkedin_url, title, integration_confirmed, maturity'
+      const { data } = await supabase.from('profiles').select(cols).eq('session_formation_id', session.id)
       setProfils(data || [])
     }
     load()
