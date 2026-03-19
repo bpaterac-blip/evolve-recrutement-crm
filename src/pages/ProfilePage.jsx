@@ -661,6 +661,15 @@ export default function ProfilePage() {
             <FieldRow field="mail" value={profile.mail} label="Email" icon={<IconEnvelope />} placeholder="email@…" />
             <FieldRow field="li" value={profile.li} label="LinkedIn" icon={<IconLink />} placeholder="linkedin.com/in/…" isLink />
             <FieldRow field="city" value={profile.city} label="Ville" icon={<IconMapPin />} />
+            {(profile.owner_full_name?.trim() || profile.owner_email?.trim()) && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: `1px solid ${PAGE_STYLE.border}` }}>
+                <span style={iconStyle}><IconUser /></span>
+                <span style={{ color: PAGE_STYLE.textSecondary, fontSize: 13, width: 100, flexShrink: 0 }}>Ajouté par</span>
+                <span style={{ flex: 1, fontSize: 12, color: PAGE_STYLE.textSecondary }}>
+                  {(profile.owner_full_name?.trim() || profile.owner_email || '').trim()} · {profile.created_at ? `le ${new Date(profile.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}` : '—'}
+                </span>
+              </div>
+            )}
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: `1px solid ${PAGE_STYLE.border}` }}>
               <span style={{ ...iconStyle, width: 24, display: 'flex', alignItems: 'center' }}><IconMap /></span>
               <span style={{ color: PAGE_STYLE.textSecondary, fontSize: 13, width: 100 }}>Région</span>

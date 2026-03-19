@@ -142,6 +142,9 @@ export default function Dashboard() {
   }, [])
 
   useEffect(() => {
+    const state = { cancelled: false }
+    let timeoutId = null
+
     const loadR1CetteSemaine = async () => {
       setR1Loading(true)
       const today = new Date()
@@ -150,43 +153,75 @@ export default function Dashboard() {
       inSevenDays.setDate(today.getDate() + 7)
       const todayStr = today.toISOString().split('T')[0]
       const inSevenDaysStr = inSevenDays.toISOString().split('T')[0]
-      const profileIds = P.map((p) => p.id).filter(Boolean)
-      const items = []
-      if (profileIds.length > 0) {
-        const { data: events } = await supabase
+
+      timeoutId = setTimeout(() => {
+        if (!state.cancelled) {
+          state.cancelled = true
+          setR1CetteSemaine([])
+          setR1Loading(false)
+        }
+      }, 5000)
+
+      try {
+        const { data: eventsR1, error } = await supabase
           .from('events')
-          .select('id, profile_id, event_date, event_type, date')
-          .or('event_type.ilike.%R1%')
+          .select('*, profiles(first_name, last_name, company, city, region)')
+          .ilike('event_type', '%R1%')
           .gte('event_date', todayStr)
           .lte('event_date', inSevenDaysStr)
-          .in('profile_id', profileIds)
-        if (events?.length) {
-          events.forEach((e) => {
-            const p = P.find((pr) => String(pr.id) === String(e.profile_id))
-            if (!p) return
+
+        console.log('R1 events:', eventsR1, 'error:', error)
+
+        if (state.cancelled) return
+
+        const items = []
+        if (eventsR1?.length) {
+          eventsR1.forEach((e) => {
+            const p = e.profiles
+            const fn = p?.first_name ?? ''
+            const ln = p?.last_name ?? ''
+            const co = p?.company ?? '—'
+            const city = p?.city ?? '—'
+            const region = p?.region ?? ''
             const eventDate = e.event_date || e.date
-            items.push({ id: `e-${e.id}`, profile_id: e.profile_id, fn: p.fn ?? '', ln: p.ln ?? '', co: p.co ?? '—', event_date: eventDate })
+            items.push({ id: `e-${e.id}`, profile_id: e.profile_id, fn, ln, co, city, region, event_date: eventDate })
           })
         }
+
+        if (items.length === 0) {
+          const { data: profilesR1 } = await supabase
+            .from('profiles')
+            .select('id, first_name, last_name, company, city, region, next_event_date')
+            .eq('next_event_label', 'R1')
+            .gte('next_event_date', todayStr)
+            .lte('next_event_date', inSevenDaysStr)
+
+          if (!state.cancelled && profilesR1?.length) {
+            profilesR1.forEach((p) => {
+              items.push({ id: `p-${p.id}`, profile_id: p.id, fn: p.first_name ?? '', ln: p.last_name ?? '', co: p.company ?? '—', city: p.city ?? '—', region: p.region ?? '', event_date: p.next_event_date })
+            })
+          }
+        }
+
+        items.sort((a, b) => new Date(a.event_date) - new Date(b.event_date))
+        if (!state.cancelled) {
+          setR1CetteSemaine(items)
+        }
+      } catch (err) {
+        console.error('R1 load error:', err)
+        if (!state.cancelled) setR1CetteSemaine([])
+      } finally {
+        clearTimeout(timeoutId)
+        if (!state.cancelled) setR1Loading(false)
       }
-      const fromProfiles = P.filter((p) => {
-        if (p.stg !== 'R1') return false
-        const d = p.next_event_date
-        if (!d) return false
-        const dStr = typeof d === 'string' ? d.split('T')[0] : new Date(d).toISOString().split('T')[0]
-        return dStr >= todayStr && dStr <= inSevenDaysStr
-      })
-      fromProfiles.forEach((p) => {
-        if (items.some((i) => String(i.profile_id) === String(p.id))) return
-        const d = p.next_event_date
-        items.push({ id: `p-${p.id}`, profile_id: p.id, fn: p.fn ?? '', ln: p.ln ?? '', co: p.co ?? '—', event_date: d })
-      })
-      items.sort((a, b) => new Date(a.event_date) - new Date(b.event_date))
-      setR1CetteSemaine(items)
-      setR1Loading(false)
     }
+
     loadR1CetteSemaine()
-  }, [P.map((p) => p.id).filter(Boolean).join(','), ownerFilter, P])
+    return () => {
+      state.cancelled = true
+      clearTimeout(timeoutId)
+    }
+  }, [])
 
   useEffect(() => {
     const loadPointsEtape = async () => {
@@ -212,7 +247,7 @@ export default function Dashboard() {
             const p = P.find((pr) => String(pr.id) === String(e.profile_id))
             if (!p) return
             const eventDate = e.event_date || e.date
-            items.push({ id: `e-${e.id}`, profile_id: e.profile_id, fn: p.fn ?? '', ln: p.ln ?? '', co: p.co ?? '—', event_date: eventDate })
+            items.push({ id: `e-${e.id}`, profile_id: e.profile_id, fn: p.fn ?? '', ln: p.ln ?? '', co: p.co ?? '—', city: p.city ?? '—', region: p.region ?? '', event_date: eventDate })
           })
         }
       }
@@ -227,7 +262,7 @@ export default function Dashboard() {
       fromProfiles.forEach((p) => {
         if (items.some((i) => String(i.profile_id) === String(p.id))) return
         const d = p.next_event_date
-        items.push({ id: `p-${p.id}`, profile_id: p.id, fn: p.fn ?? '', ln: p.ln ?? '', co: p.co ?? '—', event_date: d })
+        items.push({ id: `p-${p.id}`, profile_id: p.id, fn: p.fn ?? '', ln: p.ln ?? '', co: p.co ?? '—', city: p.city ?? '—', region: p.region ?? '', event_date: d })
       })
       items.sort((a, b) => new Date(a.event_date) - new Date(b.event_date))
       setPointsEtapeCetteSemaine(items)
@@ -460,9 +495,13 @@ export default function Dashboard() {
                 ) : (
                   <ul className="space-y-2 mt-2">
                     {r1CetteSemaine.map((item) => (
-                      <li key={item.id} className="flex justify-between items-center cursor-pointer hover:opacity-80" onClick={() => navigate(`/profiles/${item.profile_id}`)}>
-                        <span className="text-[12px]" style={{ color: '#555' }}>{item.fn} {item.ln} · {item.co}</span>
-                        <span className="text-[12px]" style={{ color: '#888' }}>{item.event_date ? new Date(item.event_date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) : ''}</span>
+                      <li key={item.id} className="flex items-center gap-2 cursor-pointer hover:opacity-80" onClick={() => navigate(`/profiles/${item.profile_id}`)}>
+                        <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0" style={{ backgroundColor: ACCENT, color: GOLD }}>{ini(item.fn, item.ln) || '?'}</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[12px]" style={{ color: '#333' }}>{[item.fn, item.ln].filter(Boolean).join(' ') || '—'}</div>
+                          <div className="text-[12px]" style={{ color: '#888' }}>{[item.city, item.region].filter(Boolean).join(' · ') || '—'}</div>
+                        </div>
+                        <span className="text-[12px] shrink-0" style={{ color: '#888' }}>{item.event_date ? new Date(item.event_date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) : ''}</span>
                       </li>
                     ))}
                   </ul>
@@ -483,9 +522,13 @@ export default function Dashboard() {
                 ) : (
                   <ul className="space-y-2 mt-2">
                     {pointsEtapeCetteSemaine.map((item) => (
-                      <li key={item.id} className="flex justify-between items-center cursor-pointer hover:opacity-80" onClick={() => navigate(`/profiles/${item.profile_id}`)}>
-                        <span className="text-[12px]" style={{ color: '#555' }}>{item.fn} {item.ln} · {item.co}</span>
-                        <span className="text-[12px]" style={{ color: '#888' }}>{item.event_date ? new Date(item.event_date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) : ''}</span>
+                      <li key={item.id} className="flex items-center gap-2 cursor-pointer hover:opacity-80" onClick={() => navigate(`/profiles/${item.profile_id}`)}>
+                        <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0" style={{ backgroundColor: ACCENT, color: GOLD }}>{ini(item.fn, item.ln) || '?'}</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[12px]" style={{ color: '#333' }}>{[item.fn, item.ln].filter(Boolean).join(' ') || '—'}</div>
+                          <div className="text-[12px]" style={{ color: '#888' }}>{[item.city, item.region].filter(Boolean).join(' · ') || '—'}</div>
+                        </div>
+                        <span className="text-[12px] shrink-0" style={{ color: '#888' }}>{item.event_date ? new Date(item.event_date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) : ''}</span>
                       </li>
                     ))}
                   </ul>
