@@ -17,7 +17,7 @@ import {
   REGIONS,
 } from '../lib/data'
 
-const SESSION_CIBLE_STAGES = ["Point d'étape téléphonique", "Point d'étape", 'R2 Amaury', 'Point juridique', 'Démission reconversion', 'Intégration', 'Recruté']
+const SESSION_CIBLE_STAGES = ['Point Business Plan', "Point d'étape téléphonique", "Point d'étape", 'R2 Amaury', 'Démission reconversion', 'Point juridique', 'Intégration', 'Recruté']
 import InlineDropdown from '../components/InlineDropdown'
 import ScoreCorrectionModal from '../components/ScoreCorrectionModal'
 import ChuteModal from '../components/ChuteModal'
@@ -64,6 +64,7 @@ const STAGE_BORDER_COLORS = {
   "Point d'étape téléphonique": '#f59e0b',
   "Point d'étape": '#f59e0b',
   'R2 Amaury': '#ef4444',
+  'Point Business Plan': '#d97706',
   'Point juridique': '#8b5cf6',
   'Démission reconversion': '#f97316',
   Intégration: '#10b981',
@@ -336,6 +337,7 @@ export default function Pipeline() {
   const [stageChangeTime, setStageChangeTime] = useState('')
   const [stageChangeRdType, setStageChangeRdType] = useState('Google Meet')
   const [stageChangeNotes, setStageChangeNotes] = useState('')
+  const [stageChangeSkipStep, setStageChangeSkipStep] = useState(false)
   const [profileToAssign, setProfileToAssign] = useState(null)
   const [showSessionModal, setShowSessionModal] = useState(false)
   const [sessions, setSessions] = useState([])
@@ -701,6 +703,7 @@ export default function Pipeline() {
     setStageChangeTime('')
     setStageChangeRdType('Google Meet')
     setStageChangeNotes('')
+    setStageChangeSkipStep(false)
   }
 
   const handleConfirmStageChange = async () => {
@@ -731,7 +734,10 @@ export default function Pipeline() {
     const oldStage = profile.stg ?? '—'
     changeStage(profileId, newStage)
     if (useSupabase) {
-      await supabase.from('profiles').update({ stage: newStage }).eq('id', profile.id)
+      const updates = { stage: newStage }
+      if (stageChangeSkipStep && newStage === 'Point Business Plan') updates.skip_business_plan = true
+      if (stageChangeSkipStep && newStage === 'Démission reconversion') updates.skip_demission = true
+      await supabase.from('profiles').update(updates).eq('id', profile.id)
       const timeVal = stageChangeTime || '12:00'
       const eventDateVal = stageChangeDate ? (stageChangeDate.includes('T') ? stageChangeDate : `${stageChangeDate}T${timeVal}${timeVal.length === 5 ? ':00' : ''}`) : null
       if (eventDateVal) {
@@ -764,6 +770,7 @@ export default function Pipeline() {
     setStageChangeTime('')
     setStageChangeRdType('Google Meet')
     setStageChangeNotes('')
+    setStageChangeSkipStep(false)
     setPendingSessionId('')
     setPendingSessions([])
     setPendingStageChange(null)
@@ -799,7 +806,10 @@ export default function Pipeline() {
     const oldStage = profile.stg ?? '—'
     changeStage(profileId, newStage)
     if (useSupabase) {
-      await supabase.from('profiles').update({ stage: newStage }).eq('id', profile.id)
+      const updates = { stage: newStage }
+      if (stageChangeSkipStep && newStage === 'Point Business Plan') updates.skip_business_plan = true
+      if (stageChangeSkipStep && newStage === 'Démission reconversion') updates.skip_demission = true
+      await supabase.from('profiles').update(updates).eq('id', profile.id)
       if (pendingSessionId && (newStage === "Point d'étape téléphonique" || newStage === "Point d'étape")) {
         const session = pendingSessions.find((s) => s.id === pendingSessionId)
         await supabase.from('profiles').update({
@@ -824,6 +834,7 @@ export default function Pipeline() {
     setStageChangeTime('')
     setStageChangeRdType('Google Meet')
     setStageChangeNotes('')
+    setStageChangeSkipStep(false)
     setPendingSessionId('')
     setPendingSessions([])
     setPendingStageChange(null)
@@ -835,7 +846,7 @@ export default function Pipeline() {
   const matStyle = (m) => ({ background: matColor(m).bg, color: matColor(m).text })
 
   const MODAL_MAT_STYLES = { Froid: { bg: '#f8fafc', color: '#94a3b8' }, Tiède: { bg: '#fff7ed', color: '#ea580c' }, Chaud: { bg: '#fff1f2', color: '#e11d48' }, 'Très chaud': { bg: '#fff1f2', color: '#e11d48' }, Chute: { bg: '#fff1f2', color: '#e11d48' }, 'Pas intéressé': { bg: '#f1f5f9', color: '#64748b', fontStyle: 'italic' }, Archivé: { bg: '#f8fafc', color: '#94a3b8' } }
-  const MODAL_STAGE_STYLES = { R0: { bg: '#eff6ff', color: '#1d4ed8' }, R1: { bg: '#f0fdf4', color: '#15803d' }, "Point d'étape": { bg: '#fefce8', color: '#a16207' }, "Point d'étape téléphonique": { bg: '#fefce8', color: '#a16207' }, 'R2 Amaury': { bg: '#fff7ed', color: '#c2410c' }, 'Point juridique': { bg: '#f5f3ff', color: '#6d28d9' }, 'Démission reconversion': { bg: '#fff7ed', color: '#ea580c' }, Intégration: { bg: '#f0fdf4', color: '#15803d' }, Recruté: { bg: '#f0fdf4', color: '#15803d' }, Démission: { bg: '#fff7ed', color: '#ea580c' } }
+  const MODAL_STAGE_STYLES = { R0: { bg: '#eff6ff', color: '#1d4ed8' }, R1: { bg: '#f0fdf4', color: '#15803d' }, "Point d'étape": { bg: '#fefce8', color: '#a16207' }, "Point d'étape téléphonique": { bg: '#fefce8', color: '#a16207' }, 'R2 Amaury': { bg: '#fff7ed', color: '#c2410c' }, 'Point Business Plan': { bg: '#fef3c7', color: '#b45309' }, 'Point juridique': { bg: '#f5f3ff', color: '#6d28d9' }, 'Démission reconversion': { bg: '#fff7ed', color: '#ea580c' }, Intégration: { bg: '#f0fdf4', color: '#15803d' }, Recruté: { bg: '#f0fdf4', color: '#15803d' }, Démission: { bg: '#fff7ed', color: '#ea580c' } }
   const MODAL_SOURCE_STYLES = { 'Chasse LinkedIn': { bg: '#eff6ff', color: '#1d4ed8' }, 'Chasse Mail': { bg: '#f0fdf4', color: '#15803d' }, Recommandation: { bg: '#fefce8', color: '#a16207' }, Ads: { bg: '#f5f3ff', color: '#6d28d9' }, 'Chasse externe': { bg: '#f8fafc', color: '#64748b' }, 'Inbound Marketing': { bg: '#f0fdf4', color: '#15803d' }, Autre: { bg: '#f8fafc', color: '#64748b' } }
   const modalMatStyle = (m) => ({ ...MODAL_MAT_STYLES[m || 'Froid'], borderRadius: 20, fontSize: 10, fontWeight: 600, padding: '3px 9px' })
   const modalStagStyle = (s) => ({ ...(MODAL_STAGE_STYLES[s] || { bg: '#f8fafc', color: '#64748b' }), borderRadius: 20, fontSize: 10, fontWeight: 600, padding: '3px 9px' })
@@ -1462,6 +1473,14 @@ export default function Pipeline() {
                     style={{ width: '100%', padding: 10, fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, resize: 'vertical' }}
                   />
                 </div>
+                {(newStage === 'Point Business Plan' || newStage === 'Démission reconversion') && (
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: '#444' }}>
+                      <input type="checkbox" checked={stageChangeSkipStep} onChange={(e) => setStageChangeSkipStep(e.target.checked)} style={{ width: 16, height: 16 }} />
+                      <span>Cette étape ne s&apos;applique pas à ce profil</span>
+                    </label>
+                  </div>
+                )}
                 {(newStage === "Point d'étape téléphonique" || newStage === "Point d'étape") && (
                   <div style={{ marginBottom: 16 }}>
                     <label style={{ fontSize: 12, fontWeight: 500, color: '#666', display: 'block', marginBottom: 4 }}>Session cible (optionnel)</label>

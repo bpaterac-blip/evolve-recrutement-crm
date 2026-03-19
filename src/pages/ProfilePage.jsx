@@ -17,7 +17,7 @@ import {
   NEXT_EVENT_LABELS,
 } from '../lib/data'
 
-const SESSION_CIBLE_STAGES = ["Point d'étape téléphonique", "Point d'étape", 'R2 Amaury', 'Point juridique', 'Démission reconversion', 'Intégration', 'Recruté']
+const SESSION_CIBLE_STAGES = ['Point Business Plan', "Point d'étape téléphonique", "Point d'étape", 'R2 Amaury', 'Démission reconversion', 'Point juridique', 'Intégration', 'Recruté']
 import InlineDropdown from '../components/InlineDropdown'
 import ScoreCorrectionModal from '../components/ScoreCorrectionModal'
 import ChuteModal from '../components/ChuteModal'

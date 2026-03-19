@@ -37,6 +37,22 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        const loginTime = session.user.last_sign_in_at || session.user.created_at
+        if (loginTime) {
+          const hoursSinceLogin = (Date.now() - new Date(loginTime).getTime()) / (1000 * 60 * 60)
+          if (hoursSinceLogin > 24) {
+            await supabase.auth.signOut()
+          }
+        }
+      }
+    }
+    checkSession()
+  }, [])
+
+  useEffect(() => {
     let cancelled = false
     const safetyTimeoutId = setTimeout(() => {
       if (!cancelled) setLoading(false)

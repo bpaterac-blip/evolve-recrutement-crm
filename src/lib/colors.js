@@ -16,6 +16,7 @@ export const STAGE_COLORS = {
   R1: { bg: '#EFF6FF', text: '#2563EB' },
   "Point d'étape": { bg: '#F5F3FF', text: '#7C3AED' },
   'R2 Amaury': { bg: '#FFF7ED', text: '#C2410C' },
+  'Point Business Plan': { bg: '#FEF3C7', text: '#B45309' },
   'Point juridique': { bg: '#ECFDF5', text: '#065F46' },
   'Démission reconversion': { bg: '#FEF9C3', text: '#854D0E' },
   Démission: { bg: '#FEF9C3', text: '#854D0E' },

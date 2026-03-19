@@ -39,6 +39,7 @@ const STAGE_STYLES = {
   "Point d'étape téléphonique": { backgroundColor: '#fefce8', color: '#a16207' },
   "Point d'étape": { backgroundColor: '#fefce8', color: '#a16207' },
   'R2 Amaury': { backgroundColor: '#fff7ed', color: '#c2410c' },
+  'Point Business Plan': { backgroundColor: '#fef3c7', color: '#b45309' },
   'Point juridique': { backgroundColor: '#faf5ff', color: '#7e22ce' },
   'Démission reconversion': { backgroundColor: '#fff1f2', color: '#e11d48' },
   Intégration: { backgroundColor: '#dcfce7', color: '#15803d' },

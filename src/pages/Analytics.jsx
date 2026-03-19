@@ -16,9 +16,9 @@ const RECRUITED_GREEN = '#16a34a'
 
 const ANALYTICS_SOURCES = ['Chasse LinkedIn', 'Chasse Mail', 'Recommandation', 'Ads', 'Chasse externe', 'Inbound Marketing', 'Autre']
 
-const ANALYTICS_STAGES = ['R0', 'R1', "Point d'étape", 'R2 Amaury', 'Point juridique', 'Démission reconversion', 'Recruté']
+const ANALYTICS_STAGES = ['R0', 'R1', 'Point Business Plan', "Point d'étape", 'R2 Amaury', 'Démission reconversion', 'Point juridique', 'Recruté']
 
-const CHUTE_STAGES = ['Avant pipeline', 'R0', 'R1', "Point d'étape téléphonique", 'R2 Amaury', 'Point juridique', 'Démission reconversion']
+const CHUTE_STAGES = ['Avant pipeline', 'R0', 'R1', 'Point Business Plan', "Point d'étape téléphonique", 'R2 Amaury', 'Démission reconversion', 'Point juridique']
 
 const CHUTE_TYPES = ['Contraintes contractuelles', 'Situation personnelle', 'Offres concurrentes', 'Statut / réglementaire', 'Contact perdu', 'Autre']
 
@@ -470,9 +470,14 @@ export default function Analytics() {
     const chuteProfiles = forAlways.filter((p) => p.mat === 'Chute' || p.mat === 'Pas intéressé')
 
     const countInStage = (stg) => {
-      if (stg === "Point d'étape") return forFunnel.filter((p) => normalizeStageForMatch(p.stg) === "Point d'étape téléphonique").length
-      if (stg === "Point d'étape téléphonique") return forFunnel.filter((p) => normalizeStageForMatch(p.stg) === stg).length
-      return forFunnel.filter((p) => p.stg === stg).length
+      const excludeSkip = (p) => {
+        if (stg === 'Point Business Plan' && p.skip_business_plan) return false
+        if (stg === 'Démission reconversion' && p.skip_demission) return false
+        return true
+      }
+      if (stg === "Point d'étape") return forFunnel.filter((p) => normalizeStageForMatch(p.stg) === "Point d'étape téléphonique" && excludeSkip(p)).length
+      if (stg === "Point d'étape téléphonique") return forFunnel.filter((p) => normalizeStageForMatch(p.stg) === stg && excludeSkip(p)).length
+      return forFunnel.filter((p) => p.stg === stg && excludeSkip(p)).length
     }
 
     const funnelCounts = ANALYTICS_STAGES.map((s) => ({ stage: s, n: countInStage(s) }))

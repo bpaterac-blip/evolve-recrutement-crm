@@ -62,6 +62,8 @@ function mapRowToProfile(row) {
     chute_date: row.chute_date ?? null,
     grille_notation: row.grille_notation ?? {},
     grille_commentaires: row.grille_commentaires ?? null,
+    skip_business_plan: row.skip_business_plan ?? false,
+    skip_demission: row.skip_demission ?? false,
   }
 }
 
