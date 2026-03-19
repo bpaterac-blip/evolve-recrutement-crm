@@ -571,8 +571,8 @@ function SessionFormationCard({ session, goal, sessionProfilsRefresh, onAssign, 
     }
     load()
   }, [session.id, sessionProfilsRefresh])
-  const confirmes = profils.filter((p) => p.integration_confirmed === true)
-  const potentiels = profils.filter((p) => p.integration_confirmed !== true)
+  const confirmes = profils.filter((p) => p.stage === 'Recruté' || p.integration_confirmed === true)
+  const potentiels = profils.filter((p) => p.stage !== 'Recruté' && p.integration_confirmed !== true)
   const total = confirmes.length + potentiels.length
   const pctConfirmes = Math.min(100, goal > 0 ? (confirmes.length / goal) * 100 : 0)
   const pctPotentiels = Math.min(100, goal > 0 ? (potentiels.length / goal) * 100 : 0)
