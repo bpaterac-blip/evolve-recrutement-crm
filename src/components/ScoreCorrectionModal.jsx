@@ -12,6 +12,7 @@ const SUGGESTIONS = [
 ]
 
 export default function ScoreCorrectionModal({ profile, onClose, onSaved, useSupabase }) {
+  const { user, userProfile } = useAuth()
   const [correctedScore, setCorrectedScore] = useState(profile?.sc ?? 0)
   const [priorityLabel, setPriorityLabel] = useState('')
   const [reason, setReason] = useState('')
@@ -36,6 +37,7 @@ export default function ScoreCorrectionModal({ profile, onClose, onSaved, useSup
           reason: reason.trim(),
           priority_label: priorityLabel || null,
           author: userProfile?.full_name?.trim() || user?.email || null,
+          consolidated: false,
         })
         await supabase.from('profiles').update({ score: correctedScore }).eq('id', profile.id)
         await supabase.from('activities').insert({

@@ -801,33 +801,43 @@ export default function Pipeline() {
     const oldStage = profile.stg ?? '—'
     changeStage(profileId, newStage)
     if (useSupabase) {
-      const timeVal = stageChangeTime || '12:00'
-      const eventDateVal = stageChangeDate ? (stageChangeDate.includes('T') ? stageChangeDate : `${stageChangeDate}T${timeVal}${timeVal.length === 5 ? ':00' : ''}`) : null
+      const nouvelleEtape = newStage
+      const dateChoisie = stageChangeDate ? String(stageChangeDate).split('T')[0].trim() : ''
+      const heureParts = (stageChangeTime || '12:00').trim().split(':')
+      const heureChoisie =
+        heureParts.length >= 2
+          ? `${String(parseInt(heureParts[0], 10) || 0).padStart(2, '0')}:${String(parseInt(heureParts[1], 10) || 0).padStart(2, '0')}`
+          : '12:00'
       const updates = { stage: newStage }
       if (stageChangeSkipStep && newStage === 'Point Business Plan') updates.skip_business_plan = true
       if (stageChangeSkipStep && newStage === 'Démission reconversion') updates.skip_demission = true
-      if (eventDateVal) {
-        updates.next_event_date = stageChangeDate.split('T')[0]
+      if (dateChoisie) {
+        updates.next_event_date = dateChoisie
         updates.next_event_label = newStage
-        const nouvelleEtape = newStage
-        const dateChoisie = eventDateVal
-        const typeRdv = stageChangeRdType || null
+        const typeRdv = stageChangeRdType || ''
         const notes = stageChangeNotes?.trim() || ''
-        const description = typeRdv ? typeRdv + (notes ? ' · ' + notes : '') : (notes || '')
-        console.log('Insert event:', { profile_id: profile.id, event_type: nouvelleEtape, event_date: dateChoisie })
-        const { error } = await supabase.from('events').insert({
+        const description = (typeRdv || '') + (notes ? ' · ' + notes : '')
+        const eventDateIso = `${dateChoisie}T${heureChoisie}:00`
+        console.log('Insert event:', {
           profile_id: profile.id,
           event_type: nouvelleEtape,
           event_date: dateChoisie,
+          heure: heureChoisie,
+        })
+        const { error } = await supabase.from('events').insert({
+          profile_id: profile.id,
+          event_type: nouvelleEtape,
+          event_date: eventDateIso,
           description: description || null,
+          ...(user?.id && { owner_id: user.id }),
           created_at: new Date().toISOString(),
         })
         if (error) console.error('Erreur insert event:', error)
         window.dispatchEvent(new CustomEvent('evolve:event-added'))
       }
       await supabase.from('profiles').update(updates).eq('id', profile.id)
-      if (eventDateVal) {
-        updateProfile(profile.id, { next_event_date: stageChangeDate.split('T')[0], next_event_label: newStage })
+      if (dateChoisie) {
+        updateProfile(profile.id, { next_event_date: dateChoisie, next_event_label: newStage })
       }
       if (pendingSessionId && INTEG_MODAL_STAGES.includes(newStage)) {
         const session = pendingSessions.find((s) => s.id === pendingSessionId)

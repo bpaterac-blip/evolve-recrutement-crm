@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { loadScoringConfig } from '../lib/scoringConfig'
 import { fetchScoringInstructions, onScoringFeedbackUpdated, notifyScoringFeedbackUpdated } from '../lib/scoringInstructions'
+import { consolidateLearning } from '../lib/consolidation'
 
 const ACCENT = '#173731'
 const GOLD = '#D2AB76'
@@ -107,11 +108,20 @@ export default function AdminScoringLearning() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [confirmError, setConfirmError] = useState('')
   const [confirmLoading, setConfirmLoading] = useState(false)
+  const [consolidating, setConsolidating] = useState(false)
+  const consolidationLockRef = useRef(false)
+  const prevUnconsolidatedRef = useRef(-1)
 
   const load = async () => {
     setLoading(true)
-    const { data: fb } = await supabase.from('scoring_feedback').select('id, profile_id, original_score, corrected_score, reason, author, created_at, priority_label, profile_data').order('created_at', { ascending: false })
-    const { data: ins } = await supabase.from('scoring_instructions').select('id, content, updated_at, updated_by').order('updated_at', { ascending: false })
+    const { data: fb } = await supabase
+      .from('scoring_feedback')
+      .select('id, profile_id, original_score, corrected_score, reason, author, created_at, priority_label, profile_data, consolidated, feedback_note')
+      .order('created_at', { ascending: false })
+    const { data: ins } = await supabase
+      .from('scoring_instructions')
+      .select('id, content, updated_at, updated_by, auto_generated')
+      .order('updated_at', { ascending: false })
     setFeedback(fb || [])
     setInstructionRows(ins || [])
     setLoading(false)
@@ -123,6 +133,54 @@ export default function AdminScoringLearning() {
     return onScoringFeedbackUpdated(() => load())
   }, [])
 
+  const unconsolidatedCount = useMemo(
+    () => (feedback || []).filter((f) => f.consolidated !== true).length,
+    [feedback],
+  )
+
+  const runConsolidation = useCallback(
+    async (forceManual) => {
+      const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY
+      if (!apiKey) {
+        if (forceManual) window.alert('Clé API Anthropic manquante (VITE_ANTHROPIC_API_KEY).')
+        return
+      }
+      const n = (feedback || []).filter((f) => f.consolidated !== true).length
+      if (forceManual) {
+        if (n < 3) {
+          window.alert(`Il faut au moins 3 corrections non consolidées (actuellement ${n}).`)
+          return
+        }
+      } else if (n < 5) return
+      if (consolidationLockRef.current) return
+      consolidationLockRef.current = true
+      setConsolidating(true)
+      try {
+        await consolidateLearning(supabase, apiKey)
+        notifyScoringFeedbackUpdated()
+        await load()
+      } catch (e) {
+        console.error(e)
+      } finally {
+        consolidationLockRef.current = false
+        setConsolidating(false)
+      }
+    },
+    [feedback],
+  )
+
+  useEffect(() => {
+    if (loading) return
+    const n = unconsolidatedCount
+    const prev = prevUnconsolidatedRef.current
+    prevUnconsolidatedRef.current = n
+    if (prev === -1) {
+      if (n >= 5) void runConsolidation(false)
+      return
+    }
+    if (n >= 5 && prev < 5) void runConsolidation(false)
+  }, [loading, unconsolidatedCount, runConsolidation])
+
   const handleInsertInstruction = async () => {
     const text = newInstructionText.trim()
     if (!text || instructionsSaving) return
@@ -133,6 +191,7 @@ export default function AdminScoringLearning() {
         content: text,
         updated_at: new Date().toISOString(),
         updated_by: author,
+        auto_generated: false,
       })
       if (error) throw error
       notifyScoringFeedbackUpdated()
@@ -158,24 +217,68 @@ export default function AdminScoringLearning() {
     setChatMessages((prev) => [...prev, { role: 'u', content: msg }])
     setChatLoading(true)
     try {
-      const instructionsText = await fetchScoringInstructions()
-      const config = await loadScoringConfig()
-      const correctionsText = feedback.slice(0, 50).map((f) => {
-        const name = getProfileName(f)
-        const pd = f.profile_data || {}
-        const company = pd?.company || pd?.companyName || '—'
-        const orig = f.original_score ?? f.previous_score
-        const corr = f.corrected_score ?? f.new_score
-        return `- ${name} (${company}): ${orig} → ${corr} — ${(f.reason || f.feedback_note || '').slice(0, 100)}`
-      }).join('\n')
-      let systemPrompt = `Tu es l'assistant APPRENTISSAGE SCORING CGP. Tu ne réponds QU'aux questions sur le scoring, les critères CGP et l'affinement des règles. Si la question ne porte pas sur le scoring CGP, réponds poliment que tu es spécialisé uniquement sur ce sujet.
+      const instructionsContenu = (await fetchScoringInstructions()) || 'Aucune instruction enregistrée.'
+      const feedbackPourResume = feedback.filter(
+        (f) =>
+          !(
+            f.profile_id == null &&
+            (f.original_score == null || f.original_score === undefined) &&
+            (f.corrected_score == null || f.corrected_score === undefined)
+          ),
+      )
+      const feedbackResume =
+        feedbackPourResume.slice(0, 10).map((f) => {
+          const name = getProfileName(f)
+          const pd = f.profile_data || {}
+          const company = pd?.company || pd?.companyName || '—'
+          const orig = f.original_score ?? f.previous_score
+          const corr = f.corrected_score ?? f.new_score
+          return `- ${name} (${company}): ${orig} → ${corr} — ${(f.reason || f.feedback_note || '').slice(0, 100)}`
+        }).join('\n') || 'Aucune correction enregistrée.'
+      const systemPrompt = `Tu es un expert en scoring de prospects CGP pour Evolve, 
+un réseau de conseillers en gestion de patrimoine indépendants couvrant toute la France.
 
-CONTEXTE :
-- Instructions permanentes : ${instructionsText || 'Aucune'}
-- Config scoring actuelle : employeur=${config?.weight_employer ?? 50}pts, titre=${config?.weight_title ?? 30}pts, ancienneté=${config?.weight_seniority ?? 20}pts, bonus CGP=${config?.bonus_cgp_experience ?? 20}pts
-- Corrections récentes :\n${correctionsText || 'Aucune'}
+GRILLE DE SCORING COMPLÈTE (100 pts max) :
 
-Réponds en français, de façon concise.`
+EMPLOYEUR (35 pts) :
+- Banque de réseau / Assurance captive = 35 pts
+  (BNP, Crédit Agricole, Société Générale, LCL, CIC, Banque Populaire, 
+  Caisse d'Épargne, HSBC, Allianz, AXA, Generali, CNP, Carac, MACSF, 
+  Banque de Savoie, CCF, etc.)
+- Réseau semi-captif = 18 pts
+  (Laplace, UFF, etc.)
+- Cabinet CGP indépendant = 5 pts
+- Hors secteur = 0 pts
+- EXCLUS (plafonné à 15 pts) : IGC, INOVEA, Stellium, Prodemial, CapFinances
+
+POSTE (35 pts) :
+- CGP / Wealth Manager / Banquier Privé / Conseiller Patrimonial = 35 pts
+- Conseiller financier / Directeur agence = 22 pts
+- Conseiller clientèle = 10 pts
+- Indépendant / alternant = plafonné
+
+ANCIENNETÉ (15 pts) :
+- 5-10 ans = 15 pts
+- 3-5 ans ou 10-15 ans = 10 pts
+- 1-3 ans = 6 pts
+- < 1 an = 0 pts
+
+PARCOURS (15 pts) :
+- Expérience passée en cabinet CGP indépendant = bonus
+
+SEUILS :
+- ≥ 70 = Prioritaire
+- 45-69 = À travailler  
+- < 45 = À écarter
+
+INSTRUCTIONS PERSONNALISÉES ACTIVES :
+${instructionsContenu}
+
+CORRECTIONS RÉCENTES :
+${feedbackResume}
+
+Réponds en français, de façon concise et constructive. 
+Tu peux suggérer des ajustements à la grille si pertinent.`
       const history = chatMessages.map((m) => ({ role: m.role === 'u' ? 'user' : 'assistant', content: m.content }))
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
@@ -457,6 +560,23 @@ Analyse ces corrections et réponds UNIQUEMENT en JSON valide (pas de markdown, 
         <button type="button" onClick={() => navigate('/admin/console')} className="text-[13px] text-[var(--t3)] hover:text-[var(--accent)] mb-4 block">← Retour</button>
         <h1 style={{ fontFamily: '"Playfair Display", serif', fontSize: 24, color: ACCENT, margin: '0 0 4px 0' }}>Apprentissage Scoring</h1>
         <p style={{ fontSize: 13, color: '#888', margin: 0 }}>Affinez les critères de scoring au fil du temps</p>
+        {consolidating && (
+          <div className="text-[13px] font-medium mb-3 px-3 py-2 rounded-lg" style={{ background: '#F3E8FF', color: '#6B21A8', border: '1px solid #C4B5FD' }}>
+            Consolidation en cours…
+          </div>
+        )}
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <span className="text-[12px] text-[var(--t3)]">Corrections non consolidées : {unconsolidatedCount}</span>
+          <button
+            type="button"
+            onClick={() => runConsolidation(true)}
+            disabled={consolidating || unconsolidatedCount < 3}
+            className="py-1.5 px-3 rounded-lg text-[12px] font-medium disabled:opacity-50 border"
+            style={{ borderColor: ACCENT, color: ACCENT, background: 'transparent' }}
+          >
+            Consolider maintenant
+          </button>
+        </div>
 
       {/* Instructions permanentes */}
       <div style={cardStyle}>
@@ -567,15 +687,19 @@ Analyse ces corrections et réponds UNIQUEMENT en JSON valide (pas de markdown, 
               <tbody>
                 {unifiedRows.map((row) => {
                   const badgeInstruction = { backgroundColor: '#FAEEDA', color: '#BA7517', border: '1px solid #FAC775' }
+                  const badgeIaConsolidated = { backgroundColor: '#F3E8FF', color: '#6B21A8', border: '1px solid #C4B5FD' }
                   const badgeScoring = { backgroundColor: '#E6F1FB', color: '#185FA5', border: '1px solid #B5D4F4' }
                   if (row.kind === 'instruction') {
                     const i = row.data
                     const detailText = (i.content || '—').trim()
                     const rowKey = `ins-${i.id}`
+                    const iaRule = i.auto_generated === true
                     return (
                       <tr key={rowKey} className="border-b cursor-pointer hover:bg-[#F8F5F1]" style={{ borderColor: 'var(--border)' }} onClick={() => openDetailModal(row)}>
                         <td className="py-2.5 px-4">
-                          <span className="inline-flex px-2 py-0.5 rounded-md text-[11px] font-semibold" style={badgeInstruction}>Instruction</span>
+                          <span className="inline-flex px-2 py-0.5 rounded-md text-[11px] font-semibold" style={iaRule ? badgeIaConsolidated : badgeInstruction}>
+                            {iaRule ? 'Règle IA consolidée' : 'Instruction'}
+                          </span>
                         </td>
                         <td className="py-2.5 px-4 text-[12px] truncate" title={detailText}>{detailText.length > 120 ? `${detailText.slice(0, 120)}…` : detailText}</td>
                         <td className="py-2.5 px-4 text-[12px]" style={{ color: 'var(--t2)' }}>{fmt(i.updated_at)}</td>
@@ -700,7 +824,7 @@ Analyse ces corrections et réponds UNIQUEMENT en JSON valide (pas de markdown, 
                 const ins = detailModal.data
                 return (
                   <>
-                    <div><span className="text-[11px] uppercase text-[var(--t3)]">Type</span><div className="mt-0.5"><span className="inline-flex px-2 py-0.5 rounded-md text-[11px] font-semibold" style={{ backgroundColor: '#FAEEDA', color: '#BA7517', border: '1px solid #FAC775' }}>Instruction</span></div></div>
+                    <div><span className="text-[11px] uppercase text-[var(--t3)]">Type</span><div className="mt-0.5"><span className="inline-flex px-2 py-0.5 rounded-md text-[11px] font-semibold" style={ins.auto_generated ? { backgroundColor: '#F3E8FF', color: '#6B21A8', border: '1px solid #C4B5FD' } : { backgroundColor: '#FAEEDA', color: '#BA7517', border: '1px solid #FAC775' }}>{ins.auto_generated ? 'Règle IA consolidée' : 'Instruction'}</span></div></div>
                     <div><span className="text-[11px] uppercase text-[var(--t3)]">Auteur</span><div className="text-[13px] mt-0.5">{ins.updated_by || '—'}</div></div>
                     <div><span className="text-[11px] uppercase text-[var(--t3)]">Date et heure</span><div className="text-[13px] mt-0.5">{fmtModal(ins.updated_at)}</div></div>
                     <div>

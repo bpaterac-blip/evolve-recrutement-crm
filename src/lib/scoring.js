@@ -4,6 +4,51 @@
  */
 
 import { getScoringConfig } from './scoringConfig'
+import { supabase } from './supabase'
+
+/**
+ * Charge tous les feedbacks pertinents + toutes les instructions et retourne le bloc à injecter
+ * dans le system prompt (après la grille de base).
+ */
+export async function buildScoringLearningPromptSuffix() {
+  const { data: feedbacksRaw } = await supabase
+    .from('scoring_feedback')
+    .select('original_score, corrected_score, previous_score, new_score, reason, feedback_note, profile_data, author')
+    .order('created_at', { ascending: false })
+
+  const feedbacks = (feedbacksRaw || []).filter((f) => {
+    const corr = f.corrected_score ?? f.new_score
+    const reas = (f.reason || f.feedback_note || '').trim()
+    return corr != null && reas.length > 0
+  })
+
+  const { data: instructions } = await supabase
+    .from('scoring_instructions')
+    .select('content')
+    .order('updated_at', { ascending: false })
+
+  const feedbackExamples = feedbacks
+    .map((f) => {
+      const co = f.profile_data?.company ?? '?'
+      const ti = f.profile_data?.title ?? '?'
+      const orig = f.original_score ?? f.previous_score ?? '?'
+      const corr = f.corrected_score ?? f.new_score
+      const reas = f.reason || f.feedback_note || ''
+      return `- ${co} "${ti}" : ${orig} → ${corr} pts. Raison : ${reas}`
+    })
+    .join('\n')
+
+  const instructionsList = (instructions || [])
+    .map((i) => (i.content || '').trim())
+    .filter(Boolean)
+    .map((c) => `- ${c}`)
+    .join('\n')
+
+  const parts = []
+  if (instructionsList) parts.push(`RÈGLES PERSONNALISÉES :\n${instructionsList}`)
+  if (feedbackExamples) parts.push(`CORRECTIONS VALIDÉES :\n${feedbackExamples}`)
+  return parts.length ? `\n\n${parts.join('\n\n')}` : ''
+}
 
 const BANQUES_CAPTIVES = [
   'bnp paribas', 'société générale', 'credit agricole',

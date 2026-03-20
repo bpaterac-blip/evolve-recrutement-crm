@@ -73,7 +73,7 @@ ${rawText}`
   const clean = text.replace(/```json|```/g, '').trim()
   return JSON.parse(clean)
 }
-import { calculateScore, scoreProfile, getExperienceBadge } from '../lib/scoring'
+import { calculateScore, scoreProfile, getExperienceBadge, buildScoringLearningPromptSuffix } from '../lib/scoring'
 import { enrichProfileWithNetrows } from '../lib/netrows'
 import { supabase } from '../lib/supabase'
 import { detectDoublon } from '../lib/detectDoublon'
@@ -207,22 +207,6 @@ ${expList}
 Explique pourquoi ce score, ce qui joue en sa faveur, ce qui lui manque pour être prioritaire, et si tu recommandes de le contacter.`
 }
 
-const fetchLearningContext = async () => {
-  const { data } = await supabase.from('scoring_feedback').select('*').order('created_at', { ascending: false }).limit(20)
-  return (data || []).filter((f) => (f.reason || f.feedback_note || '').trim())
-}
-
-const buildLearningContextPrompt = (feedbacks) => {
-  if (!feedbacks.length) return ''
-  const lines = feedbacks.map((f) => {
-    const pd = f.profile_data || {}
-    const co = pd.company || pd.name || '—'
-    const ti = pd.title || '—'
-    return `- Profil : ${co} - ${ti}\n  Score initial : ${f.previous_score ?? '?'} → Corrigé : ${f.new_score ?? '?'}\n  Raison : ${(f.reason || f.feedback_note || '').slice(0, 200)}`
-  })
-  return `\n\nAPPRENTISSAGES DE TES ANALYSES PRÉCÉDENTES :\n${lines.join('\n\n')}\n\nTiens compte de ces apprentissages pour affiner ton analyse.`
-}
-
 const generateConversationSummary = async (messages, apiKey) => {
   const convText = (messages || []).filter((m) => m.content).map((m) => `${m.role === 'user' ? 'Utilisateur' : 'Claude'}: ${m.content}`).join('\n\n')
   const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -299,23 +283,13 @@ const ProfileImportModal = ({
     if (!apiKey) { showNotif('Clé API Anthropic manquante'); return }
     setLoading(true)
     try {
-      let instructions = ''
-      let feedbackContext = ''
+      let learningSuffix = ''
       if (useSupabase) {
-        instructions = await fetchScoringInstructions()
-        const feedbacks = await fetchLearningContext()
-        feedbackContext = feedbacks.length
-          ? feedbacks.map((f) => {
-              const pd = f.profile_data || {}
-              return `- Profil : ${pd.company || pd.name || '—'} - ${pd.title || '—'} | Score ${f.previous_score ?? '?'} → ${f.new_score ?? '?'} | Raison : ${(f.reason || f.feedback_note || '').slice(0, 200)}`
-            }).join('\n')
-          : 'Aucune'
+        learningSuffix = await buildScoringLearningPromptSuffix()
       }
       const systemPrompt = `Tu es un expert en recrutement CGP pour Evolve Investissement. Tu analyses des profils de Conseillers en Gestion de Patrimoine en banque ou assurance pour identifier les meilleurs candidats à rejoindre un réseau indépendant.
 
-Critères de scoring : employeur banque ou assurance = jusqu'à 50pts, intitulé CGP = jusqu'à 30pts, ancienneté 3-7 ans = jusqu'à 20pts, bonus expérience cabinet CGP = +20pts.
-
-${instructions ? `INSTRUCTIONS PERMANENTES DE BAPTISTE :\n${instructions}\n\n` : ''}APPRENTISSAGES DES CORRECTIONS PRÉCÉDENTES :\n${feedbackContext}
+Critères de scoring : employeur banque ou assurance = jusqu'à 50pts, intitulé CGP = jusqu'à 30pts, ancienneté 3-7 ans = jusqu'à 20pts, bonus expérience cabinet CGP = +20pts.${learningSuffix}
 
 Applique ces instructions en priorité dans ton analyse. Réponds toujours en français, de manière concise et professionnelle.`
       const history = (messages || []).filter((m) => m.role && m.content).map((m) => ({ role: m.role, content: m.content }))
@@ -366,6 +340,7 @@ Applique ces instructions en priorité dans ton analyse. Réponds toujours en fr
         reason,
         priority_label: priority,
         author: userProfile?.full_name?.trim() || user?.email || null,
+        consolidated: false,
       })
       onProfileCorrection?.(profile, { sc: correctedScore, _correctedByUser: true, _correctedAt: Date.now() })
       notifyScoringFeedbackUpdated()
