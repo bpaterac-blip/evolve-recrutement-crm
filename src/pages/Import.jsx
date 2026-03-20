@@ -327,9 +327,11 @@ Applique ces instructions en priorité dans ton analyse. Réponds toujours en fr
     const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY
     setSaving(true)
     try {
-      let reason = correctionReason.trim()
-      if (apiKey && (messages || []).length > 0) reason = await generateConversationSummary(messages, apiKey) || reason
-      if (!reason) reason = 'Correction manuelle'
+      const manualReason = correctionReason.trim()
+      const aiSummary = (!manualReason && apiKey && (messages || []).length > 0)
+        ? await generateConversationSummary(messages, apiKey)
+        : null
+      const reason = manualReason || aiSummary || 'Correction manuelle'
       const priority = priorityLabel || getPriorityLabel(profile?.sc ?? 0)
       const profileData = !profile?.id ? { name: `${profile?.fn || ''} ${profile?.ln || ''}`.trim(), company: profile?.co, title: profile?.ti, score: profile?.sc, priority } : null
       await supabase.from('scoring_feedback').insert({

@@ -114,15 +114,15 @@ export default function AdminScoringLearning() {
 
   const load = async () => {
     setLoading(true)
-    const { data: fb } = await supabase
+    const { data: allFeedbacks } = await supabase
       .from('scoring_feedback')
-      .select('id, profile_id, original_score, corrected_score, reason, author, created_at, priority_label, profile_data, consolidated, feedback_note')
+      .select('*')
       .order('created_at', { ascending: false })
     const { data: ins } = await supabase
       .from('scoring_instructions')
       .select('id, content, updated_at, updated_by, auto_generated')
       .order('updated_at', { ascending: false })
-    setFeedback(fb || [])
+    setFeedback(allFeedbacks || [])
     setInstructionRows(ins || [])
     setLoading(false)
   }
@@ -151,7 +151,7 @@ export default function AdminScoringLearning() {
           window.alert(`Il faut au moins 3 corrections non consolidées (actuellement ${n}).`)
           return
         }
-      } else if (n < 5) return
+      } else if (n < 3) return
       if (consolidationLockRef.current) return
       consolidationLockRef.current = true
       setConsolidating(true)
@@ -175,11 +175,27 @@ export default function AdminScoringLearning() {
     const prev = prevUnconsolidatedRef.current
     prevUnconsolidatedRef.current = n
     if (prev === -1) {
-      if (n >= 5) void runConsolidation(false)
+      if (n >= 3) void runConsolidation(false)
       return
     }
-    if (n >= 5 && prev < 5) void runConsolidation(false)
+    if (n >= 3 && prev < 3) void runConsolidation(false)
   }, [loading, unconsolidatedCount, runConsolidation])
+
+  useEffect(() => {
+    const ch = supabase
+      .channel('admin_scoring_feedback_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'scoring_feedback' },
+        () => {
+          void load()
+        },
+      )
+      .subscribe()
+    return () => {
+      supabase.removeChannel(ch)
+    }
+  }, [])
 
   const handleInsertInstruction = async () => {
     const text = newInstructionText.trim()
@@ -303,14 +319,9 @@ Tu peux suggérer des ajustements à la grille si pertinent.`
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [chatMessages])
 
-  const isInstructionEcho = (f) =>
-    f.profile_id == null &&
-    (f.original_score == null || f.original_score === undefined) &&
-    (f.corrected_score == null || f.corrected_score === undefined)
-
   const unifiedRows = useMemo(() => {
     const rows = []
-    ;(feedback || []).filter((f) => !isInstructionEcho(f)).forEach((f) => rows.push({ kind: 'scoring', data: f, sortKey: f.created_at }))
+    ;(feedback || []).forEach((f) => rows.push({ kind: 'scoring', data: f, sortKey: f.created_at }))
     ;(instructionRows || [])
       .filter((i) => (i.content || '').trim())
       .forEach((i) => rows.push({ kind: 'instruction', data: i, sortKey: i.updated_at }))
@@ -723,17 +734,23 @@ Analyse ces corrections et réponds UNIQUEMENT en JSON valide (pas de markdown, 
                   const orig = f.original_score ?? f.previous_score
                   const corr = f.corrected_score ?? f.new_score
                   const reason = (f.reason || f.feedback_note || '').trim()
-                  const detailText =
-                    orig != null && corr != null
-                      ? `Score corrigé ${orig} → ${corr}${reason ? ` · ${reason}` : ''}`
-                      : reason || '—'
+                  const isScoringRow = f.original_score != null
+                  const reasonTrunc = reason.length > 120 ? `${reason.slice(0, 120)}…` : reason
+                  const detailText = isScoringRow
+                    ? `Score ${orig ?? '—'} → ${corr ?? '—'}${reason ? ` · ${reasonTrunc}` : ''}`
+                    : reason || '—'
+                  const detailTitle = isScoringRow
+                    ? `Score ${orig ?? '—'} → ${corr ?? '—'}${reason ? ` · ${reason}` : ''}`
+                    : reason || '—'
                   const rowKey = `fb-${f.id}`
                   return (
                     <tr key={rowKey} className="border-b cursor-pointer hover:bg-[#F8F5F1]" style={{ borderColor: 'var(--border)' }} onClick={() => openDetailModal(row)}>
                       <td className="py-2.5 px-4">
-                        <span className="inline-flex px-2 py-0.5 rounded-md text-[11px] font-semibold" style={badgeScoring}>Scoring</span>
+                        <span className="inline-flex px-2 py-0.5 rounded-md text-[11px] font-semibold" style={isScoringRow ? badgeScoring : badgeInstruction}>
+                          {isScoringRow ? 'Scoring' : 'Instruction'}
+                        </span>
                       </td>
-                      <td className="py-2.5 px-4 text-[12px] truncate" title={detailText}>{detailText.length > 120 ? `${detailText.slice(0, 120)}…` : detailText}</td>
+                      <td className="py-2.5 px-4 text-[12px] truncate" title={detailTitle}>{detailText.length > 120 ? `${detailText.slice(0, 120)}…` : detailText}</td>
                       <td className="py-2.5 px-4 text-[12px]" style={{ color: 'var(--t2)' }}>{fmt(f.created_at)}</td>
                       <td className="py-2.5 px-4 text-[12px]">{abbreviateAuthor(f.author)}</td>
                       <td className="py-2.5 px-4">
