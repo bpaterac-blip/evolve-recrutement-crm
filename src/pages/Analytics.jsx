@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useCRM } from '../context/CRMContext'
-import { PAS_INTERESSE_TYPES } from '../lib/data'
 import { useAuth } from '../context/AuthContext'
 import { useViewMode } from '../context/ViewModeContext'
 import { supabase } from '../lib/supabase'
@@ -544,19 +543,20 @@ export default function Analytics() {
       return { stage, chuteCount, currentInStage, taux, profiles: chuteProfiles.filter((p) => matchStg(p)) }
     })
 
+    const chuteProfilesRaisons = chuteProfiles.filter((p) => p.chute_type != null && (p.chute_type ?? '') !== '' && p.chute_detail != null && (p.chute_detail ?? '') !== '')
     const chuteByType = {}
-    chuteProfiles.forEach((p) => {
+    chuteProfilesRaisons.forEach((p) => {
       const t = p.chute_type || 'Autre'
       if (!chuteByType[t]) chuteByType[t] = []
       chuteByType[t].push(p)
     })
-    const allRaisonTypes = [...CHUTE_TYPES, ...PAS_INTERESSE_TYPES]
-    const raisonsAbandon = allRaisonTypes.map((t) => ({
+    const raisonsAbandon = CHUTE_TYPES.map((t) => ({
       type: t,
       count: (chuteByType[t] || []).length,
       profiles: chuteByType[t] || [],
     }))
     const totalChute = chuteProfiles.length
+    const totalChuteRaisons = chuteProfilesRaisons.length
 
     const bySource = {}
     forAlways.forEach((p) => {
@@ -638,6 +638,7 @@ export default function Analytics() {
       chuteByStage,
       raisonsAbandon,
       totalChute,
+      totalChuteRaisons,
       srcData,
       totalRecrutes,
       avgDelay,
@@ -757,7 +758,7 @@ export default function Analytics() {
             </div>
             <div style={{ ...cardStyle, minHeight: 200 }}>
               <div style={cardLabelStyle}>Raisons d'abandon</div>
-              {stats.totalChute > 0 ? (
+              {stats.totalChuteRaisons > 0 ? (
                 <RaisonsDoughnutChart data={stats.raisonsAbandon} onSliceClick={(r) => r.count > 0 && setChuteModal({ title: r.type, profiles: r.profiles, columns: ['chute_stade', 'chute_detail', 'chute_date'] })} />
               ) : (
                 <div className="flex flex-col items-center justify-center py-12" style={{ color: '#888' }}>

@@ -448,6 +448,8 @@ export default function Dashboard() {
                       onProfileClick={(p) => setProfileModalData(p)}
                       stag={stag}
                       ini={ini}
+                      viewMode={viewMode}
+                      currentUserId={user?.id}
                     />
                   ))}
                 </div>
@@ -636,20 +638,21 @@ function formatDateDebutRange(dateDebut) {
   return `Du ${lundi} au ${vendredi}`
 }
 
-function SessionFormationCard({ session, goal, sessionProfilsRefresh, onAssign, onAddSession, onProfileClick, stag, ini }) {
+function SessionFormationCard({ session, goal, sessionProfilsRefresh, onAssign, onAddSession, onProfileClick, stag, ini, viewMode, currentUserId }) {
   const [profils, setProfils] = useState([])
   const [editDateModal, setEditDateModal] = useState(false)
   const [editDateValue, setEditDateValue] = useState('')
   useEffect(() => {
     const load = async () => {
-      const cols = 'id, first_name, last_name, company, city, region, stage, score, linkedin_url, title, integration_confirmed, maturity'
+      const cols = 'id, first_name, last_name, company, city, region, stage, score, linkedin_url, title, integration_confirmed, maturity, owner_id'
       const { data } = await supabase.from('profiles').select(cols).eq('session_formation_id', session.id)
       setProfils(data || [])
     }
     load()
   }, [session.id, sessionProfilsRefresh])
-  const confirmes = profils.filter((p) => p.stage === 'Recruté' || p.integration_confirmed === true)
-  const potentiels = profils.filter((p) => p.stage !== 'Recruté' && p.integration_confirmed !== true)
+  const sessionProfiles = (profils || []).filter((p) => viewMode === 'global' || String(p.owner_id || '') === String(currentUserId || ''))
+  const confirmes = sessionProfiles.filter((p) => p.stage === 'Recruté' || p.integration_confirmed === true)
+  const potentiels = sessionProfiles.filter((p) => p.stage !== 'Recruté' && p.integration_confirmed !== true)
   const total = confirmes.length + potentiels.length
   const pctConfirmes = Math.min(100, goal > 0 ? (confirmes.length / goal) * 100 : 0)
   const pctPotentiels = Math.min(100, goal > 0 ? (potentiels.length / goal) * 100 : 0)
