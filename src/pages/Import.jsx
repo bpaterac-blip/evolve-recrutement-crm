@@ -534,6 +534,7 @@ export default function Import() {
   const hasClearedAfterPushRef = useRef(false)
   const [loading, setLoading] = useState(false)
   const [pushing, setPushing] = useState(false)
+  const [pushingRowKey, setPushingRowKey] = useState(null)
   const [includeATravailler, setIncludeATravailler] = useState(false)
   const [ecarteExpanded, setEcarteExpanded] = useState(false)
   const [enriching, setEnriching] = useState(false)
@@ -578,8 +579,11 @@ export default function Import() {
 
   useEffect(() => {
     if (!useSupabase || tab !== 'im') return
-    const load = async () => {
-      const { count } = await supabase.from('scoring_feedback').select('*', { count: 'exact', head: true })
+
+    const loadLearningStats = async () => {
+      const { count: feedbackCount } = await supabase.from('scoring_feedback').select('*', { count: 'exact', head: true })
+      const { count: instructionsCount } = await supabase.from('scoring_instructions').select('*', { count: 'exact', head: true })
+      const total = (feedbackCount || 0) + (instructionsCount || 0)
       const { data: fb } = await supabase.from('scoring_feedback').select('profile_data, previous_score').limit(500)
       const companies = {}
       ;(fb || []).forEach((f) => {
@@ -587,10 +591,30 @@ export default function Import() {
         companies[co] = (companies[co] || 0) + 1
       })
       const topCompanies = Object.entries(companies).sort((a, b) => b[1] - a[1]).slice(0, 3)
-      const { data: lastFeedback } = await supabase.from('scoring_feedback').select('created_at').order('created_at', { ascending: false }).limit(1).single()
-      setLearningStats({ total: count ?? 0, topCompanies, lastInstructionAt: lastFeedback?.created_at })
+      const { data: lastFb } = await supabase.from('scoring_feedback').select('created_at').order('created_at', { ascending: false }).limit(1).maybeSingle()
+      const { data: lastInstr } = await supabase.from('scoring_instructions').select('updated_at').order('updated_at', { ascending: false }).limit(1).maybeSingle()
+      const t1 = lastFb?.created_at ? new Date(lastFb.created_at).getTime() : 0
+      const t2 = lastInstr?.updated_at ? new Date(lastInstr.updated_at).getTime() : 0
+      const maxT = Math.max(t1, t2)
+      const lastInstructionAt = maxT > 0 ? new Date(maxT).toISOString() : null
+      setLearningStats({ total, topCompanies, lastInstructionAt })
     }
-    load()
+
+    loadLearningStats()
+
+    const channel = supabase
+      .channel('import-learning-stats')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'scoring_feedback' }, () => {
+        loadLearningStats()
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'scoring_instructions' }, () => {
+        loadLearningStats()
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }, [useSupabase, tab, learningRefresh])
 
   useEffect(() => {
@@ -779,6 +803,51 @@ export default function Import() {
       showNotif(`Erreur : ${err?.message}`)
     } finally {
       setPushing(false)
+    }
+  }
+
+  const pushSingleProfileToCRM = async (p, rowKey) => {
+    if (!p || pushingRowKey) return
+    setPushingRowKey(rowKey)
+    setDoublons([])
+    try {
+      if (useSupabase) {
+        const existing = await detectDoublon(p)
+        if (existing) {
+          setDoublons([{ imported: p, existing }])
+          setDoublonsModalOpen(true)
+          return
+        }
+        const inserted = await addProfilesBatch([p])
+        const arr = Array.isArray(inserted) ? inserted : []
+        if (arr.length > 0) {
+          showNotif('✓ Profil ajouté au CRM')
+          if (importSource === 'pdf' && pdfFileRef.current && arr[0]?.id) {
+            const profileId = arr[0].id
+            const file = pdfFileRef.current
+            const storagePath = `${profileId}/${file.name}`
+            const { error: uploadErr } = await supabase.storage.from('cvs').upload(storagePath, file, { contentType: 'application/pdf' })
+            if (!uploadErr) {
+              const { data: urlData } = await supabase.storage.from('cvs').createSignedUrl(storagePath, 60 * 60 * 24 * 365)
+              if (urlData?.signedUrl) {
+                await supabase.from('profiles').update({ cv_url: urlData.signedUrl, cv_url_path: storagePath }).eq('id', profileId)
+                fetchProfiles()
+              }
+            }
+            pdfFileRef.current = null
+          }
+          fetchProfiles?.()
+          setParsedRows((prev) => prev.filter((row) => !(row.fn === p.fn && row.ln === p.ln && (row.co || '') === (p.co || ''))))
+        }
+      } else {
+        await addProfile(p)
+        showNotif('✓ Profil ajouté au CRM')
+        setParsedRows((prev) => prev.filter((row) => !(row.fn === p.fn && row.ln === p.ln && (row.co || '') === (p.co || ''))))
+      }
+    } catch (err) {
+      showNotif(`Erreur : ${err?.message}`)
+    } finally {
+      setPushingRowKey(null)
     }
   }
 
@@ -1089,13 +1158,13 @@ export default function Import() {
             </button>
             {ecarteExpanded && (
               <div style={{ padding: '0 24px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '36px 2.5fr 1.5fr 2fr 70px 110px 40px', alignItems: 'center', gap: 12, padding: '12px 0', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#bbb', borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
-                  <span>Avatar</span><span>Profil</span><span>Employeur</span><span>Intitulé</span><span>Score</span><span>Priorité</span><span />
+                <div style={{ display: 'grid', gridTemplateColumns: '36px 2.5fr 1.5fr 2fr 70px 110px minmax(140px, auto)', alignItems: 'center', gap: 12, padding: '12px 0', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#bbb', borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+                  <span>Avatar</span><span>Profil</span><span>Employeur</span><span>Intitulé</span><span>Score</span><span>Priorité</span><span style={{ textAlign: 'right' }}>Actions</span>
                 </div>
                 {ecarteRows.map((p, i) => {
                   const rowKey = `ecarte-${i}`
                   return (
-                    <div key={rowKey} style={{ display: 'grid', gridTemplateColumns: '36px 2.5fr 1.5fr 2fr 70px 110px 40px', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid rgba(0,0,0,0.04)', cursor: 'pointer' }} onClick={() => { setModalProfile(p); setModalRowKey(rowKey) }} onMouseEnter={(e) => { e.currentTarget.style.background = '#f8fafc' }} onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}>
+                    <div key={rowKey} style={{ display: 'grid', gridTemplateColumns: '36px 2.5fr 1.5fr 2fr 70px 110px minmax(140px, auto)', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid rgba(0,0,0,0.04)', cursor: 'pointer' }} onClick={() => { setModalProfile(p); setModalRowKey(rowKey) }} onMouseEnter={(e) => { e.currentTarget.style.background = '#f8fafc' }} onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}>
                       <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#fef2f2', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600 }}>{ini(p.fn, p.ln)}</div>
                       <span style={{ fontSize: 13, color: '#333', fontWeight: 500 }}>{p.fn} {p.ln}</span>
                       <span style={{ fontSize: 12, color: '#555' }}>{p.co || '—'}</span>
@@ -1106,9 +1175,14 @@ export default function Import() {
                         <ScoreImprovementBadge p={p} />
                       </div>
                       <span style={{ padding: '4px 10px', borderRadius: 20, background: '#fef2f2', color: '#dc2626', fontSize: 11, fontWeight: 500 }}>À écarter</span>
-                      <button type="button" onClick={(e) => { e.stopPropagation(); exportToLemlistCsv([p]) }} title="Exporter vers Lemlist" style={{ width: 28, height: 28, borderRadius: 8, background: '#F5F0E8', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <IconUpload />
-                      </button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }} onClick={(e) => e.stopPropagation()}>
+                        <button type="button" onClick={(e) => { e.stopPropagation(); exportToLemlistCsv([p]) }} title="Exporter vers Lemlist" style={{ width: 28, height: 28, borderRadius: 8, background: '#F5F0E8', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <IconUpload />
+                        </button>
+                        <button type="button" onClick={(e) => { e.stopPropagation(); pushSingleProfileToCRM(p, rowKey) }} disabled={pushingRowKey === rowKey || pushing} title="Ajouter ce profil au CRM" style={{ padding: '6px 10px', borderRadius: 8, background: ACCENT, color: GOLD, fontSize: 11, fontWeight: 500, border: 'none', cursor: pushingRowKey === rowKey || pushing ? 'not-allowed' : 'pointer', opacity: pushingRowKey === rowKey || pushing ? 0.65 : 1, whiteSpace: 'nowrap' }}>
+                          {pushingRowKey === rowKey ? '…' : 'Ajouter au CRM'}
+                        </button>
+                      </div>
                     </div>
                   )
                 })}
