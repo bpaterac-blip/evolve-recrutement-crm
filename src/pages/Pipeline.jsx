@@ -801,7 +801,6 @@ export default function Pipeline() {
     const oldStage = profile.stg ?? '—'
     changeStage(profileId, newStage)
     if (useSupabase) {
-      const nouvelleEtape = newStage
       const dateChoisie = stageChangeDate ? String(stageChangeDate).split('T')[0].trim() : ''
       const heureParts = (stageChangeTime || '12:00').trim().split(':')
       const heureChoisie =
@@ -814,25 +813,35 @@ export default function Pipeline() {
       if (dateChoisie) {
         updates.next_event_date = dateChoisie
         updates.next_event_label = newStage
-        const typeRdv = stageChangeRdType || ''
+        const targetStage = newStage
+        const selectedDate = dateChoisie
+        const selectedTime = heureChoisie
+        const selectedRdvType = stageChangeRdType || ''
         const notes = stageChangeNotes?.trim() || ''
-        const description = (typeRdv || '') + (notes ? ' · ' + notes : '')
-        const eventDateIso = `${dateChoisie}T${heureChoisie}:00`
-        console.log('Insert event:', {
-          profile_id: profile.id,
-          event_type: nouvelleEtape,
-          event_date: dateChoisie,
-          heure: heureChoisie,
+        console.log('DEBUG event insert:', {
+          profile_id: profile?.id,
+          event_type: targetStage,
+          event_date: selectedDate,
+          heure: selectedTime,
+          typeRdv: selectedRdvType,
+          notes,
         })
-        const { error } = await supabase.from('events').insert({
-          profile_id: profile.id,
-          event_type: nouvelleEtape,
-          event_date: eventDateIso,
-          description: description || null,
-          ...(user?.id && { owner_id: user.id }),
-          created_at: new Date().toISOString(),
-        })
-        if (error) console.error('Erreur insert event:', error)
+        if (profile?.id) {
+          const { data: eventData, error: eventError } = await supabase
+            .from('events')
+            .insert({
+              profile_id: profile.id,
+              event_type: targetStage,
+              event_date: `${selectedDate}T${selectedTime || '09:00'}:00`,
+              description: [selectedRdvType, notes].filter(Boolean).join(' · '),
+              owner_id: user?.id,
+            })
+            .select()
+          if (eventError) console.error('ERROR event insert:', eventError)
+          else console.log('SUCCESS event insert:', eventData)
+        } else {
+          console.error('DEBUG event insert: profile.id manquant, insert events ignoré')
+        }
         window.dispatchEvent(new CustomEvent('evolve:event-added'))
       }
       await supabase.from('profiles').update(updates).eq('id', profile.id)

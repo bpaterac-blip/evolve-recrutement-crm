@@ -52,7 +52,10 @@ export async function buildScoringLearningPromptSuffix() {
 
 const BANQUES_CAPTIVES = [
   'bnp paribas', 'société générale', 'credit agricole',
-  'crédit agricole', 'lcl', 'banque populaire',
+  'crédit agricole',
+  'lcl',
+  // Toute dénomination contenant « banque populaire » : companyNorm.includes(normalize(...)) (casse / accents ignorés)
+  'banque populaire',
   "caisse d'épargne", 'bred', 'cic', 'hsbc',
   'la banque postale', 'credit mutuel', 'crédit mutuel',
   'boursorama', 'hello bank', 'orange bank',
@@ -82,12 +85,28 @@ const BANQUES_CAPTIVES = [
   'banque richelieu', 'banque leonard de vinci',
   'banque sba', 'banque cic', 'banque tarneaud',
   'banque laydernier', 'banque nuger', 'banque kolb',
-  'banque rhone alpes', 'banque populaire aura',
-  'banque populaire occitanie', 'banque populaire aquitaine',
-  'banque populaire bourgogne', 'banque populaire alsace',
-  'banque populaire nord', 'banque populaire atlantic',
-  'banque populaire val de france', 'banque populaire grand ouest',
-  'banque populaire mediterranee', 'banque populaire rives',
+  'banque rhone alpes',
+  'banque populaire occitane',
+  'banque populaire val de france',
+  'banque populaire grand ouest',
+  'banque populaire auvergne rhone alpes',
+  'banque populaire mediterranee',
+  'banque populaire alsace lorraine champagne',
+  'banque populaire bourgogne franche-comte',
+  'banque populaire aquitaine centre atlantique',
+  'banque populaire du nord',
+  'banque populaire rives de paris',
+  'banque populaire loire et lyonnais',
+  'banque populaire du massif central',
+  'banque populaire du sud',
+  'banque populaire aura',
+  'banque populaire occitanie',
+  'banque populaire aquitaine',
+  'banque populaire bourgogne',
+  'banque populaire alsace',
+  'banque populaire nord',
+  'banque populaire atlantic',
+  'banque populaire rives',
   'caisse epargne', "caisse d'epargne", 'cepac',
   'caisse epargne paca', 'caisse epargne rhone alpes',
   'caisse epargne occitanie', 'caisse epargne bretagne',
@@ -310,6 +329,25 @@ function parseTenureYears(dur) {
   return 0
 }
 
+/** Somme des durées de toutes les expériences (carrière totale), pour affichage / analytics — ne modifie pas le scoring d'ancienneté sur le poste actuel. */
+export function computeTotalExperienceYears(experiences) {
+  const exps = Array.isArray(experiences) ? experiences : []
+  return exps.reduce((sum, exp) => {
+    const sy = exp.startYear ?? exp.start
+    const ey = exp.endYear ?? exp.end
+    if (sy != null && sy !== '' && ey != null && ey !== '') {
+      const a = typeof sy === 'number' ? sy : parseInt(String(sy), 10)
+      const b = typeof ey === 'number' ? ey : parseInt(String(ey), 10)
+      if (!Number.isNaN(a) && !Number.isNaN(b)) return sum + Math.max(0, b - a)
+    }
+    if (sy != null && sy !== '' && exp.isCurrent) {
+      const a = typeof sy === 'number' ? sy : parseInt(String(sy), 10)
+      if (!Number.isNaN(a)) return sum + Math.max(0, new Date().getFullYear() - a)
+    }
+    return sum
+  }, 0)
+}
+
 export function scoreProfile(profile, experiences = []) {
   let score = 0
   const signals = []
@@ -325,6 +363,7 @@ export function scoreProfile(profile, experiences = []) {
   })
   const dur = profile.dur || profile.duration || ''
   const exps = Array.isArray(experiences) ? experiences : []
+  const totalYears = computeTotalExperienceYears(exps)
 
   const cfg = getScoringConfig()
   const wEmployer = cfg.weight_employer ?? 50
@@ -424,11 +463,15 @@ export function scoreProfile(profile, experiences = []) {
     }
   }
 
+  if (totalYears > 0) {
+    signals.push(`Expérience totale : ${Math.round(totalYears)} ans`)
+  }
+
   let priority = 'À écarter'
   if (score >= thPriority) priority = 'Prioritaire'
   else if (score >= thTowork) priority = 'À travailler'
 
-  return { score: Math.min(100, Math.max(0, Math.round(score))), priority, signals }
+  return { score: Math.min(100, Math.max(0, Math.round(score))), priority, signals, totalYears }
 }
 
 /** Compatibilité : retourne le score numérique pour addProfile, Import, etc. */
@@ -451,8 +494,8 @@ export function getExperienceBadge(exp) {
   const isAssurance =
     ASSURANCES_CAPTIVES.some((a) => cNorm.includes(normalize(a))) ||
     hasInsuranceCompanyKeyword(cNorm)
-  if (isCabinet) return 'cabinet'
   if (isBanque) return 'banque'
   if (isAssurance) return 'assurance'
+  if (isCabinet) return 'cabinet'
   return null
 }

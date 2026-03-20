@@ -3,6 +3,7 @@ import { useCRM } from '../context/CRMContext'
 import { useAuth } from '../context/AuthContext'
 import { useViewMode } from '../context/ViewModeContext'
 import { supabase } from '../lib/supabase'
+import { computeTotalExperienceYears } from '../lib/scoring'
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js'
 import { Doughnut } from 'react-chartjs-2'
 
@@ -81,23 +82,6 @@ function getSectorFromCompany(company) {
   return 'Autre'
 }
 
-function parseYearsFromExperiences(experiences) {
-  const exps = Array.isArray(experiences) ? experiences : []
-  if (exps.length === 0) return null
-  const now = new Date().getFullYear()
-  let totalYears = 0
-  let count = 0
-  for (const exp of exps) {
-    const start = exp.startYear ?? exp.start
-    if (!start) continue
-    const end = exp.isCurrent ? now : (exp.endYear ?? exp.end ?? now)
-    const years = Math.max(0, (typeof end === 'number' ? end : parseInt(end, 10) || now) - (typeof start === 'number' ? start : parseInt(start, 10) || now))
-    totalYears += years
-    count++
-  }
-  return count > 0 ? totalYears / count : null
-}
-
 function parseYearsFromDuration(dur) {
   if (!dur || typeof dur !== 'string') return null
   const m = dur.match(/(\d+)\s*ans?/i) || dur.match(/(\d+)\s*years?/i)
@@ -108,14 +92,17 @@ function parseYearsFromDuration(dur) {
 }
 
 function getYearsExperience(profile) {
+  const exps = profile?.experiences
+  if (Array.isArray(exps) && exps.length > 0) {
+    const total = computeTotalExperienceYears(exps)
+    if (total > 0) return total
+  }
   const durInCo = profile?.durationInCompany ?? profile?.duration ?? profile?.dur
   const yearsFromDur = parseYearsFromDuration(durInCo)
   if (yearsFromDur != null) return yearsFromDur
   const durInRole = profile?.durationInRole
   const yearsFromRole = parseYearsFromDuration(durInRole)
   if (yearsFromRole != null) return yearsFromRole
-  const yearsFromExp = parseYearsFromExperiences(profile?.experiences)
-  if (yearsFromExp != null) return yearsFromExp
   return null
 }
 
