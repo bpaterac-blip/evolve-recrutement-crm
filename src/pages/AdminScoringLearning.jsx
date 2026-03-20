@@ -1,24 +1,12 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { loadScoringConfig } from '../lib/scoringConfig'
-import { fetchScoringInstructions, fetchScoringInstructionsWithMeta, saveScoringInstructions, onScoringFeedbackUpdated, notifyScoringFeedbackUpdated } from '../lib/scoringInstructions'
+import { fetchScoringInstructions, onScoringFeedbackUpdated, notifyScoringFeedbackUpdated } from '../lib/scoringInstructions'
 
 const ACCENT = '#173731'
 const GOLD = '#D2AB76'
-
-const IconChevronUp = () => (
-  <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="18 15 12 9 6 15" />
-  </svg>
-)
-
-const IconChevronDown = () => (
-  <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="6 9 12 15 18 9" />
-  </svg>
-)
 
 const IconPencil = () => (
   <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -90,34 +78,30 @@ function getProfileName(entry) {
   return `Profil #${entry.profile_id}`
 }
 
-const INSTRUCTIONS_PLACEHOLDER = `Écrivez ici vos règles métier pour affiner le scoring...
-Ex: Banque Courtois est une banque captive importante dans le Sud-Ouest. Un profil avec 5+ ans chez eux est toujours prioritaire.
-Ex: Les gérants de cabinets indépendants ne sont pas notre cible — ils sont déjà indépendants.
-Ex: Un titre 'Inspecteur commercial' chez une assurance captive vaut autant qu'un CGP.`
+const NEW_INSTRUCTION_PLACEHOLDER =
+  'Décrivez une règle de scoring à apprendre...\nEx: Les banques régionales comme Banque Courtois doivent être notées comme des banques de réseau'
 
 export default function AdminScoringLearning() {
   const navigate = useNavigate()
   const { user, userProfile, role } = useAuth()
   const isAdmin = role === 'admin'
   const [feedback, setFeedback] = useState([])
+  const [instructionRows, setInstructionRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [analyzing, setAnalyzing] = useState(false)
   const [analysis, setAnalysis] = useState(null)
   const [applying, setApplying] = useState(false)
-  const [instructions, setInstructions] = useState('')
+  const [newInstructionText, setNewInstructionText] = useState('')
   const [instructionsSaving, setInstructionsSaving] = useState(false)
-  const [instructionsLoaded, setInstructionsLoaded] = useState(false)
-  const [instructionsUpdatedAt, setInstructionsUpdatedAt] = useState(null)
-  const [saveSuccess, setSaveSuccess] = useState(false)
   const [chatMessages, setChatMessages] = useState([])
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
   const chatEndRef = useRef(null)
-  const [sortBy, setSortBy] = useState({ col: 'created_at', asc: false })
   const [detailModal, setDetailModal] = useState(null)
   const [detailEditing, setDetailEditing] = useState(false)
   const [detailEditScore, setDetailEditScore] = useState('')
   const [detailEditReason, setDetailEditReason] = useState('')
+  const [detailEditInstructionContent, setDetailEditInstructionContent] = useState('')
   const [detailSaving, setDetailSaving] = useState(false)
   const [confirmModal, setConfirmModal] = useState(null)
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -127,45 +111,33 @@ export default function AdminScoringLearning() {
   const load = async () => {
     setLoading(true)
     const { data: fb } = await supabase.from('scoring_feedback').select('id, profile_id, original_score, corrected_score, reason, author, created_at, priority_label, profile_data').order('created_at', { ascending: false })
+    const { data: ins } = await supabase.from('scoring_instructions').select('id, content, updated_at, updated_by').order('updated_at', { ascending: false })
     setFeedback(fb || [])
+    setInstructionRows(ins || [])
     setLoading(false)
   }
 
   useEffect(() => { load() }, [])
 
   useEffect(() => {
-    const loadInstructions = async () => {
-      const { content, updated_at } = await fetchScoringInstructionsWithMeta()
-      setInstructions(content)
-      setInstructionsUpdatedAt(updated_at)
-      setInstructionsLoaded(true)
-    }
-    loadInstructions()
-  }, [])
-
-  useEffect(() => {
     return onScoringFeedbackUpdated(() => load())
   }, [])
 
-  const handleSaveInstructions = async () => {
+  const handleInsertInstruction = async () => {
+    const text = newInstructionText.trim()
+    if (!text || instructionsSaving) return
     setInstructionsSaving(true)
-    setSaveSuccess(false)
     try {
-      const updatedAt = await saveScoringInstructions(instructions)
-      setInstructionsUpdatedAt(updatedAt)
-      await supabase.from('scoring_feedback').insert({
-        profile_id: null,
-        original_score: null,
-        corrected_score: null,
-        reason: instructions.trim() || null,
-        author: (userProfile?.full_name?.trim() || user?.email) ?? null,
-        priority_label: null,
-        profile_data: null,
+      const author = userProfile?.full_name?.trim() || user?.email || 'Baptiste'
+      const { error } = await supabase.from('scoring_instructions').insert({
+        content: text,
+        updated_at: new Date().toISOString(),
+        updated_by: author,
       })
+      if (error) throw error
       notifyScoringFeedbackUpdated()
+      setNewInstructionText('')
       await load()
-      setSaveSuccess(true)
-      setTimeout(() => setSaveSuccess(false), 4000)
     } catch (err) {
       console.error(err)
     } finally {
@@ -228,31 +200,43 @@ Réponds en français, de façon concise.`
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [chatMessages])
 
-  const totalEntries = feedback.length
+  const isInstructionEcho = (f) =>
+    f.profile_id == null &&
+    (f.original_score == null || f.original_score === undefined) &&
+    (f.corrected_score == null || f.corrected_score === undefined)
 
-  const sortedFeedback = [...feedback].sort((a, b) => {
-    if (sortBy.col === 'created_at') {
-      const ta = new Date(a.created_at).getTime()
-      const tb = new Date(b.created_at).getTime()
-      return sortBy.asc ? ta - tb : tb - ta
+  const unifiedRows = useMemo(() => {
+    const rows = []
+    ;(feedback || []).filter((f) => !isInstructionEcho(f)).forEach((f) => rows.push({ kind: 'scoring', data: f, sortKey: f.created_at }))
+    ;(instructionRows || [])
+      .filter((i) => (i.content || '').trim())
+      .forEach((i) => rows.push({ kind: 'instruction', data: i, sortKey: i.updated_at }))
+    return rows.sort((a, b) => new Date(b.sortKey) - new Date(a.sortKey))
+  }, [feedback, instructionRows])
+
+  const totalEntries = unifiedRows.length
+
+  const openDetailModal = (row) => {
+    if (!row?.data) return
+    setDetailModal({ kind: row.kind, data: row.data })
+    if (row.kind === 'scoring') {
+      const item = row.data
+      const score = item.corrected_score ?? item.new_score
+      setDetailEditScore(String(score ?? ''))
+      setDetailEditReason(item.reason || item.feedback_note || '')
     }
-    return 0
-  })
-
-  const openDetailModal = (item) => {
-    setDetailModal({ data: item })
-    const score = item.corrected_score ?? item.new_score
-    setDetailEditScore(String(score ?? ''))
-    setDetailEditReason(item.reason || item.feedback_note || '')
+    if (row.kind === 'instruction') {
+      setDetailEditInstructionContent(row.data.content || '')
+    }
     setDetailEditing(false)
   }
 
-  const handleEdit = (item) => {
-    setConfirmModal({ type: 'edit', item, fromDetail: !!detailModal })
+  const handleEdit = (row) => {
+    setConfirmModal({ type: 'edit', row, fromDetail: !!detailModal })
   }
 
-  const handleDelete = (item) => {
-    setConfirmModal({ type: 'delete', item })
+  const handleDelete = (row) => {
+    setConfirmModal({ type: 'delete', row })
     setDetailModal(null)
   }
 
@@ -260,22 +244,41 @@ Réponds en français, de façon concise.`
     setDetailModal(null)
     setDetailEditing(false)
     setDetailSaving(false)
+    setDetailEditInstructionContent('')
   }
 
   const handleDetailSave = async () => {
     if (!detailModal?.data || detailSaving) return
     setDetailSaving(true)
     try {
-      const score = parseInt(detailEditScore, 10)
-      const payload = { reason: detailEditReason.trim() || null }
-      if (!isNaN(score)) {
-        payload.corrected_score = score
-        payload.new_score = score
+      if (detailModal.kind === 'instruction') {
+        const author = userProfile?.full_name?.trim() || user?.email || 'Baptiste'
+        const { error } = await supabase
+          .from('scoring_instructions')
+          .update({
+            content: detailEditInstructionContent.trim(),
+            updated_at: new Date().toISOString(),
+            updated_by: author,
+          })
+          .eq('id', detailModal.data.id)
+        if (error) throw error
+        notifyScoringFeedbackUpdated()
+        await load()
+        closeDetailModal()
+        return
       }
-      await supabase.from('scoring_feedback').update(payload).eq('id', detailModal.data.id)
-      notifyScoringFeedbackUpdated()
-      await load()
-      closeDetailModal()
+      if (detailModal.kind === 'scoring') {
+        const score = parseInt(detailEditScore, 10)
+        const payload = { reason: detailEditReason.trim() || null }
+        if (!isNaN(score)) {
+          payload.corrected_score = score
+          payload.new_score = score
+        }
+        await supabase.from('scoring_feedback').update(payload).eq('id', detailModal.data.id)
+        notifyScoringFeedbackUpdated()
+        await load()
+        closeDetailModal()
+      }
     } catch (err) {
       console.error(err)
     } finally {
@@ -301,17 +304,28 @@ Réponds en français, de façon concise.`
         return
       }
       if (confirmModal.type === 'delete') {
-        await supabase.from('scoring_feedback').delete().eq('id', confirmModal.item.id)
+        if (confirmModal.row.kind === 'instruction') {
+          await supabase.from('scoring_instructions').delete().eq('id', confirmModal.row.data.id)
+        } else {
+          await supabase.from('scoring_feedback').delete().eq('id', confirmModal.row.data.id)
+        }
         notifyScoringFeedbackUpdated()
         await load()
         closeConfirmModal()
       } else {
         closeConfirmModal()
-        if (confirmModal.fromDetail && detailModal?.data?.id === confirmModal.item.id) {
+        const { row } = confirmModal
+        if (row.kind === 'instruction') {
+          setDetailModal({ kind: 'instruction', data: row.data })
+          setDetailEditInstructionContent(row.data.content || '')
           setDetailEditing(true)
-        } else {
-          openDetailModal(confirmModal.item)
-          setDetailEditing(true)
+        } else if (row.kind === 'scoring') {
+          if (confirmModal.fromDetail && detailModal?.data?.id === row.data.id) {
+            setDetailEditing(true)
+          } else {
+            openDetailModal(row)
+            setDetailEditing(true)
+          }
         }
       }
     } catch (err) {
@@ -320,15 +334,6 @@ Réponds en français, de façon concise.`
       setConfirmLoading(false)
     }
   }
-
-  const reasonCounts = {}
-  feedback.forEach((f) => {
-    const r = (f.reason || f.feedback_note || 'Autre').slice(0, 50)
-    reasonCounts[r] = (reasonCounts[r] || 0) + 1
-  })
-  const topReasons = Object.entries(reasonCounts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 3)
 
   const handleAnalyze = async () => {
     if (!feedback.length) return
@@ -448,7 +453,7 @@ Analyse ces corrections et réponds UNIQUEMENT en JSON valide (pas de markdown, 
 
   return (
     <div className="page h-full overflow-y-auto" style={{ color: 'var(--text)', background: '#F5F0E8' }}>
-      <div style={{ maxWidth: 860, margin: '0 auto', padding: '32px 24px' }}>
+      <div style={{ maxWidth: 960, margin: '0 auto', padding: '32px 24px' }}>
         <button type="button" onClick={() => navigate('/admin/console')} className="text-[13px] text-[var(--t3)] hover:text-[var(--accent)] mb-4 block">← Retour</button>
         <h1 style={{ fontFamily: '"Playfair Display", serif', fontSize: 24, color: ACCENT, margin: '0 0 4px 0' }}>Apprentissage Scoring</h1>
         <p style={{ fontSize: 13, color: '#888', margin: 0 }}>Affinez les critères de scoring au fil du temps</p>
@@ -461,109 +466,81 @@ Analyse ces corrections et réponds UNIQUEMENT en JSON valide (pas de markdown, 
           </div>
           <div className="flex-1 min-w-0">
             <div className="font-semibold text-[13px]" style={{ color: 'var(--text)' }}>Instructions permanentes</div>
-            <div className="flex items-center gap-2 mt-1 flex-wrap">
-              {instructions.trim() ? (
-                <span className="inline-flex px-2 py-0.5 rounded-md text-[11px] font-semibold" style={{ backgroundColor: '#D4EDE1', color: '#15803d' }}>Actif</span>
-              ) : (
-                <span className="inline-flex px-2 py-0.5 rounded-md text-[11px]" style={{ backgroundColor: 'var(--s2)', color: 'var(--t3)' }}>Aucune instruction</span>
-              )}
-              <span className="text-[11px] text-[var(--t3)]">{instructions.length} / 2000 caractères</span>
-            </div>
+            <div className="text-[11px] text-[var(--t3)] mt-1">Chaque enregistrement est une règle distincte pour le scoring IA.</div>
           </div>
         </div>
         <textarea
-          value={instructions}
-          onChange={(e) => setInstructions(e.target.value)}
-          placeholder={INSTRUCTIONS_PLACEHOLDER}
-          disabled={!instructionsLoaded}
+          value={newInstructionText}
+          onChange={(e) => setNewInstructionText(e.target.value)}
+          placeholder={NEW_INSTRUCTION_PLACEHOLDER}
           maxLength={2000}
-          rows={4}
-          className="w-full mb-3 resize-y"
-          style={{ maxWidth: '100%', minHeight: 96, borderRadius: 8, border: '1px solid rgba(0,0,0,0.12)', padding: '12px 14px', fontSize: 14 }}
+          rows={6}
+          disabled={instructionsSaving}
+          className="w-full rounded-lg border px-3 py-2.5 text-[13px] resize-y mb-4"
+          style={{ borderColor: 'var(--border)', minHeight: 120 }}
         />
-        <div className="flex justify-end items-center gap-3">
-          {saveSuccess && <span className="text-[12px] font-medium" style={{ color: '#15803d' }}>Enregistré</span>}
-          <button
-            type="button"
-            onClick={handleSaveInstructions}
-            disabled={instructionsSaving || !instructionsLoaded}
-            className="py-2 px-4 rounded-lg text-[13px] font-medium disabled:opacity-50"
-            style={{ backgroundColor: '#173731', color: '#E7E0D0', border: 'none' }}
-          >
-            {instructionsSaving ? 'Enregistrement…' : 'Enregistrer'}
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={handleInsertInstruction}
+          disabled={instructionsSaving || !newInstructionText.trim()}
+          className="py-2 px-4 rounded-lg text-[13px] font-medium disabled:opacity-50"
+          style={{ backgroundColor: '#173731', color: '#E7E0D0', border: 'none' }}
+        >
+          {instructionsSaving ? 'Enregistrement…' : 'Enregistrer l\'instruction'}
+        </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 mb-5">
-        <div style={cardStyle}>
-          <div className="flex items-center gap-2 mb-3" style={{ paddingBottom: 12, borderBottom: '1px solid rgba(0,0,0,0.07)' }}>
-            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(59,130,246,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1d4ed8' }}>
-              <IconCheck />
-            </div>
-            <span className="font-semibold text-[13px]" style={{ color: 'var(--text)' }}>Top raisons</span>
+      {/* Chat apprentissage — avant le tableau */}
+      <div style={{ ...cardStyle, minHeight: 200 }}>
+        <div className="flex items-center gap-2 mb-3" style={{ paddingBottom: 12, borderBottom: '1px solid rgba(0,0,0,0.07)' }}>
+          <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(59,130,246,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
           </div>
-          {topReasons.length > 0 ? (
-            <ol className="list-decimal list-inside space-y-1 text-[13px]">
-              {topReasons.map(([r, n], i) => (
-                <li key={i}>{r}… <span className="text-[var(--t3)]">({n}x)</span></li>
-              ))}
-            </ol>
-          ) : (
-            <div className="text-[13px] text-[var(--t3)]">Aucune correction enregistrée</div>
-          )}
+          <span className="font-semibold text-[13px]" style={{ color: 'var(--text)' }}>Chat apprentissage</span>
         </div>
-        <div style={{ ...cardStyle, minHeight: 200 }}>
-          <div className="flex items-center gap-2 mb-3" style={{ paddingBottom: 12, borderBottom: '1px solid rgba(0,0,0,0.07)' }}>
-            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(59,130,246,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
-            </div>
-            <span className="font-semibold text-[13px]" style={{ color: 'var(--text)' }}>Chat apprentissage</span>
+        <div className="text-[12px] text-[var(--t3)] mb-3">Ex: « Comment améliorer la détection des banques captives ? »</div>
+        <div className="flex-1 flex flex-col" style={{ minHeight: 0 }}>
+          <div className="flex-1 overflow-y-auto py-4 px-0 flex flex-col gap-3" style={{ maxHeight: 280 }}>
+            {chatMessages.map((m, i) => (
+              <div key={i} className={`flex gap-2.5 max-w-[85%] items-start ${m.role === 'u' ? 'flex-row-reverse self-end' : ''}`}>
+                <div className={`w-[28px] h-[28px] rounded-full flex items-center justify-center text-xs font-semibold shrink-0 ${m.role === 'ai' ? 'bg-[var(--accent)] text-white' : 'bg-[var(--s2)] text-[var(--t2)]'}`}>{m.role === 'ai' ? 'IA' : 'Vous'}</div>
+                <div className={`py-2 px-3 rounded-xl text-[13px] ${m.role === 'ai' ? 'bg-[var(--s2)] border' : 'bg-[var(--accent)] text-white'}`} style={m.role === 'ai' ? { borderColor: 'var(--border)' } : {}}>
+                  {typeof m.content === 'string' && m.content.includes('<') ? <span dangerouslySetInnerHTML={{ __html: m.content }} /> : m.content}
+                </div>
+              </div>
+            ))}
+            {chatLoading && (
+              <div className="flex gap-2.5 items-start">
+                <div className="w-[28px] h-[28px] rounded-full flex items-center justify-center text-xs font-semibold shrink-0 bg-[var(--accent)] text-white">IA</div>
+                <div className="py-2 px-3 rounded-xl text-[13px] text-[var(--t3)]">…</div>
+              </div>
+            )}
+            <div ref={chatEndRef} />
           </div>
-          <div className="text-[12px] text-[var(--t3)] mb-3">Ex: « Comment améliorer la détection des banques captives ? »</div>
-          <div className="flex-1 flex flex-col" style={{ minHeight: 0 }}>
-            <div className="flex-1 overflow-y-auto py-4 px-0 flex flex-col gap-3" style={{ maxHeight: 280 }}>
-              {chatMessages.map((m, i) => (
-                <div key={i} className={`flex gap-2.5 max-w-[85%] items-start ${m.role === 'u' ? 'flex-row-reverse self-end' : ''}`}>
-                  <div className={`w-[28px] h-[28px] rounded-full flex items-center justify-center text-xs font-semibold shrink-0 ${m.role === 'ai' ? 'bg-[var(--accent)] text-white' : 'bg-[var(--s2)] text-[var(--t2)]'}`}>{m.role === 'ai' ? 'IA' : 'Vous'}</div>
-                  <div className={`py-2 px-3 rounded-xl text-[13px] ${m.role === 'ai' ? 'bg-[var(--s2)] border' : 'bg-[var(--accent)] text-white'}`} style={m.role === 'ai' ? { borderColor: 'var(--border)' } : {}}>
-                    {typeof m.content === 'string' && m.content.includes('<') ? <span dangerouslySetInnerHTML={{ __html: m.content }} /> : m.content}
-                  </div>
-                </div>
-              ))}
-              {chatLoading && (
-                <div className="flex gap-2.5 items-start">
-                  <div className="w-[28px] h-[28px] rounded-full flex items-center justify-center text-xs font-semibold shrink-0 bg-[var(--accent)] text-white">IA</div>
-                  <div className="py-2 px-3 rounded-xl text-[13px] text-[var(--t3)]">…</div>
-                </div>
-              )}
-              <div ref={chatEndRef} />
-            </div>
-            <div className="flex gap-2 items-center mt-3 shrink-0">
-              <input
-                type="text"
-                className="flex-1 border rounded-lg py-2 px-3 text-[13px] outline-none"
-                style={{ borderColor: 'var(--border)' }}
-                placeholder="Question sur le scoring CGP…"
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleChatSend())}
-                disabled={chatLoading}
-              />
-              <button type="button" onClick={handleChatSend} disabled={chatLoading || !chatInput.trim()} className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 disabled:opacity-50" style={{ backgroundColor: '#173731', color: '#E7E0D0', border: 'none' }}>→</button>
-            </div>
+          <div className="flex gap-2 items-center mt-3 shrink-0">
+            <input
+              type="text"
+              className="flex-1 border rounded-lg py-2 px-3 text-[13px] outline-none"
+              style={{ borderColor: 'var(--border)' }}
+              placeholder="Question sur le scoring CGP…"
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleChatSend())}
+              disabled={chatLoading}
+            />
+            <button type="button" onClick={handleChatSend} disabled={chatLoading || !chatInput.trim()} className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 disabled:opacity-50" style={{ backgroundColor: '#173731', color: '#E7E0D0', border: 'none' }}>→</button>
           </div>
         </div>
       </div>
 
-      {/* Instructions & corrections actives */}
+      {/* Historique unifié */}
       <div style={cardStyle}>
         <div className="py-3 border-b mb-0" style={{ borderColor: 'rgba(0,0,0,0.07)' }}>
-          <span className="font-semibold text-sm">Instructions & corrections actives ({totalEntries})</span>
+          <span className="font-semibold text-sm">Historique ({totalEntries})</span>
         </div>
         {loading ? (
           <div className="py-8 text-center text-[var(--t3)]">Chargement…</div>
-        ) : feedback.length === 0 ? (
+        ) : unifiedRows.length === 0 ? (
           <div className="py-12 flex flex-col items-center justify-center gap-3 text-[var(--t3)]">
             <IconEmpty />
             <span className="text-[13px]">Aucune instruction ni correction enregistrée</span>
@@ -572,46 +549,76 @@ Analyse ces corrections et réponds UNIQUEMENT en JSON valide (pas de markdown, 
           <div className="overflow-x-auto">
             <table className="w-full border-collapse" style={{ tableLayout: 'fixed' }}>
               <colgroup>
+                <col style={{ width: '18%' }} />
+                <col style={{ width: '38%' }} />
                 <col style={{ width: '20%' }} />
-                <col style={{ width: '40%' }} />
-                <col style={{ width: '20%' }} />
-                <col style={{ width: '15%' }} />
-                <col style={{ width: 48 }} />
+                <col style={{ width: '14%' }} />
+                <col style={{ width: 88 }} />
               </colgroup>
               <thead>
                 <tr style={{ backgroundColor: 'var(--s2)' }}>
                   <th className="text-left text-[11px] font-medium uppercase tracking-wider text-[var(--t3)] py-2 px-4 border-b" style={{ borderColor: 'var(--border)' }}>Type</th>
                   <th className="text-left text-[11px] font-medium uppercase tracking-wider text-[var(--t3)] py-2 px-4 border-b" style={{ borderColor: 'var(--border)' }}>Détail</th>
-                  <th className="text-left text-[11px] font-medium uppercase tracking-wider text-[var(--t3)] py-2 px-4 border-b" style={{ borderColor: 'var(--border)' }}>
-                    <button type="button" onClick={() => setSortBy((s) => ({ col: 'created_at', asc: s.col === 'created_at' ? !s.asc : false }))} className="flex items-center gap-1 hover:text-[var(--accent)]">
-                      Date {sortBy.col === 'created_at' && (sortBy.asc ? <IconChevronUp /> : <IconChevronDown />)}
-                    </button>
-                  </th>
+                  <th className="text-left text-[11px] font-medium uppercase tracking-wider text-[var(--t3)] py-2 px-4 border-b" style={{ borderColor: 'var(--border)' }}>Date</th>
                   <th className="text-left text-[11px] font-medium uppercase tracking-wider text-[var(--t3)] py-2 px-4 border-b" style={{ borderColor: 'var(--border)' }}>Auteur</th>
-                  <th className="py-2 px-4 border-b" style={{ borderColor: 'var(--border)' }} />
+                  <th className="text-left text-[11px] font-medium uppercase tracking-wider text-[var(--t3)] py-2 px-4 border-b" style={{ borderColor: 'var(--border)' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {sortedFeedback.map((f) => {
-                  const name = getProfileName(f)
-                  const reason = f.reason || f.feedback_note || '—'
-                  const typeLabel = f.profile_id == null ? 'Instruction' : 'Correction profil'
-                  const detailText = f.profile_id == null ? reason : `${name} — ${reason}`
+                {unifiedRows.map((row) => {
+                  const badgeInstruction = { backgroundColor: '#FAEEDA', color: '#BA7517', border: '1px solid #FAC775' }
+                  const badgeScoring = { backgroundColor: '#E6F1FB', color: '#185FA5', border: '1px solid #B5D4F4' }
+                  if (row.kind === 'instruction') {
+                    const i = row.data
+                    const detailText = (i.content || '—').trim()
+                    const rowKey = `ins-${i.id}`
+                    return (
+                      <tr key={rowKey} className="border-b cursor-pointer hover:bg-[#F8F5F1]" style={{ borderColor: 'var(--border)' }} onClick={() => openDetailModal(row)}>
+                        <td className="py-2.5 px-4">
+                          <span className="inline-flex px-2 py-0.5 rounded-md text-[11px] font-semibold" style={badgeInstruction}>Instruction</span>
+                        </td>
+                        <td className="py-2.5 px-4 text-[12px] truncate" title={detailText}>{detailText.length > 120 ? `${detailText.slice(0, 120)}…` : detailText}</td>
+                        <td className="py-2.5 px-4 text-[12px]" style={{ color: 'var(--t2)' }}>{fmt(i.updated_at)}</td>
+                        <td className="py-2.5 px-4 text-[12px]">{abbreviateAuthor(i.updated_by)}</td>
+                        <td className="py-2.5 px-4">
+                          {isAdmin && (
+                            <div className="flex items-center gap-1">
+                              <button type="button" onClick={(e) => { e.stopPropagation(); handleEdit(row); }} style={{ color: ACCENT, background: 'none', border: 'none', cursor: 'pointer', padding: 4 }} title="Editer">
+                                <IconPencil />
+                              </button>
+                              <button type="button" onClick={(e) => { e.stopPropagation(); handleDelete(row); }} style={{ color: ACCENT, background: 'none', border: 'none', cursor: 'pointer', padding: 4 }} title="Supprimer">
+                                <IconTrash />
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  }
+                  const f = row.data
+                  const orig = f.original_score ?? f.previous_score
+                  const corr = f.corrected_score ?? f.new_score
+                  const reason = (f.reason || f.feedback_note || '').trim()
+                  const detailText =
+                    orig != null && corr != null
+                      ? `Score corrigé ${orig} → ${corr}${reason ? ` · ${reason}` : ''}`
+                      : reason || '—'
+                  const rowKey = `fb-${f.id}`
                   return (
-                    <tr key={f.id} className="border-b cursor-pointer hover:bg-[#F8F5F1]" style={{ borderColor: 'var(--border)' }} onClick={() => openDetailModal(f)}>
+                    <tr key={rowKey} className="border-b cursor-pointer hover:bg-[#F8F5F1]" style={{ borderColor: 'var(--border)' }} onClick={() => openDetailModal(row)}>
                       <td className="py-2.5 px-4">
-                        <span className="inline-flex px-2 py-0.5 rounded-md text-[11px] font-semibold" style={{ backgroundColor: f.profile_id == null ? 'rgba(210,171,118,0.2)' : 'rgba(23,55,49,0.1)', color: f.profile_id == null ? GOLD : ACCENT }}>{typeLabel}</span>
+                        <span className="inline-flex px-2 py-0.5 rounded-md text-[11px] font-semibold" style={badgeScoring}>Scoring</span>
                       </td>
-                      <td className="py-2.5 px-4 text-[12px] truncate" title={detailText}>{detailText.length > 80 ? `${detailText.slice(0, 80)}...` : detailText}</td>
+                      <td className="py-2.5 px-4 text-[12px] truncate" title={detailText}>{detailText.length > 120 ? `${detailText.slice(0, 120)}…` : detailText}</td>
                       <td className="py-2.5 px-4 text-[12px]" style={{ color: 'var(--t2)' }}>{fmt(f.created_at)}</td>
                       <td className="py-2.5 px-4 text-[12px]">{abbreviateAuthor(f.author)}</td>
                       <td className="py-2.5 px-4">
                         {isAdmin && (
                           <div className="flex items-center gap-1">
-                            <button type="button" onClick={(e) => { e.stopPropagation(); handleEdit(f); }} style={{ color: ACCENT, background: 'none', border: 'none', cursor: 'pointer', padding: 4 }} title="Editer">
+                            <button type="button" onClick={(e) => { e.stopPropagation(); handleEdit(row); }} style={{ color: ACCENT, background: 'none', border: 'none', cursor: 'pointer', padding: 4 }} title="Editer">
                               <IconPencil />
                             </button>
-                            <button type="button" onClick={(e) => { e.stopPropagation(); handleDelete(f); }} style={{ color: ACCENT, background: 'none', border: 'none', cursor: 'pointer', padding: 4 }} title="Supprimer">
+                            <button type="button" onClick={(e) => { e.stopPropagation(); handleDelete(row); }} style={{ color: ACCENT, background: 'none', border: 'none', cursor: 'pointer', padding: 4 }} title="Supprimer">
                               <IconTrash />
                             </button>
                           </div>
@@ -689,15 +696,38 @@ Analyse ces corrections et réponds UNIQUEMENT en JSON valide (pas de markdown, 
               <button type="button" onClick={closeDetailModal} className="p-1.5 rounded-lg hover:bg-[var(--s2)]" style={{ color: 'var(--t2)' }}><IconX /></button>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {(() => {
+              {detailModal.kind === 'instruction' ? (() => {
+                const ins = detailModal.data
+                return (
+                  <>
+                    <div><span className="text-[11px] uppercase text-[var(--t3)]">Type</span><div className="mt-0.5"><span className="inline-flex px-2 py-0.5 rounded-md text-[11px] font-semibold" style={{ backgroundColor: '#FAEEDA', color: '#BA7517', border: '1px solid #FAC775' }}>Instruction</span></div></div>
+                    <div><span className="text-[11px] uppercase text-[var(--t3)]">Auteur</span><div className="text-[13px] mt-0.5">{ins.updated_by || '—'}</div></div>
+                    <div><span className="text-[11px] uppercase text-[var(--t3)]">Date et heure</span><div className="text-[13px] mt-0.5">{fmtModal(ins.updated_at)}</div></div>
+                    <div>
+                      <span className="text-[11px] uppercase text-[var(--t3)]">Contenu</span>
+                      {detailEditing ? (
+                        <textarea
+                          value={detailEditInstructionContent}
+                          onChange={(e) => setDetailEditInstructionContent(e.target.value)}
+                          rows={8}
+                          maxLength={2000}
+                          className="mt-1 w-full rounded border px-3 py-2 text-[13px] resize-y"
+                          style={{ borderColor: 'var(--border)' }}
+                        />
+                      ) : (
+                        <div className="text-[13px] mt-0.5 whitespace-pre-wrap">{ins.content || '—'}</div>
+                      )}
+                    </div>
+                  </>
+                )
+              })() : (() => {
                 const f = detailModal.data
                 const name = getProfileName(f)
-                const typeLabel = f.profile_id == null ? 'Instruction' : 'Correction profil'
                 const orig = f.original_score ?? f.previous_score
                 const corr = f.corrected_score ?? f.new_score
                 return (
                   <>
-                    <div><span className="text-[11px] uppercase text-[var(--t3)]">Type</span><div className="mt-0.5"><span className="inline-flex px-2 py-0.5 rounded-md text-[11px] font-semibold" style={{ backgroundColor: f.profile_id == null ? 'rgba(210,171,118,0.2)' : 'rgba(23,55,49,0.1)', color: f.profile_id == null ? GOLD : ACCENT }}>{typeLabel}</span></div></div>
+                    <div><span className="text-[11px] uppercase text-[var(--t3)]">Type</span><div className="mt-0.5"><span className="inline-flex px-2 py-0.5 rounded-md text-[11px] font-semibold" style={{ backgroundColor: '#E6F1FB', color: '#185FA5', border: '1px solid #B5D4F4' }}>Scoring</span></div></div>
                     <div><span className="text-[11px] uppercase text-[var(--t3)]">Profil</span><div className="text-[13px] mt-0.5">{name}</div></div>
                     <div><span className="text-[11px] uppercase text-[var(--t3)]">Auteur</span><div className="text-[13px] mt-0.5">{f.author || '—'}</div></div>
                     <div><span className="text-[11px] uppercase text-[var(--t3)]">Date et heure</span><div className="text-[13px] mt-0.5">{fmtModal(f.created_at)}</div></div>
@@ -725,7 +755,13 @@ Analyse ces corrections et réponds UNIQUEMENT en JSON valide (pas de markdown, 
               })()}
             </div>
             <div className="py-3 px-4 border-t flex items-center justify-end gap-2 shrink-0" style={{ borderColor: 'var(--border)' }}>
-              {isAdmin && detailEditing && (
+              {isAdmin && detailModal.kind === 'instruction' && detailEditing && (
+                <>
+                  <button type="button" onClick={() => { setDetailEditing(false); setDetailEditInstructionContent(detailModal.data.content || '') }} className="flex items-center gap-1.5 py-2 px-3 rounded-lg text-[13px] font-medium border" style={{ borderColor: 'var(--border)', color: 'var(--t2)' }}><IconX /> Annuler</button>
+                  <button type="button" onClick={handleDetailSave} disabled={detailSaving || !detailEditInstructionContent.trim()} className="flex items-center gap-1.5 py-2 px-3 rounded-lg text-[13px] font-medium disabled:opacity-50" style={{ backgroundColor: GOLD, color: ACCENT }}><IconCheck /> {detailSaving ? 'Enregistrement…' : 'Enregistrer'}</button>
+                </>
+              )}
+              {isAdmin && detailModal.kind === 'scoring' && detailEditing && (
                 <>
                   <button type="button" onClick={() => { setDetailEditing(false); setDetailEditScore(String(detailModal.data.corrected_score ?? detailModal.data.new_score ?? '')); setDetailEditReason(detailModal.data.reason || detailModal.data.feedback_note || '') }} className="flex items-center gap-1.5 py-2 px-3 rounded-lg text-[13px] font-medium border" style={{ borderColor: 'var(--border)', color: 'var(--t2)' }}><IconX /> Annuler</button>
                   <button type="button" onClick={handleDetailSave} disabled={detailSaving} className="flex items-center gap-1.5 py-2 px-3 rounded-lg text-[13px] font-medium disabled:opacity-50" style={{ backgroundColor: GOLD, color: ACCENT }}><IconCheck /> {detailSaving ? 'Enregistrement…' : 'Enregistrer'}</button>
@@ -733,8 +769,8 @@ Analyse ces corrections et réponds UNIQUEMENT en JSON valide (pas de markdown, 
               )}
               {isAdmin && !detailEditing && (
                 <>
-                  <button type="button" onClick={() => handleEdit(detailModal.data)} className="flex items-center gap-1.5 py-2 px-3 rounded-lg text-[13px] font-medium" style={{ backgroundColor: 'var(--s2)', color: 'var(--t2)' }}><IconPencil /> Editer</button>
-                  <button type="button" onClick={() => handleDelete(detailModal.data)} className="flex items-center gap-1.5 py-2 px-3 rounded-lg text-[13px] font-medium" style={{ backgroundColor: '#FEE2E2', color: '#b91c1c' }}><IconTrash /> Supprimer</button>
+                  <button type="button" onClick={() => handleEdit({ kind: detailModal.kind, data: detailModal.data })} className="flex items-center gap-1.5 py-2 px-3 rounded-lg text-[13px] font-medium" style={{ backgroundColor: 'var(--s2)', color: 'var(--t2)' }}><IconPencil /> Editer</button>
+                  <button type="button" onClick={() => handleDelete({ kind: detailModal.kind, data: detailModal.data })} className="flex items-center gap-1.5 py-2 px-3 rounded-lg text-[13px] font-medium" style={{ backgroundColor: '#FEE2E2', color: '#b91c1c' }}><IconTrash /> Supprimer</button>
                 </>
               )}
               {!isAdmin && (
@@ -754,8 +790,8 @@ Analyse ces corrections et réponds UNIQUEMENT en JSON valide (pas de markdown, 
               <p className="text-[14px] font-medium mb-1">Action irréversible</p>
               <p className="text-[13px] text-[var(--t2)]">
                 {confirmModal.type === 'edit'
-                  ? 'Modifier cette instruction peut changer le comportement du scoring IA pour tous les futurs imports. Confirmez votre mot de passe pour continuer.'
-                  : 'Supprimer cette instruction peut changer le comportement du scoring IA pour tous les futurs imports. Cette action est irréversible. Confirmez votre mot de passe pour continuer.'}
+                  ? 'Modifier cette entrée peut changer le comportement du scoring IA pour tous les futurs imports. Confirmez votre mot de passe pour continuer.'
+                  : 'Supprimer cette entrée peut changer le comportement du scoring IA pour tous les futurs imports. Cette action est irréversible. Confirmez votre mot de passe pour continuer.'}
               </p>
             </div>
             <label className="block text-[12px] font-medium text-[var(--t3)] mb-1">Votre mot de passe</label>

@@ -7,34 +7,31 @@ import { supabase } from './supabase'
 
 const STORAGE_KEY = 'scoring_feedback_updated'
 
-/** Charge les instructions depuis Supabase (première ligne par updated_at desc) */
+/** Charge toutes les instructions (lignes séparées), concaténées pour le prompt IA */
 export async function fetchScoringInstructions() {
   const { data } = await supabase
     .from('scoring_instructions')
     .select('content')
     .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  const instructions = (data?.content || '').trim()
+  const parts = (data || []).map((r) => (r.content || '').trim()).filter(Boolean)
+  const instructions = parts.join('\n\n')
   if (instructions) {
     console.log('Instructions scoring chargées:', instructions.substring(0, 100) + '...')
   }
   return instructions
 }
 
-/** Charge les instructions avec métadonnées (content, updated_at) */
+/** Agrégat de toutes les lignes + date de la ligne la plus récente */
 export async function fetchScoringInstructionsWithMeta() {
   const { data } = await supabase
     .from('scoring_instructions')
     .select('content, updated_at')
     .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  const content = (data?.content || '').trim()
-  if (content) {
-    console.log('Instructions scoring chargées:', content.substring(0, 100) + '...')
-  }
-  return { content, updated_at: data?.updated_at }
+  const rows = data || []
+  const parts = rows.map((r) => (r.content || '').trim()).filter(Boolean)
+  const content = parts.join('\n\n')
+  const updated_at = rows[0]?.updated_at
+  return { content, updated_at }
 }
 
 /** Sauvegarde les instructions (update la première ligne, sinon insert) */

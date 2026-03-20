@@ -361,9 +361,8 @@ Applique ces instructions en priorité dans ton analyse. Réponds toujours en fr
       await supabase.from('scoring_feedback').insert({
         profile_id: profile?.id || null,
         profile_data: profileData,
-        previous_score: profile?.sc ?? 0,
-        new_score: correctedScore,
-        feedback_note: reason,
+        original_score: profile?.sc ?? 0,
+        corrected_score: correctedScore,
         reason,
         priority_label: priority,
         author: userProfile?.full_name?.trim() || user?.email || null,
