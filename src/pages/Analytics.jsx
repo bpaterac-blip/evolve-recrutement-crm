@@ -1,13 +1,9 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useCRM } from '../context/CRMContext'
 import { useAuth } from '../context/AuthContext'
 import { useViewMode } from '../context/ViewModeContext'
 import { supabase } from '../lib/supabase'
 import { computeTotalExperienceYears } from '../lib/scoring'
-import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js'
-import { Doughnut } from 'react-chartjs-2'
-
-ChartJS.register(ArcElement, Tooltip, Legend)
 
 const ACCENT = '#173731'
 const GOLD = '#D2AB76'
@@ -19,8 +15,6 @@ const ANALYTICS_SOURCES = ['Chasse LinkedIn', 'Chasse Mail', 'Recommandation', '
 const ANALYTICS_STAGES = ['R0', 'R1', 'Point Business Plan', "Point d'étape", 'Démission reconversion', 'R2 Amaury', 'Point juridique', 'Recruté']
 
 const CHUTE_STAGES = ['Avant pipeline', 'R0', 'R1', 'Point Business Plan', "Point d'étape téléphonique", 'Démission reconversion', 'R2 Amaury', 'Point juridique']
-
-const CHUTE_TYPES = ['Contraintes contractuelles', 'Situation personnelle', 'Offres concurrentes', 'Statut / réglementaire', 'Contact perdu', 'Autre']
 
 function normalizeStageForMatch(stg) {
   if (stg === "Point d'étape") return "Point d'étape téléphonique"
@@ -196,49 +190,54 @@ function DurationBarRow({ stage, days }) {
   )
 }
 
-const CHART_COLORS = ['#173731', '#D2AB76', '#16a34a', '#f59e0b', '#ef4444', '#8b5cf6']
-
-function RaisonsDoughnutChart({ data, onSliceClick }) {
-  const chartRef = useRef(null)
-  const withData = data.filter((r) => r.count > 0)
-  const totalChute = withData.reduce((a, r) => a + r.count, 0)
-  const chartData = {
-    labels: withData.map((r) => r.type),
-    datasets: [{
-      data: withData.map((r) => r.count),
-      backgroundColor: withData.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]),
-      borderWidth: 0,
-      hoverOffset: 8,
-    }],
-  }
-  const options = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { display: false },
-      tooltip: { callbacks: { label: (ctx) => `${ctx.label}: ${ctx.raw} profils` } },
-    },
-    onClick: (_, elements) => {
-      if (elements.length > 0) {
-        const idx = elements[0].index
-        const r = withData[idx]
-        if (r?.count > 0) onSliceClick(r)
-      }
-    },
-  }
+function RaisonsAbandonBarList({ data, onRowClick }) {
+  const rows = data.filter((r) => r.count > 0).sort((a, b) => b.count - a.count)
+  const maxCount = Math.max(1, ...rows.map((r) => r.count))
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, cursor: 'pointer' }}>
-      <div style={{ width: 100, height: 100, flexShrink: 0 }}>
-        <Doughnut data={chartData} options={options} ref={chartRef} />
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11, color: '#666' }}>
-        {withData.map((r, i) => (
-          <div key={r.type} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ width: 6, height: 6, borderRadius: 3, background: CHART_COLORS[i % CHART_COLORS.length], flexShrink: 0 }} />
-            <span>{r.type}: {r.count}</span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {rows.map((r) => {
+        const pct = (r.count / maxCount) * 100
+        return (
+          <div
+            key={r.type}
+            role="button"
+            tabIndex={0}
+            onClick={() => onRowClick(r)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRowClick(r) } }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              cursor: 'pointer',
+            }}
+          >
+            <span
+              style={{
+                fontSize: 13,
+                color: ACCENT,
+                flex: '0 1 42%',
+                minWidth: 0,
+                lineHeight: 1.3,
+              }}
+            >
+              {r.type}
+            </span>
+            <div
+              style={{
+                flex: 1,
+                minWidth: 48,
+                height: 6,
+                background: '#E7E0D0',
+                borderRadius: 3,
+                overflow: 'hidden',
+              }}
+            >
+              <div style={{ width: `${pct}%`, height: '100%', background: '#173731', borderRadius: 3, minWidth: pct > 0 ? 2 : 0 }} />
+            </div>
+            <span style={{ fontSize: 13, fontWeight: 500, color: '#173731', flexShrink: 0, minWidth: 28, textAlign: 'right' }}>{r.count}</span>
           </div>
-        ))}
-      </div>
+        )
+      })}
     </div>
   )
 }
@@ -409,6 +408,7 @@ export default function Analytics() {
   const [upcomingSessions, setUpcomingSessions] = useState([])
   const [loading, setLoading] = useState(true)
   const [chuteModal, setChuteModal] = useState(null)
+  const [raisonsAbandonStats, setRaisonsAbandonStats] = useState({ raisonsAbandon: [], totalChuteRaisons: 0 })
 
   const isGlobalView = role === 'admin' && viewMode === 'global'
   const sessionGoal = isGlobalView ? 6 : 3
@@ -446,6 +446,31 @@ export default function Analytics() {
     }
     load()
   }, [])
+
+  useEffect(() => {
+    const load = async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('chute_type, maturity')
+        .eq('maturity', 'Chute')
+
+      console.log('Chutes data:', data, 'error:', error)
+
+      const rows = data || []
+      const byType = {}
+      rows.forEach((row) => {
+        const t = row.chute_type != null && String(row.chute_type).trim() !== '' ? row.chute_type : 'Non renseigné'
+        byType[t] = (byType[t] || 0) + 1
+      })
+      const raisonsAbandon = Object.entries(byType).map(([type, count]) => ({
+        type,
+        count,
+        profiles: [],
+      }))
+      setRaisonsAbandonStats({ raisonsAbandon, totalChuteRaisons: rows.length })
+    }
+    load()
+  }, [profileIdsForActivities])
 
   const stats = useMemo(() => {
     const dayMs = 24 * 60 * 60 * 1000
@@ -530,20 +555,7 @@ export default function Analytics() {
       return { stage, chuteCount, currentInStage, taux, profiles: chuteProfiles.filter((p) => matchStg(p)) }
     })
 
-    const chuteProfilesRaisons = chuteProfiles.filter((p) => p.chute_type != null && (p.chute_type ?? '') !== '' && p.chute_detail != null && (p.chute_detail ?? '') !== '')
-    const chuteByType = {}
-    chuteProfilesRaisons.forEach((p) => {
-      const t = p.chute_type || 'Autre'
-      if (!chuteByType[t]) chuteByType[t] = []
-      chuteByType[t].push(p)
-    })
-    const raisonsAbandon = CHUTE_TYPES.map((t) => ({
-      type: t,
-      count: (chuteByType[t] || []).length,
-      profiles: chuteByType[t] || [],
-    }))
     const totalChute = chuteProfiles.length
-    const totalChuteRaisons = chuteProfilesRaisons.length
 
     const bySource = {}
     forAlways.forEach((p) => {
@@ -623,9 +635,7 @@ export default function Analytics() {
       total,
       avgByStage,
       chuteByStage,
-      raisonsAbandon,
       totalChute,
-      totalChuteRaisons,
       srcData,
       totalRecrutes,
       avgDelay,
@@ -745,8 +755,30 @@ export default function Analytics() {
             </div>
             <div style={{ ...cardStyle, minHeight: 200 }}>
               <div style={cardLabelStyle}>Raisons d'abandon</div>
-              {stats.totalChuteRaisons > 0 ? (
-                <RaisonsDoughnutChart data={stats.raisonsAbandon} onSliceClick={(r) => r.count > 0 && setChuteModal({ title: r.type, profiles: r.profiles, columns: ['chute_stade', 'chute_detail', 'chute_date'] })} />
+              {raisonsAbandonStats.totalChuteRaisons > 0 ? (
+                <RaisonsAbandonBarList
+                  data={raisonsAbandonStats.raisonsAbandon}
+                  onRowClick={async (r) => {
+                    if (r.count <= 0) return
+                    const ids = profileIdsForActivities ? profileIdsForActivities.split(',').filter(Boolean) : []
+                    let q = supabase
+                      .from('profiles')
+                      .select('id, first_name, last_name, chute_stade, chute_detail, chute_date, maturity')
+                      .eq('maturity', 'Chute')
+                      .eq('chute_type', r.type)
+                    const { data } = ids.length ? await q.in('id', ids) : await q
+                    const profiles = (data || []).map((p) => ({
+                      id: p.id,
+                      fn: p.first_name,
+                      ln: p.last_name,
+                      mat: p.maturity,
+                      chute_stade: p.chute_stade,
+                      chute_detail: p.chute_detail,
+                      chute_date: p.chute_date,
+                    }))
+                    setChuteModal({ title: r.type, profiles, columns: ['chute_stade', 'chute_detail', 'chute_date'] })
+                  }}
+                />
               ) : (
                 <div className="flex flex-col items-center justify-center py-12" style={{ color: '#888' }}>
                   <span className="mb-3" style={{ color: '#bbb' }}><IconEmpty /></span>

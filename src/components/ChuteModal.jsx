@@ -1,5 +1,14 @@
 import { useState } from 'react'
-import { CHUTE_TYPES } from '../lib/data'
+
+const CHUTE_RAISONS = [
+  'A rejoint un autre réseau',
+  'Veut rester sur son poste actuel',
+  'A peur de se lancer',
+  'Ghosting',
+  'A accepté une offre en CDI',
+  'Pas le bon moment',
+  'Autre',
+]
 
 const ACCENT = '#173731'
 const GOLD = '#D2AB76'
@@ -29,7 +38,9 @@ export default function ChuteModal({ profile, onClose, onSaved }) {
           <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 6 }}>Type d'abandon</label>
           <select value={chuteType} onChange={(e) => setChuteType(e.target.value)} required style={{ width: '100%', padding: '10px 12px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6 }}>
             <option value="">Sélectionner...</option>
-            {CHUTE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+            {CHUTE_RAISONS.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
           </select>
         </div>
         <div style={{ marginBottom: 20 }}>

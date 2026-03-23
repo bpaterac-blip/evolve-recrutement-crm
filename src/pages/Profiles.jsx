@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase'
 import { STAGES, MATURITIES, SOURCES } from '../lib/data'
 import InlineDropdown from '../components/InlineDropdown'
 import PasInteresseModal from '../components/PasInteresseModal'
+import ChuteRaisonModal from '../components/ChuteRaisonModal'
 
 const ACCENT = '#173731'
 const GOLD = '#D2AB76'
@@ -118,6 +119,7 @@ export default function Profiles() {
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [pasInteresseModalProfile, setPasInteresseModalProfile] = useState(null)
+  const [chuteModalProfile, setChuteModalProfile] = useState(null)
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -368,6 +370,11 @@ export default function Profiles() {
                               setOpenDropdownId(null)
                               return
                             }
+                            if (v === 'Chute') {
+                              setChuteModalProfile(p)
+                              setOpenDropdownId(null)
+                              return
+                            }
                             changeMaturity(p.id, v)
                             setOpenDropdownId(null)
                           }}
@@ -415,6 +422,26 @@ export default function Profiles() {
               }).eq('id', pasInteresseModalProfile.id)
               changeMaturity(pasInteresseModalProfile.id, 'Pas intéressé')
               setPasInteresseModalProfile(null)
+              await fetchProfiles()
+            }}
+          />
+        </div>
+      )}
+      {chuteModalProfile && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setChuteModalProfile(null)}>
+          <ChuteRaisonModal
+            profile={chuteModalProfile}
+            onClose={() => setChuteModalProfile(null)}
+            onSaved={async (raison, detail) => {
+              await supabase.from('profiles').update({
+                maturity: 'Chute',
+                chute_stade: chuteModalProfile.stg || 'Avant pipeline',
+                chute_type: raison,
+                chute_detail: detail || null,
+                chute_date: new Date().toISOString(),
+              }).eq('id', chuteModalProfile.id)
+              changeMaturity(chuteModalProfile.id, 'Chute')
+              setChuteModalProfile(null)
               await fetchProfiles()
             }}
           />

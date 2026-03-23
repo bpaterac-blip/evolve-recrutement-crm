@@ -22,7 +22,6 @@ const INTEG_MODAL_STAGES = ["Point d'étape", "Point d'étape téléphonique", '
 const INTEG_DATE_STAGES = ["Point d'étape", "Point d'étape téléphonique", 'Démission reconversion', 'R2 Amaury', 'Point juridique', 'Intégration', 'Recruté']
 const MOIS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
 const ANNEES = [2025, 2026, 2027]
-import InlineDropdown from '../components/InlineDropdown'
 import ScoreCorrectionModal from '../components/ScoreCorrectionModal'
 import ChuteModal from '../components/ChuteModal'
 import PasInteresseModal from '../components/PasInteresseModal'
@@ -694,20 +693,22 @@ export default function Pipeline() {
   }
 
   const handleChangeStage = async (v) => {
-    if (!displayProfile?.id || !modalProfile?.id) return
-    const oldValue = displayProfile.stg ?? '—'
+    const profileId = modalProfile?.id
+    if (!profileId) return
+    const oldValue = displayProfile?.stg ?? '—'
     if (oldValue === v) return
-    changeStage(displayProfile.id, v)
+    changeStage(profileId, v)
     await supabase.from('activities').insert({
-      profile_id: modalProfile.id,
+      profile_id: profileId,
       type: 'stage_change',
       note: `${oldValue} → ${v}`,
       date: new Date().toISOString().split('T')[0],
       icon: 'refresh',
       source: 'manual',
     })
-    const { data } = await supabase.from('activities').select('*').eq('profile_id', modalProfile.id).order('created_at', { ascending: false }).limit(10)
+    const { data } = await supabase.from('activities').select('*').eq('profile_id', profileId).order('created_at', { ascending: false }).limit(10)
     setActivities(data || [])
+    if (useSupabase) await fetchProfiles()
     if (v === 'Recruté') {
       setModalProfile(null)
       setSelectedCardId(null)
@@ -717,8 +718,10 @@ export default function Pipeline() {
   }
 
   const handleChangeMaturity = async (v) => {
-    if (!displayProfile?.id || !modalProfile?.id) return
-    const oldValue = displayProfile.mat ?? '—'
+    const profileId = modalProfile?.id
+    if (!profileId) return
+    console.log('onChange maturité:', profileId, v)
+    const oldValue = displayProfile?.mat ?? '—'
     if (oldValue === v) return
     if (v === 'Chute') {
       setChuteModalProfile(displayProfile)
@@ -728,17 +731,27 @@ export default function Pipeline() {
       setPasInteresseModalProfile(displayProfile)
       return
     }
-    changeMaturity(displayProfile.id, v)
+    changeMaturity(profileId, v)
     await supabase.from('activities').insert({
-      profile_id: modalProfile.id,
+      profile_id: profileId,
       type: 'maturity_change',
       note: `${oldValue} → ${v}`,
       date: new Date().toISOString().split('T')[0],
       icon: 'refresh',
       source: 'manual',
     })
-    const { data } = await supabase.from('activities').select('*').eq('profile_id', modalProfile.id).order('created_at', { ascending: false }).limit(10)
+    const { data } = await supabase.from('activities').select('*').eq('profile_id', profileId).order('created_at', { ascending: false }).limit(10)
     setActivities(data || [])
+    if (useSupabase) await fetchProfiles()
+  }
+
+  const handleChangeSource = async (v) => {
+    const profileId = modalProfile?.id
+    if (!profileId) return
+    changeSource(profileId, v)
+    setShowSourceDropdown(false)
+    await loadActivities()
+    if (useSupabase) await fetchProfiles()
   }
 
   const handleDrop = async (profileId, newStage) => {
@@ -1069,11 +1082,44 @@ export default function Pipeline() {
                 {displayProfile.co || '—'} · {displayProfile.ti || '—'} · {displayProfile.city || '—'}
               </p>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                <InlineDropdown options={MATURITIES} value={displayProfile.mat} onChange={handleChangeMaturity} buttonStyle={modalMatStyle} buttonClassName="tag tag-btn" open={showMaturiteDropdown} onOpenChange={(v) => { setShowMaturiteDropdown(v); if (v) setShowStadeDropdown(false); }} containerClassName="maturite-dropdown" />
-                <InlineDropdown options={STAGES} value={displayProfile.stg} onChange={handleChangeStage} buttonStyle={modalStagStyle} buttonClassName="tag tag-btn" placeholder="—" open={showStadeDropdown} onOpenChange={(v) => { setShowStadeDropdown(v); if (v) setShowMaturiteDropdown(false); }} containerClassName="stade-dropdown" />
-                {displayProfile.src && (
-                  <InlineDropdown options={SOURCES} value={displayProfile.src} onChange={(v) => { changeSource(displayProfile.id, v); setShowSourceDropdown(false); loadActivities(); }} buttonStyle={(v) => modalSourceStyle(v || displayProfile.src)} buttonClassName="tag tag-btn" open={showSourceDropdown} onOpenChange={(v) => { setShowSourceDropdown(v); if (v) { setShowStadeDropdown(false); setShowMaturiteDropdown(false); } }} containerClassName="source-dropdown" />
-                )}
+                <select
+                  value={displayProfile.mat || ''}
+                  onChange={(e) => handleChangeMaturity(e.target.value)}
+                  style={{
+                    padding: '4px 8px', fontSize: 13, borderRadius: 6,
+                    border: '1px solid #ccc', cursor: 'pointer',
+                    background: '#173731', color: '#E7E0D0',
+                  }}
+                >
+                  {MATURITIES.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+                <select
+                  value={displayProfile.stg || ''}
+                  onChange={(e) => handleChangeStage(e.target.value)}
+                  style={{
+                    padding: '4px 8px', fontSize: 13, borderRadius: 6,
+                    border: '1px solid #ccc', cursor: 'pointer',
+                    background: '#D2AB76', color: '#173731',
+                  }}
+                >
+                  {STAGES.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+                <select
+                  value={displayProfile.src || ''}
+                  onChange={(e) => handleChangeSource(e.target.value)}
+                  style={{
+                    padding: '4px 8px', fontSize: 13, borderRadius: 6,
+                    border: '1px solid #ccc', cursor: 'pointer',
+                  }}
+                >
+                  {SOURCES.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
               </div>
               <div style={{ background: '#ffffff', borderRadius: 10, border: '1px solid rgba(0,0,0,0.08)', padding: '10px 14px', marginTop: 8 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>

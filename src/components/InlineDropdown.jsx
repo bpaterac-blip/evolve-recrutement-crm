@@ -79,7 +79,11 @@ export default function InlineDropdown({ options, value, onChange, buttonStyle =
                 key={opt}
                 className="ddi py-1.5 px-2.5 rounded-md text-[13px] cursor-pointer hover:bg-[var(--s2)]"
                 style={value === opt ? { fontWeight: 600 } : {}}
-                onClick={() => { onChange(opt); setOpen(false); }}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setOpen(false)
+                  setTimeout(() => onChange(opt), 0)
+                }}
               >
                 {opt}
               </div>
