@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
+import { useAuth } from '../context/AuthContext'
+import { supabase } from '../lib/supabase'
 import {
   listAllTicketsForAdmin,
   updateTicketStatusForAdmin,
   updateTicketForAdmin,
   insertTicketResolvedNotificationForAdmin,
-  insertTicketReponseNotificationForAdmin,
   deleteTicketForAdmin,
 } from '../lib/tickets'
 import { IconTrash } from '../components/Icons'
@@ -20,6 +21,7 @@ const STATUT_STYLE = {
 }
 
 export default function AdminTickets() {
+  const { user } = useAuth()
   const [tickets, setTickets] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -46,6 +48,17 @@ export default function AdminTickets() {
 
   useEffect(() => { load() }, [])
 
+  useEffect(() => {
+    if (!user?.id) return
+    ;(async () => {
+      await supabase
+        .from('notifications')
+        .update({ read: true })
+        .eq('user_id', user.id)
+        .in('type', ['nouveau_ticket', 'ticket_reponse_user'])
+    })()
+  }, [user?.id])
+
   const openTicketModal = (t) => {
     setSelectedTicket(t)
     setModalStatut(t?.statut || 'Ouvert')
@@ -57,16 +70,21 @@ export default function AdminTickets() {
     setModalSaving(true)
     setError(null)
     try {
-      const oldStatut = selectedTicket.statut
       await updateTicketForAdmin(selectedTicket.id, { statut: modalStatut, admin_response: modalReponse || null })
-      const hasReponse = !!modalReponse?.trim()
-      const justResolved = modalStatut === 'Résolu' && oldStatut !== 'Résolu'
-      if (hasReponse || justResolved) {
-        if (modalStatut === 'Résolu') {
-          await insertTicketResolvedNotificationForAdmin(selectedTicket)
-        } else if (hasReponse) {
-          await insertTicketReponseNotificationForAdmin(selectedTicket)
-        }
+      const newStatut = modalStatut
+      const adminResponse = modalReponse || ''
+      const ticket = selectedTicket
+      if (ticket.user_id && (newStatut === 'Résolu' || adminResponse.trim())) {
+        const notifType = newStatut === 'Résolu' ? 'ticket_resolu' : 'ticket_reponse'
+        const notifMessage = newStatut === 'Résolu'
+          ? `Votre ticket "${ticket.titre}" a été résolu.`
+          : `Réponse à votre ticket "${ticket.titre}" : ${adminResponse.substring(0, 80)}...`
+        await supabase.from('notifications').insert({
+          user_id: ticket.user_id,
+          type: notifType,
+          message: notifMessage,
+          ticket_id: ticket.id,
+        })
       }
       setTickets((prev) => prev.map((t) => (t.id === selectedTicket.id ? { ...t, statut: modalStatut, admin_response: modalReponse || null, updated_at: new Date().toISOString() } : t)))
       setSelectedTicket(null)

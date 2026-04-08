@@ -1,7 +1,6 @@
 import { useState, useEffect, Fragment } from 'react'
 import { supabase } from '../lib/supabase'
 import { getMyTickets, createTicket, uploadTicketScreenshot, notifyAdminsOnNewTicket, updateTicketWithUserResponse, notifyAdminsOnUserResponse } from '../lib/tickets'
-import { sendTicketNotificationEmail } from '../lib/ticketEmail'
 
 const ACCENT = '#173731'
 const GOLD = '#D2AB76'
@@ -85,12 +84,7 @@ export default function Tickets() {
       setScreenshotUrl(null)
       const { data: { user } } = await supabase.auth.getUser()
       notifyAdminsOnNewTicket(ticket, user?.email).catch(() => {})
-      const emailResult = await sendTicketNotificationEmail(ticket)
-      if (emailResult.success) {
-        setEmailFeedback({ type: 'success', message: 'Ticket créé. Notification email envoyée.' })
-      } else {
-        setEmailFeedback({ type: 'error', message: emailResult.error || 'Notification email non envoyée.' })
-      }
+      setEmailFeedback({ type: 'success', message: 'Ticket créé avec succès' })
     } catch (e) {
       setError(e?.message || 'Erreur lors de l\'envoi')
     } finally {
@@ -154,11 +148,6 @@ export default function Tickets() {
       {emailFeedback?.type === 'success' && (
         <div className="mb-4 py-3 px-4 rounded-lg text-sm" style={{ backgroundColor: 'rgba(34,197,94,0.1)', color: '#15803d' }}>
           {emailFeedback.message}
-        </div>
-      )}
-      {emailFeedback?.type === 'error' && (
-        <div className="mb-4 py-3 px-4 rounded-lg text-sm" style={{ backgroundColor: 'rgba(234,179,8,0.15)', color: '#a16207' }}>
-          Ticket créé. Email non envoyé : {emailFeedback.message}
         </div>
       )}
 

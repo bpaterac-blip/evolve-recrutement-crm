@@ -79,14 +79,14 @@ export async function getUnreadTicketResoluCount() {
 export async function getUnreadNouveauTicketCount() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return 0
-  const { count, error } = await supabase
+  const { data, error } = await supabase
     .from('notifications')
-    .select('*', { count: 'exact', head: true })
+    .select('*')
     .eq('user_id', user.id)
     .in('type', ['nouveau_ticket', 'ticket_reponse_user'])
     .eq('read', false)
   if (error) return 0
-  return count ?? 0
+  return data?.length || 0
 }
 
 /**

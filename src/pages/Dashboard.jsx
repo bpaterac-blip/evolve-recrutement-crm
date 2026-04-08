@@ -72,8 +72,26 @@ function ownerDisplay(p) {
   return name.charAt(0).toUpperCase() + name.slice(1).replace(/[._]/g, ' ')
 }
 
+/** Lundi–dimanche (local), pour event_date / next_event_date (YYYY-MM-DD) */
+function getCalendarWeekBounds() {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const dow = today.getDay()
+  const monday = new Date(today)
+  monday.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1))
+  const sunday = new Date(monday)
+  sunday.setDate(monday.getDate() + 6)
+  const ymd = (d) => {
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${y}-${m}-${day}`
+  }
+  return { startOfWeek: ymd(monday), endOfWeek: ymd(sunday) }
+}
+
 export default function Dashboard() {
-  const { profiles, filteredProfiles, fetchProfiles } = useCRM()
+  const { filteredProfiles, fetchProfiles } = useCRM()
   const { user, role, userProfile } = useAuth()
   const { viewMode } = useViewMode()
   const navigate = useNavigate()
@@ -93,22 +111,17 @@ export default function Dashboard() {
   const [contactesDiff, setContactesDiff] = useState(null)
   const [recrutes2026, setRecrutes2026] = useState(null)
   const [recrutesCeMois, setRecrutesCeMois] = useState(null)
+  const [globalAdvisorBreakdown, setGlobalAdvisorBreakdown] = useState(null)
+  const [myAdvisorRecrutes2026, setMyAdvisorRecrutes2026] = useState(null)
 
   const allProfiles = [...filteredProfiles].filter((p) => p.mat !== 'Archivé')
   const P = ownerFilter === 'all' ? allProfiles : allProfiles.filter((p) => (p.owner_email || '') === ownerFilter)
   const ownerEmails = [...new Set(allProfiles.map((p) => p.owner_email || '').filter(Boolean))].sort()
   const isGlobalView = role === 'admin' && viewMode === 'global'
-  const pipeline = P.filter((p) => p.stg && p.stg !== '' && p.stg !== 'Recruté')
-  const recruited = P.filter((p) => p.stg === 'Recruté')
-
-  const today = new Date()
-  const dayOfWeek = today.getDay()
-  const monday = new Date(today)
-  monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1))
-  monday.setHours(0, 0, 0, 0)
-  const sunday = new Date(monday)
-  sunday.setDate(monday.getDate() + 6)
-  sunday.setHours(23, 59, 59, 999)
+  /** Stats carte objectif / pipeline / points d'étape : vue globale = toute l'équipe (sans filtre conseiller du select) */
+  const statsProfiles = isGlobalView ? allProfiles : P
+  const pipeline = statsProfiles.filter((p) => p.stg && p.stg !== '' && p.stg !== 'Recruté')
+  const profilesForPointsEtape = isGlobalView ? allProfiles : P
 
   const ini = (a, b) => (a?.[0] || '') + (b?.[0] || '')
   const stag = (s) => (STAGE_COLORS[s] ? { backgroundColor: STAGE_COLORS[s].bg, color: STAGE_COLORS[s].text } : {})
@@ -147,12 +160,8 @@ export default function Dashboard() {
 
     const loadR1CetteSemaine = async () => {
       setR1Loading(true)
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      const inSevenDays = new Date(today)
-      inSevenDays.setDate(today.getDate() + 7)
-      const todayStr = today.toISOString().split('T')[0]
-      const inSevenDaysStr = inSevenDays.toISOString().split('T')[0]
+      const { startOfWeek, endOfWeek } = getCalendarWeekBounds()
+      const globalTeam = viewMode === 'global' && role === 'admin'
 
       timeoutId = setTimeout(() => {
         if (!state.cancelled) {
@@ -163,14 +172,12 @@ export default function Dashboard() {
       }, 5000)
 
       try {
-        const { data: eventsR1, error } = await supabase
+        const { data: eventsR1 } = await supabase
           .from('events')
-          .select('*, profiles(first_name, last_name, company, city, region)')
+          .select('*, profiles(first_name, last_name, company, city, region, owner_id)')
           .ilike('event_type', '%R1%')
-          .gte('event_date', todayStr)
-          .lte('event_date', inSevenDaysStr)
-
-        console.log('R1 events:', eventsR1, 'error:', error)
+          .gte('event_date', startOfWeek)
+          .lte('event_date', endOfWeek)
 
         if (state.cancelled) return
 
@@ -184,28 +191,56 @@ export default function Dashboard() {
             const city = p?.city ?? '—'
             const region = p?.region ?? ''
             const eventDate = e.event_date || e.date
-            items.push({ id: `e-${e.id}`, profile_id: e.profile_id, fn, ln, co, city, region, event_date: eventDate })
+            const ownerId = p?.owner_id ?? null
+            items.push({ id: `e-${e.id}`, profile_id: e.profile_id, fn, ln, co, city, region, event_date: eventDate, owner_id: ownerId })
           })
         }
 
-        if (items.length === 0) {
-          const { data: profilesR1 } = await supabase
-            .from('profiles')
-            .select('id, first_name, last_name, company, city, region, next_event_date')
-            .eq('next_event_label', 'R1')
-            .gte('next_event_date', todayStr)
-            .lte('next_event_date', inSevenDaysStr)
-
-          if (!state.cancelled && profilesR1?.length) {
-            profilesR1.forEach((p) => {
-              items.push({ id: `p-${p.id}`, profile_id: p.id, fn: p.first_name ?? '', ln: p.last_name ?? '', co: p.company ?? '—', city: p.city ?? '—', region: p.region ?? '', event_date: p.next_event_date })
+        const mergeProfilesR1 = (rows) => {
+          if (!rows?.length) return
+          rows.forEach((p) => {
+            if (items.some((it) => String(it.profile_id) === String(p.id))) return
+            items.push({
+              id: `p-${p.id}`,
+              profile_id: p.id,
+              fn: p.first_name ?? '',
+              ln: p.last_name ?? '',
+              co: p.company ?? '—',
+              city: p.city ?? '—',
+              region: p.region ?? '',
+              event_date: p.next_event_date,
+              owner_id: p.owner_id ?? null,
             })
-          }
+          })
         }
 
-        items.sort((a, b) => new Date(a.event_date) - new Date(b.event_date))
+        if (!globalTeam && user?.id) {
+          const { data: myProfilesR1 } = await supabase
+            .from('profiles')
+            .select('id, first_name, last_name, company, city, region, next_event_date, owner_id')
+            .eq('owner_id', user.id)
+            .eq('next_event_label', 'R1')
+            .gte('next_event_date', startOfWeek)
+            .lte('next_event_date', endOfWeek)
+          if (!state.cancelled) mergeProfilesR1(myProfilesR1)
+        } else if (globalTeam) {
+          const { data: profilesR1 } = await supabase
+            .from('profiles')
+            .select('id, first_name, last_name, company, city, region, next_event_date, owner_id')
+            .eq('next_event_label', 'R1')
+            .gte('next_event_date', startOfWeek)
+            .lte('next_event_date', endOfWeek)
+          if (!state.cancelled) mergeProfilesR1(profilesR1)
+        }
+
+        let filtered = items
+        if (!globalTeam && user?.id) {
+          filtered = items.filter((it) => String(it.owner_id || '') === String(user.id))
+        }
+
+        filtered.sort((a, b) => new Date(a.event_date) - new Date(b.event_date))
         if (!state.cancelled) {
-          setR1CetteSemaine(items)
+          setR1CetteSemaine(filtered)
         }
       } catch (err) {
         console.error('R1 load error:', err)
@@ -221,55 +256,106 @@ export default function Dashboard() {
       state.cancelled = true
       clearTimeout(timeoutId)
     }
-  }, [])
+  }, [role, viewMode, user?.id])
 
   useEffect(() => {
     const loadPointsEtape = async () => {
       setPointsEtapeLoading(true)
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      const inSevenDays = new Date(today)
-      inSevenDays.setDate(today.getDate() + 7)
-      const todayStr = today.toISOString().split('T')[0]
-      const inSevenDaysStr = inSevenDays.toISOString().split('T')[0]
-      const profileIds = P.map((p) => p.id).filter(Boolean)
+      const { startOfWeek, endOfWeek } = getCalendarWeekBounds()
+      const globalTeam = viewMode === 'global' && role === 'admin'
+      const pointEtapeStages = ["Point d'étape", "Point d'étape téléphonique"]
       const items = []
-      if (profileIds.length > 0) {
-        const { data: events } = await supabase
+
+      if (globalTeam) {
+        const { data: ptEvents } = await supabase
           .from('events')
-          .select('id, profile_id, event_date, event_type, date')
-          .or("event_type.ilike.%Point d'étape%")
-          .gte('event_date', todayStr)
-          .lte('event_date', inSevenDaysStr)
-          .in('profile_id', profileIds)
-        if (events?.length) {
-          events.forEach((e) => {
-            const p = P.find((pr) => String(pr.id) === String(e.profile_id))
-            if (!p) return
+          .select('id, profile_id, event_date, event_type, date, profiles(first_name, last_name, company, city, region)')
+          .ilike('event_type', '%Point d\'étape%')
+          .gte('event_date', startOfWeek)
+          .lte('event_date', endOfWeek)
+        if (ptEvents?.length) {
+          ptEvents.forEach((e) => {
+            const pr = e.profiles
             const eventDate = e.event_date || e.date
-            items.push({ id: `e-${e.id}`, profile_id: e.profile_id, fn: p.fn ?? '', ln: p.ln ?? '', co: p.co ?? '—', city: p.city ?? '—', region: p.region ?? '', event_date: eventDate })
+            if (!e.profile_id) return
+            if (items.some((i) => String(i.profile_id) === String(e.profile_id))) return
+            items.push({
+              id: `e-${e.id}`,
+              profile_id: e.profile_id,
+              fn: pr?.first_name ?? '',
+              ln: pr?.last_name ?? '',
+              co: pr?.company ?? '—',
+              city: pr?.city ?? '—',
+              region: pr?.region ?? '',
+              event_date: eventDate,
+            })
           })
         }
+        const { data: profRows } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name, company, city, region, next_event_date, stage')
+          .in('stage', pointEtapeStages)
+          .gte('next_event_date', startOfWeek)
+          .lte('next_event_date', endOfWeek)
+        if (profRows?.length) {
+          profRows.forEach((p) => {
+            if (items.some((i) => String(i.profile_id) === String(p.id))) return
+            items.push({
+              id: `p-${p.id}`,
+              profile_id: p.id,
+              fn: p.first_name ?? '',
+              ln: p.last_name ?? '',
+              co: p.company ?? '—',
+              city: p.city ?? '—',
+              region: p.region ?? '',
+              event_date: p.next_event_date,
+            })
+          })
+        }
+      } else {
+        const profileIds = profilesForPointsEtape.map((p) => p.id).filter(Boolean)
+        if (profileIds.length > 0) {
+          const { data: events } = await supabase
+            .from('events')
+            .select('id, profile_id, event_date, event_type, date')
+            .ilike('event_type', '%Point d\'étape%')
+            .gte('event_date', startOfWeek)
+            .lte('event_date', endOfWeek)
+            .in('profile_id', profileIds)
+          if (events?.length) {
+            events.forEach((e) => {
+              const p = profilesForPointsEtape.find((pr) => String(pr.id) === String(e.profile_id))
+              if (!p) return
+              const eventDate = e.event_date || e.date
+              items.push({ id: `e-${e.id}`, profile_id: e.profile_id, fn: p.fn ?? '', ln: p.ln ?? '', co: p.co ?? '—', city: p.city ?? '—', region: p.region ?? '', event_date: eventDate })
+            })
+          }
+        }
+        const fromProfiles = profilesForPointsEtape.filter((p) => {
+          if (!pointEtapeStages.includes(p.stg)) return false
+          const d = p.next_event_date
+          if (!d) return false
+          const dStr = typeof d === 'string' ? d.split('T')[0] : new Date(d).toISOString().split('T')[0]
+          return dStr >= startOfWeek && dStr <= endOfWeek
+        })
+        fromProfiles.forEach((p) => {
+          if (items.some((i) => String(i.profile_id) === String(p.id))) return
+          items.push({ id: `p-${p.id}`, profile_id: p.id, fn: p.fn ?? '', ln: p.ln ?? '', co: p.co ?? '—', city: p.city ?? '—', region: p.region ?? '', event_date: p.next_event_date })
+        })
       }
-      const pointEtapeStages = ["Point d'étape", "Point d'étape téléphonique"]
-      const fromProfiles = P.filter((p) => {
-        if (!pointEtapeStages.includes(p.stg)) return false
-        const d = p.next_event_date
-        if (!d) return false
-        const dStr = typeof d === 'string' ? d.split('T')[0] : new Date(d).toISOString().split('T')[0]
-        return dStr >= todayStr && dStr <= inSevenDaysStr
-      })
-      fromProfiles.forEach((p) => {
-        if (items.some((i) => String(i.profile_id) === String(p.id))) return
-        const d = p.next_event_date
-        items.push({ id: `p-${p.id}`, profile_id: p.id, fn: p.fn ?? '', ln: p.ln ?? '', co: p.co ?? '—', city: p.city ?? '—', region: p.region ?? '', event_date: d })
-      })
+
       items.sort((a, b) => new Date(a.event_date) - new Date(b.event_date))
       setPointsEtapeCetteSemaine(items)
       setPointsEtapeLoading(false)
     }
     loadPointsEtape()
-  }, [P.map((p) => p.id).filter(Boolean).join(','), ownerFilter])
+  }, [
+    isGlobalView,
+    profilesForPointsEtape.map((p) => p.id).filter(Boolean).join(','),
+    ownerFilter,
+    viewMode,
+    role,
+  ])
 
   useEffect(() => {
     const loadContactesRecrutes = async () => {
@@ -279,8 +365,8 @@ export default function Dashboard() {
       const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString()
       const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59).toISOString()
 
-      const isGlobalView = role === 'admin' && viewMode === 'global'
-      const ownerFilterForQuery = isGlobalView ? null : user?.id
+      const globalDashboard = viewMode === 'global' && role === 'admin'
+      const ownerFilterForQuery = globalDashboard ? null : user?.id
 
       let qCeMois = supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', startOfMonth).lte('created_at', endOfMonth)
       let qMoisPrec = supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', startOfLastMonth).lte('created_at', endOfLastMonth)
@@ -311,7 +397,7 @@ export default function Dashboard() {
   useEffect(() => {
     const loadStageCounts = async () => {
       let query = supabase.from('profiles').select('stage').neq('maturity', 'Archivé')
-      if (role === 'admin' && viewMode === 'global') {
+      if (viewMode === 'global' && role === 'admin') {
         if (ownerFilter !== 'all') {
           query = query.eq('owner_email', ownerFilter)
         }
@@ -330,6 +416,53 @@ export default function Dashboard() {
     }
     loadStageCounts()
   }, [role, viewMode, ownerFilter, user?.id])
+
+  useEffect(() => {
+    let cancelled = false
+    const loadAdvisorObjectifs = async () => {
+      const globalTeam = viewMode === 'global' && role === 'admin'
+      if (globalTeam) {
+        setGlobalAdvisorBreakdown(null)
+        const { data } = await supabase
+          .from('profiles')
+          .select('owner_id, owner_full_name, owner_email, created_at')
+          .eq('stage', 'Recruté')
+        if (cancelled) return
+        const byKey = {}
+        ;(data || []).forEach((row) => {
+          if (!row.created_at || new Date(row.created_at).getFullYear() !== 2026) return
+          const key = row.owner_id != null ? `id:${row.owner_id}` : (row.owner_email ? `em:${row.owner_email}` : 'none')
+          if (!byKey[key]) {
+            byKey[key] = {
+              key,
+              owner_id: row.owner_id,
+              owner_email: row.owner_email || '',
+              owner_full_name: row.owner_full_name || '',
+              count: 0,
+            }
+          }
+          byKey[key].count++
+        })
+        setGlobalAdvisorBreakdown(Object.values(byKey).sort((a, b) => b.count - a.count))
+        setMyAdvisorRecrutes2026(null)
+        return
+      }
+      setGlobalAdvisorBreakdown(null)
+      if (!user?.id) {
+        setMyAdvisorRecrutes2026(null)
+        return
+      }
+      const { count } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('owner_id', user.id)
+        .eq('stage', 'Recruté')
+        .gte('created_at', '2026-01-01T00:00:00.000Z')
+      if (!cancelled) setMyAdvisorRecrutes2026(count ?? 0)
+    }
+    loadAdvisorObjectifs()
+    return () => { cancelled = true }
+  }, [viewMode, role, user?.id])
 
   const maxStageCount = Math.max(1, ...stageCounts.map((s) => s.count))
 
@@ -463,10 +596,16 @@ export default function Dashboard() {
             <div style={sectionTitleStyle}>Objectif 2026</div>
             <div className="text-[12px] mb-2" style={{ color: '#888' }}>{isGlobalView ? '30 recrutés (équipe)' : '15 recrutés (ma vue)'}</div>
             {(() => {
-              const year2026 = 2026
-              const recruited2026 = P.filter((p) => p.stg === 'Recruté' && p.created_at && new Date(p.created_at).getFullYear() === year2026)
-              const count = recruited2026.length
               const goal = isGlobalView ? 30 : 15
+              const count = recrutes2026
+              if (count == null) {
+                return (
+                  <>
+                    <div style={valueStyle} className="mb-2">— / {goal}</div>
+                    <div className="text-[12px]" style={{ color: '#888' }}>Chargement…</div>
+                  </>
+                )
+              }
               const pct = Math.min(100, Math.round((count / goal) * 100))
               return (
                 <>
@@ -561,40 +700,64 @@ export default function Dashboard() {
             </ul>
           </div>
 
-          {isGlobalView && (() => {
-            const year2026 = 2026
-            const byOwner = {}
-            allProfiles.forEach((p) => {
-              const email = p.owner_email || ''
-              if (!byOwner[email]) byOwner[email] = { email, count: 0 }
-              if (p.stg === 'Recruté' && p.created_at && new Date(p.created_at).getFullYear() === year2026) byOwner[email].count++
-            })
-            const owners = Object.values(byOwner).filter((o) => o.email).sort((a, b) => b.count - a.count)
-            if (owners.length === 0) return null
-            return (
-              <div style={cardStyle}>
-                <div style={sectionTitleStyle}>Objectif par conseiller</div>
-                <div className="space-y-3">
-                  {owners.map((o) => {
-                    const pct = Math.min(100, Math.round((o.count / 15) * 100))
-                    const barColor = pct >= 100 ? '#16a34a' : pct >= 67 ? '#3b82f6' : pct >= 34 ? '#f59e0b' : '#dc2626'
-                    const name = ownerDisplay(allProfiles.find((p) => (p.owner_email || '') === o.email) || { owner_email: o.email })
-                    return (
-                      <div key={o.email}>
+          {isGlobalView && globalAdvisorBreakdown === null && (
+            <div style={cardStyle}>
+              <div style={sectionTitleStyle}>Objectif par conseiller</div>
+              <div className="text-[13px]" style={{ color: '#888' }}>Chargement…</div>
+            </div>
+          )}
+          {isGlobalView && globalAdvisorBreakdown !== null && globalAdvisorBreakdown.length > 0 && (
+            <div style={cardStyle}>
+              <div style={sectionTitleStyle}>Objectif par conseiller</div>
+              <div className="space-y-3">
+                {globalAdvisorBreakdown.map((o) => {
+                  const pct = Math.min(100, Math.round((o.count / 15) * 100))
+                  const barColor = pct >= 100 ? '#16a34a' : pct >= 67 ? '#3b82f6' : pct >= 34 ? '#f59e0b' : '#dc2626'
+                  const name = ownerDisplay({ owner_full_name: o.owner_full_name, owner_email: o.owner_email })
+                  return (
+                    <div key={o.key}>
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-[13px] font-medium">{name}</span>
+                        <span className="text-[12px] text-[var(--t2)]">{o.count} / 15</span>
+                      </div>
+                      <div style={{ height: 6, background: 'rgba(0,0,0,0.08)', borderRadius: 4, overflow: 'hidden' }}>
+                        <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: 4, transition: 'width 0.3s' }} />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+          {!isGlobalView && user?.id && (
+            <div style={cardStyle}>
+              <div style={sectionTitleStyle}>Objectif par conseiller</div>
+              {myAdvisorRecrutes2026 == null ? (
+                <div className="text-[13px]" style={{ color: '#888' }}>Chargement…</div>
+              ) : (
+                (() => {
+                  const goalPerso = 15
+                  const myCount = myAdvisorRecrutes2026
+                  const pct = Math.min(100, Math.round((myCount / goalPerso) * 100))
+                  const barColor = pct >= 100 ? '#16a34a' : pct >= 67 ? '#3b82f6' : pct >= 34 ? '#f59e0b' : '#dc2626'
+                  const name = ownerDisplay(allProfiles.find((p) => String(p.owner_id || '') === String(user.id)) || { owner_email: user.email || '' })
+                  return (
+                    <div className="space-y-3">
+                      <div>
                         <div className="flex justify-between items-center mb-1">
                           <span className="text-[13px] font-medium">{name}</span>
-                          <span className="text-[12px] text-[var(--t2)]">{o.count} / 15</span>
+                          <span className="text-[12px] text-[var(--t2)]">{myCount} / {goalPerso}</span>
                         </div>
                         <div style={{ height: 6, background: 'rgba(0,0,0,0.08)', borderRadius: 4, overflow: 'hidden' }}>
                           <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: 4, transition: 'width 0.3s' }} />
                         </div>
                       </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )
-          })()}
+                    </div>
+                  )
+                })()
+              )}
+            </div>
+          )}
         </div>
       </div>
 
