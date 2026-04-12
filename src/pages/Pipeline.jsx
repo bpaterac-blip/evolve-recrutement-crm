@@ -840,18 +840,38 @@ export default function Pipeline() {
           notes,
         })
         if (profile?.id) {
-          const { data: eventData, error: eventError } = await supabase
+          const { data: existingEvent } = await supabase
             .from('events')
-            .insert({
-              profile_id: profile.id,
-              event_type: targetStage,
-              event_date: `${selectedDate}T${selectedTime || '09:00'}:00`,
-              description: [selectedRdvType, notes].filter(Boolean).join(' · '),
-              owner_id: user?.id,
-            })
-            .select()
-          if (eventError) console.error('ERROR event insert:', eventError)
-          else console.log('SUCCESS event insert:', eventData)
+            .select('id')
+            .eq('profile_id', profile.id)
+            .eq('event_type', targetStage)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+          if (existingEvent?.id) {
+            const { error: updateError } = await supabase
+              .from('events')
+              .update({
+                event_date: `${selectedDate}T${selectedTime || '09:00'}:00`,
+                description: [selectedRdvType, notes].filter(Boolean).join(' · '),
+              })
+              .eq('id', existingEvent.id)
+            if (updateError) console.error('ERROR event update:', updateError)
+            else console.log('SUCCESS event update:', existingEvent.id)
+          } else {
+            const { data: eventData, error: eventError } = await supabase
+              .from('events')
+              .insert({
+                profile_id: profile.id,
+                event_type: targetStage,
+                event_date: `${selectedDate}T${selectedTime || '09:00'}:00`,
+                description: [selectedRdvType, notes].filter(Boolean).join(' · '),
+                owner_id: user?.id,
+              })
+              .select()
+            if (eventError) console.error('ERROR event insert:', eventError)
+            else console.log('SUCCESS event insert:', eventData)
+          }
         } else {
           console.error('DEBUG event insert: profile.id manquant, insert events ignoré')
         }
