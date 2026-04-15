@@ -12,9 +12,31 @@ const RECRUITED_GREEN = '#16a34a'
 
 const ANALYTICS_SOURCES = ['Chasse LinkedIn', 'Chasse Mail', 'Recommandation', 'Ads', 'Chasse externe', 'Inbound Marketing', 'Autre']
 
-const ANALYTICS_STAGES = ['R0', 'R1', 'Point Business Plan', "Point d'étape", 'Démission reconversion', 'R2 Amaury', 'Point juridique', 'Recruté']
+// Mandatory stages for the main funnel — optional stages (PBP, Démission) are excluded
+// to avoid biasing conversion rates for profiles who legitimately skip them
+const ANALYTICS_STAGES = ['R0', 'R1', "Point d'étape", 'R2 Amaury', 'Point juridique', 'Recruté']
+
+// All stages in pipeline order (including optional) — used for cumulative index lookup
+const ALL_PIPELINE_STAGES = ['R0', 'R1', 'Point Business Plan', "Point d'étape", 'Démission reconversion', 'R2 Amaury', 'Point juridique', 'Recruté']
+
+// Optional stages shown separately
+const OPTIONAL_STAGES = [
+  { key: 'Point Business Plan', skipFlag: 'skip_business_plan' },
+  { key: 'Démission reconversion', skipFlag: 'skip_demission' },
+]
 
 const CHUTE_STAGES = ['Avant pipeline', 'R0', 'R1', 'Point Business Plan', "Point d'étape téléphonique", 'Démission reconversion', 'R2 Amaury', 'Point juridique']
+
+// Color palette for sources
+const SOURCE_COLORS = {
+  'Chasse LinkedIn': '#0077B5',
+  'Chasse Mail': '#6366f1',
+  'Recommandation': '#16a34a',
+  'Ads': '#ea580c',
+  'Chasse externe': '#8b5cf6',
+  'Inbound Marketing': '#0891b2',
+  'Autre': '#94a3b8',
+}
 
 function normalizeStageForMatch(stg) {
   if (stg === "Point d'étape") return "Point d'étape téléphonique"
@@ -22,33 +44,22 @@ function normalizeStageForMatch(stg) {
   return stg || ''
 }
 
+/**
+ * Returns the index in ALL_PIPELINE_STAGES for a given stage string.
+ * Higher index = further in the pipeline.
+ */
+function stageIndex(stg) {
+  if (!stg) return -1
+  const normalized = stg === "Point d'étape téléphonique" ? "Point d'étape" : (stg === 'R2 Baptiste' ? 'R2 Amaury' : stg)
+  const idx = ALL_PIPELINE_STAGES.indexOf(normalized)
+  return idx
+}
+
 const SECTOR_KEYWORDS = {
   Banque: ['bnp', 'société générale', 'cic', 'lcl', 'crédit agricole', 'credit agricole', 'banque', 'bpce', "caisse d'épargne", 'banque populaire', 'la banque postale'],
   Assurance: ['axa', 'allianz', 'generali', 'swiss life', 'groupama', 'maif', 'ag2r', 'aviva', 'mma', 'natixis'],
   'Cabinet CGP': ['cabinet', 'patrimoine', 'gestion', 'conseil', 'indépendant', 'cgp', 'laplace', 'primonial'],
 }
-
-const IconClock = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="10" />
-    <polyline points="12 6 12 12 16 14" />
-  </svg>
-)
-
-const IconUser = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-    <circle cx="12" cy="7" r="4" />
-  </svg>
-)
-
-const IconUserOff = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-    <circle cx="12" cy="7" r="4" />
-    <line x1="1" y1="1" x2="23" y2="23" />
-  </svg>
-)
 
 const IconEmpty = () => (
   <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -127,31 +138,100 @@ function getFunnelBarColor(stage) {
   return GOLD
 }
 
-function FunnelBar({ step, funnelCounts, maxCount, showRate }) {
-  const { stage, n } = step
-  const idx = funnelCounts.findIndex((s) => s.stage === stage)
-  const nextCount = funnelCounts[idx + 1]?.n ?? 0
-  const rate = n > 0 && idx < funnelCounts.length - 1 ? Math.round((nextCount / n) * 100) : null
-  const widthPct = Math.max(4, maxCount > 0 ? (n / maxCount) * 100 : 4)
-  const barBg = n === 0 ? 'rgba(0,0,0,0.08)' : getFunnelBarColor(stage)
+function initials(fn, ln) {
+  return ((fn?.[0] || '') + (ln?.[0] || '')).toUpperCase() || '?'
+}
+
+/* ─────────────────────────────────────────
+   FUNNEL BAR — now with cumulative counts
+   ───────────────────────────────────────── */
+function FunnelBar({ stage, reached, maxReached, prevReached, isLast }) {
+  const widthPct = Math.max(4, maxReached > 0 ? (reached / maxReached) * 100 : 4)
+  const barBg = reached === 0 ? 'rgba(0,0,0,0.08)' : getFunnelBarColor(stage)
+  const convRate = prevReached > 0 && !isLast ? Math.round((reached / prevReached) * 100) : null
+
   return (
-    <>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
+    <div style={{ marginBottom: 2 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <span style={{ fontSize: 12, color: '#555', width: 160, flexShrink: 0 }}>{stage}</span>
         <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={{ flex: 1, height: 24, background: 'rgba(0,0,0,0.06)', borderRadius: 4, overflow: 'hidden' }}>
             <div style={{ width: `${widthPct}%`, height: '100%', background: barBg, borderRadius: 4, minWidth: 4, transition: 'width 0.3s' }} />
           </div>
-          <span style={{ fontSize: 13, fontWeight: 600, color: ACCENT, minWidth: 28 }}>{n}</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: ACCENT, minWidth: 28 }}>{reached}</span>
         </div>
       </div>
-      {showRate && rate != null && (
-        <div style={{ fontSize: 10, color: '#aaa', marginLeft: 160, marginBottom: 8 }}>↓ {rate}% de passage</div>
+      {convRate != null && (
+        <div style={{ fontSize: 10, color: '#aaa', marginLeft: 160, marginBottom: 4, marginTop: 2 }}>↓ {convRate}% de passage</div>
       )}
-    </>
+    </div>
   )
 }
 
+/* ─────────────────────────────────────────────────
+   SOURCE BREAKDOWN BAR — stacked bar per stage
+   ───────────────────────────────────────────────── */
+function SourceBreakdownRow({ stage, sourceCounts, totalReached, maxReached }) {
+  if (totalReached === 0) return null
+  const widthPct = maxReached > 0 ? (totalReached / maxReached) * 100 : 0
+
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ fontSize: 12, color: '#555', width: 160, flexShrink: 0 }}>{stage}</span>
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ flex: 1, height: 18, background: 'rgba(0,0,0,0.04)', borderRadius: 4, overflow: 'hidden', display: 'flex' }}>
+            {sourceCounts.map(({ source, count }) => {
+              if (count === 0) return null
+              const segPct = (count / totalReached) * widthPct
+              return (
+                <div
+                  key={source}
+                  title={`${source}: ${count} (${Math.round((count / totalReached) * 100)}%)`}
+                  style={{
+                    width: `${Math.max(0.5, segPct)}%`,
+                    height: '100%',
+                    background: SOURCE_COLORS[source] || '#94a3b8',
+                    transition: 'width 0.3s',
+                  }}
+                />
+              )
+            })}
+          </div>
+          <span style={{ fontSize: 12, fontWeight: 600, color: ACCENT, minWidth: 28 }}>{totalReached}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ─────────────────────────────────
+   CONVERSION INTER-ÉTAPES TABLE
+   ───────────────────────────────── */
+function ConversionTable({ conversions }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {conversions.map((c) => {
+        const barPct = Math.max(4, Math.min(100, c.rate))
+        const barColor = c.rate >= 50 ? RECRUITED_GREEN : c.rate >= 25 ? GOLD : CHUTE_RED
+        return (
+          <div key={c.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 11, color: '#555', width: 200, flexShrink: 0 }}>{c.label}</span>
+            <div style={{ flex: 1, height: 10, background: 'rgba(0,0,0,0.06)', borderRadius: 5, overflow: 'hidden' }}>
+              <div style={{ width: `${barPct}%`, height: '100%', background: barColor, borderRadius: 5, transition: 'width 0.3s' }} />
+            </div>
+            <span style={{ fontSize: 12, fontWeight: 600, color: barColor, minWidth: 38, textAlign: 'right' }}>{c.rate}%</span>
+            <span style={{ fontSize: 10, color: '#aaa', minWidth: 50 }}>{c.from} → {c.to}</span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/* ────────────────────────────────
+   CHUTE (DROP-OFF) BAR ROW
+   ──────────────────────────────── */
 function ChuteBarRow({ data, maxChute, onOpenModal }) {
   const { stage, chuteCount, taux, profiles } = data
   const hasChute = chuteCount > 0
@@ -173,6 +253,9 @@ function ChuteBarRow({ data, maxChute, onOpenModal }) {
   )
 }
 
+/* ──────────────────────────────────
+   DURATION BAR ROW
+   ────────────────────────────────── */
 function DurationBarRow({ stage, days }) {
   const maxDays = 60
   const widthPct = days != null ? Math.min(100, (days / maxDays) * 100) : 0
@@ -190,6 +273,9 @@ function DurationBarRow({ stage, days }) {
   )
 }
 
+/* ──────────────────────────────────
+   RAISONS D'ABANDON LIST
+   ────────────────────────────────── */
 function RaisonsAbandonBarList({ data, onRowClick }) {
   const rows = data.filter((r) => r.count > 0).sort((a, b) => b.count - a.count)
   const maxCount = Math.max(1, ...rows.map((r) => r.count))
@@ -204,34 +290,10 @@ function RaisonsAbandonBarList({ data, onRowClick }) {
             tabIndex={0}
             onClick={() => onRowClick(r)}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRowClick(r) } }}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              cursor: 'pointer',
-            }}
+            style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}
           >
-            <span
-              style={{
-                fontSize: 13,
-                color: ACCENT,
-                flex: '0 1 42%',
-                minWidth: 0,
-                lineHeight: 1.3,
-              }}
-            >
-              {r.type}
-            </span>
-            <div
-              style={{
-                flex: 1,
-                minWidth: 48,
-                height: 6,
-                background: '#E7E0D0',
-                borderRadius: 3,
-                overflow: 'hidden',
-              }}
-            >
+            <span style={{ fontSize: 13, color: ACCENT, flex: '0 1 42%', minWidth: 0, lineHeight: 1.3 }}>{r.type}</span>
+            <div style={{ flex: 1, minWidth: 48, height: 6, background: '#E7E0D0', borderRadius: 3, overflow: 'hidden' }}>
               <div style={{ width: `${pct}%`, height: '100%', background: '#173731', borderRadius: 3, minWidth: pct > 0 ? 2 : 0 }} />
             </div>
             <span style={{ fontSize: 13, fontWeight: 500, color: '#173731', flexShrink: 0, minWidth: 28, textAlign: 'right' }}>{r.count}</span>
@@ -242,26 +304,43 @@ function RaisonsAbandonBarList({ data, onRowClick }) {
   )
 }
 
+/* ──────────────────────────────────────
+   SOURCE ATTRIBUTION FOR RECRUITS
+   ────────────────────────────────────── */
 function SourcesRecrutesBars({ srcData }) {
-  const withRecrutes = srcData.filter((s) => s.recruited > 0).sort((a, b) => b.pctRecrutes - a.pctRecrutes)
-  const withoutRecrutes = srcData.filter((s) => s.recruited === 0)
+  const withRecrutes = srcData.filter((s) => s.recruited > 0).sort((a, b) => b.recruited - a.recruited)
+  const withoutRecrutes = srcData.filter((s) => s.recruited === 0 && s.total > 0)
   const ordered = [...withRecrutes, ...withoutRecrutes]
+  const maxRecruited = Math.max(1, ...ordered.map((s) => s.recruited))
   return (
     <div className="space-y-3">
-      {ordered.map((s) => (
-        <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 12, color: '#444', width: 160, flexShrink: 0 }}>{s.label}</span>
-          <div style={{ flex: 1, maxWidth: '100%', height: 8, background: 'rgba(0,0,0,0.06)', borderRadius: 6, overflow: 'hidden' }}>
-            <div style={{ width: `${Math.min(100, s.pctRecrutes)}%`, height: '100%', background: s.recruited > 0 ? RECRUITED_GREEN : 'rgba(0,0,0,0.08)', borderRadius: 6, transition: 'width 0.3s' }} />
+      {ordered.map((s) => {
+        const barPct = maxRecruited > 0 ? Math.max(4, (s.recruited / maxRecruited) * 100) : 4
+        return (
+          <div key={s.label}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ fontSize: 12, color: '#444', width: 160, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ width: 10, height: 10, borderRadius: 2, background: SOURCE_COLORS[s.label] || '#94a3b8', flexShrink: 0 }} />
+                {s.label}
+              </span>
+              <div style={{ flex: 1, maxWidth: '100%', height: 10, background: 'rgba(0,0,0,0.06)', borderRadius: 6, overflow: 'hidden' }}>
+                <div style={{ width: `${s.recruited > 0 ? barPct : 0}%`, height: '100%', background: s.recruited > 0 ? RECRUITED_GREEN : 'rgba(0,0,0,0.08)', borderRadius: 6, transition: 'width 0.3s' }} />
+              </div>
+              <span style={{ fontSize: 12, color: '#666', minWidth: 90, textAlign: 'right' }}>
+                <strong>{s.recruited}</strong> recruté{s.recruited > 1 ? 's' : ''} / {s.total} <span style={{ color: '#aaa' }}>({s.conversionRate}%)</span>
+              </span>
+            </div>
           </div>
-          <span style={{ fontSize: 12, color: '#666', minWidth: 70 }}>{s.pctRecrutes}% · {s.recruited} rec.</span>
-        </div>
-      ))}
+        )
+      })}
       {ordered.length === 0 && <div className="text-[13px] py-4" style={{ color: '#888' }}>Aucune donnée</div>}
     </div>
   )
 }
 
+/* ──────────────────────────────────
+   CHUTE PROFILES MODAL
+   ────────────────────────────────── */
 function ChuteProfilesModal({ title, profiles, columns, onClose }) {
   const formatDate = (d) => {
     if (!d) return '—'
@@ -314,8 +393,20 @@ function ChuteProfilesModal({ title, profiles, columns, onClose }) {
   )
 }
 
-function initials(fn, ln) {
-  return ((fn?.[0] || '') + (ln?.[0] || '')).toUpperCase() || '?'
+/* ──────────────────────────────
+   SOURCE LEGEND
+   ────────────────────────────── */
+function SourceLegend({ sources }) {
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 12 }}>
+      {sources.map((s) => (
+        <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#666' }}>
+          <span style={{ width: 10, height: 10, borderRadius: 2, background: SOURCE_COLORS[s] || '#94a3b8', flexShrink: 0 }} />
+          {s}
+        </div>
+      ))}
+    </div>
+  )
 }
 
 const MATURITY_BADGE_STYLES = {
@@ -398,6 +489,9 @@ function SessionsFormationCard({ sessions, goal }) {
   )
 }
 
+/* ═══════════════════════════════════════════
+   MAIN ANALYTICS COMPONENT
+   ═══════════════════════════════════════════ */
 export default function Analytics() {
   const { filteredProfiles } = useCRM()
   const { user, role } = useAuth()
@@ -449,12 +543,10 @@ export default function Analytics() {
 
   useEffect(() => {
     const load = async () => {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('profiles')
         .select('chute_type, maturity')
         .eq('maturity', 'Chute')
-
-      console.log('Chutes data:', data, 'error:', error)
 
       const rows = data || []
       const byType = {}
@@ -480,21 +572,133 @@ export default function Analytics() {
     const forAlways = ownerFilteredAll
     const chuteProfiles = forAlways.filter((p) => p.mat === 'Chute' || p.mat === 'Pas intéressé')
 
-    const countInStage = (stg) => {
-      const excludeSkip = (p) => {
-        if (stg === 'Point Business Plan' && p.skip_business_plan) return false
-        if (stg === 'Démission reconversion' && p.skip_demission) return false
-        return true
-      }
-      if (stg === "Point d'étape") return forFunnel.filter((p) => normalizeStageForMatch(p.stg) === "Point d'étape téléphonique" && excludeSkip(p)).length
-      if (stg === "Point d'étape téléphonique") return forFunnel.filter((p) => normalizeStageForMatch(p.stg) === stg && excludeSkip(p)).length
-      return forFunnel.filter((p) => p.stg === stg && excludeSkip(p)).length
+    /* ─── ACTIVITY-BASED STAGE HISTORY ─────────────────────────────────
+       Build a set of stages each profile has EXPLICITLY been recorded at,
+       using stage_change activities (new_value, old_value, or parsed note).
+       Profiles with no activities fall back to the cumulative approach.
+       ─────────────────────────────────────────────────────────────────── */
+    const normalizeStg = (s) => {
+      if (!s) return ''
+      if (s === "Point d'étape téléphonique") return "Point d'étape"
+      if (s === 'R2 Baptiste') return 'R2 Amaury'
+      return s
     }
 
-    const funnelCounts = ANALYTICS_STAGES.map((s) => ({ stage: s, n: countInStage(s) }))
+    const stagesReachedByProfile = {}
+    activities.forEach((a) => {
+      const pid = a.profile_id
+      if (!stagesReachedByProfile[pid]) stagesReachedByProfile[pid] = new Set()
+      // Use explicit old_value/new_value fields if available
+      if (a.new_value) stagesReachedByProfile[pid].add(normalizeStg(a.new_value))
+      if (a.old_value) stagesReachedByProfile[pid].add(normalizeStg(a.old_value))
+      // Fallback: parse "Stage A → Stage B" from note field
+      if (a.note && a.note.includes(' → ')) {
+        const parts = a.note.split(' → ')
+        const from = parts[0]?.trim()
+        // strip "(rétrospectif)" suffix if present
+        const to = parts[1]?.replace(/\s*\(.*?\)/, '').trim()
+        if (from) stagesReachedByProfile[pid].add(normalizeStg(from))
+        if (to) stagesReachedByProfile[pid].add(normalizeStg(to))
+      }
+    })
+
+    /* ─── SMART reachedStage ─────────────────────────────────────────────
+       If the profile has activity records: use them (activity-based).
+       If no activities: fall back to cumulative current-stage approach.
+       Always count the current stage and chute stage directly.
+       ─────────────────────────────────────────────────────────────────── */
+    const reachedStage = (profile, targetStageIdx) => {
+      const targetStage = ALL_PIPELINE_STAGES[targetStageIdx]
+      const pStg = normalizeStg(profile.stg)
+      const pIdx = stageIndex(pStg)
+
+      // Always count if current stage IS the target
+      if (pIdx === targetStageIdx) return true
+
+      // For chute profiles: check chute_stade
+      if (profile.mat === 'Chute' || profile.mat === 'Pas intéressé') {
+        const chuteStade = normalizeStg(profile.chute_stade || profile.stg)
+        if (stageIndex(chuteStade) === targetStageIdx) return true
+        // Also check cumulative for chute (they dropped after reaching a later stage)
+        if (stageIndex(chuteStade) > targetStageIdx) return true
+      }
+
+      // Activity-based: if profile has recorded activities, use them
+      const actStages = stagesReachedByProfile[profile.id]
+      if (actStages && actStages.size > 0) {
+        return actStages.has(targetStage)
+      }
+
+      // No activities recorded yet: cumulative fallback (current stage >= target)
+      return pIdx >= targetStageIdx
+    }
+
+    // Main funnel: mandatory stages only
+    const funnelCounts = ANALYTICS_STAGES.map((stage) => {
+      const targetIdx = stageIndex(stage)
+      const reached = forFunnel.filter((p) => reachedStage(p, targetIdx)).length
+      return { stage, n: reached }
+    })
+
+    /* ─── OPTIONAL STAGES STATS ─────────────────────────────────────────
+       For each optional stage, compute stats only for eligible profiles
+       (those who haven't set the skip flag and who have reached R1+).
+       ─────────────────────────────────────────────────────────────────── */
+    const r1Idx = stageIndex('R1')
+    const optionalStageStats = OPTIONAL_STAGES.map(({ key, skipFlag }) => {
+      const stgIdx = stageIndex(key)
+      // Eligible = reached R1 and NOT skipped this stage
+      const eligible = forFunnel.filter((p) => reachedStage(p, r1Idx) && !p[skipFlag])
+      // Passed through = reached this optional stage
+      const passed = eligible.filter((p) => reachedStage(p, stgIdx))
+      // Currently skipped explicitly
+      const skipped = forFunnel.filter((p) => reachedStage(p, r1Idx) && p[skipFlag])
+      const taux = eligible.length > 0 ? Math.round((passed.length / eligible.length) * 100) : 0
+      return { stage: key, eligible: eligible.length, passed: passed.length, skipped: skipped.length, taux }
+    })
+
+    /* ─── SOURCE BREAKDOWN PER STAGE (cumulative) ───────────────────── */
+    const sourceByStage = ANALYTICS_STAGES.map((stage) => {
+      const targetIdx = stageIndex(stage)
+      const profilesAtStage = forFunnel.filter((p) => reachedStage(p, targetIdx))
+      const sourceCounts = ANALYTICS_SOURCES.map((source) => ({
+        source,
+        count: profilesAtStage.filter((p) => mapSourceToDisplay(p.src || 'Chasse LinkedIn') === source).length,
+      }))
+      return {
+        stage,
+        totalReached: profilesAtStage.length,
+        sourceCounts,
+      }
+    })
+
+    /* ─── STAGE-TO-STAGE CONVERSION RATES ───────────────────────────── */
+    const conversions = []
+    for (let i = 0; i < ANALYTICS_STAGES.length - 1; i++) {
+      const from = funnelCounts[i].n
+      const to = funnelCounts[i + 1].n
+      const rate = from > 0 ? Math.round((to / from) * 100) : 0
+      conversions.push({
+        label: `${ANALYTICS_STAGES[i]} → ${ANALYTICS_STAGES[i + 1]}`,
+        from,
+        to,
+        rate,
+      })
+    }
+    // Global R0 → Recruté
+    const globalFrom = funnelCounts[0].n
+    const globalTo = funnelCounts[funnelCounts.length - 1].n
+    conversions.push({
+      label: 'R0 → Recruté (global)',
+      from: globalFrom,
+      to: globalTo,
+      rate: globalFrom > 0 ? Math.round((globalTo / globalFrom) * 100) : 0,
+    })
+
     const total = forFunnel.length
     const totalRecrutes = forAlways.filter((p) => p.stg === 'Recruté').length
 
+    /* ─── STAGE DURATIONS ───────────────────────────────────────────── */
     const stageDurations = {}
     const stageOrder = ANALYTICS_STAGES
     const actsByProfile = {}
@@ -537,6 +741,7 @@ export default function Analytics() {
       avgByStage[s] = arr.length > 0 ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : null
     })
 
+    /* ─── CHUTE (DROP-OFF) BY STAGE ─────────────────────────────────── */
     const chuteByStage = CHUTE_STAGES.map((stage) => {
       const matchStg = (p) => {
         const stade = p.chute_stade || p.stg || 'Avant pipeline'
@@ -545,18 +750,19 @@ export default function Analytics() {
         return stade === stage
       }
       const chuteCount = chuteProfiles.filter((p) => matchStg(p)).length
-      const currentInStage = stage === 'Avant pipeline' ? 0 : forAlways.filter((p) => {
-        const s = p.stg
-        if (stage === "Point d'étape téléphonique") return normalizeStageForMatch(s) === stage && p.mat !== 'Chute' && p.mat !== 'Pas intéressé'
-        return s === stage && p.mat !== 'Chute' && p.mat !== 'Pas intéressé'
-      }).length
-      const denom = currentInStage + chuteCount
-      const taux = denom > 0 ? Math.round((chuteCount / denom) * 100) : 0
-      return { stage, chuteCount, currentInStage, taux, profiles: chuteProfiles.filter((p) => matchStg(p)) }
+      // For taux: chute at this stage / total who reached this stage
+      const lookupStage = stage === "Point d'étape téléphonique" ? "Point d'étape" : stage
+      const thisStageIdx = stageIndex(lookupStage)
+      const totalReachedHere = thisStageIdx >= 0
+        ? forFunnel.filter((p) => reachedStage(p, thisStageIdx)).length
+        : forFunnel.length
+      const taux = totalReachedHere > 0 ? Math.round((chuteCount / totalReachedHere) * 100) : 0
+      return { stage, chuteCount, taux, profiles: chuteProfiles.filter((p) => matchStg(p)) }
     })
 
     const totalChute = chuteProfiles.length
 
+    /* ─── SOURCE ATTRIBUTION ────────────────────────────────────────── */
     const bySource = {}
     forAlways.forEach((p) => {
       const s = mapSourceToDisplay(p.src || 'Chasse LinkedIn')
@@ -569,8 +775,10 @@ export default function Analytics() {
       total: bySource[s]?.total || 0,
       recruited: bySource[s]?.recruited || 0,
       pctRecrutes: totalRecrutes > 0 ? Math.round(((bySource[s]?.recruited || 0) / totalRecrutes) * 100) : 0,
+      conversionRate: (bySource[s]?.total || 0) > 0 ? Math.round(((bySource[s]?.recruited || 0) / (bySource[s]?.total || 1)) * 100) : 0,
     }))
 
+    /* ─── RECRUTÉS STATS ────────────────────────────────────────────── */
     const recrutesProfiles = forAlways.filter((p) => p.stg === 'Recruté')
     const year2026 = 2026
     const recrutes2026Filter = (p) => p.stg === 'Recruté' && p.created_at && new Date(p.created_at).getFullYear() === year2026
@@ -590,6 +798,7 @@ export default function Analytics() {
       .filter((d) => d > 0)
     const avgDelay = r0ToIntegDelay.length > 0 ? Math.round(r0ToIntegDelay.reduce((a, b) => a + b, 0) / r0ToIntegDelay.length) : null
 
+    /* ─── QUALITY STATS ─────────────────────────────────────────────── */
     const integresProfiles = forAlways.filter((p) => p.stg === 'Recruté')
     const scoresIntegres = integresProfiles.map((p) => p.sc ?? 0).filter((s) => s > 0)
     const scoresAll = forAlways.map((p) => p.sc ?? 0).filter((s) => s > 0)
@@ -632,6 +841,9 @@ export default function Analytics() {
 
     return {
       funnelCounts,
+      optionalStageStats,
+      sourceByStage,
+      conversions,
       total,
       avgByStage,
       chuteByStage,
@@ -660,8 +872,12 @@ export default function Analytics() {
   const cardStyle = { background: '#ffffff', borderRadius: 16, border: '1px solid rgba(0,0,0,0.06)', padding: '20px 24px', boxShadow: 'none' }
   const cardLabelStyle = { fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#999', marginBottom: 8 }
 
+  // Active sources for legend (only those with data)
+  const activeSources = ANALYTICS_SOURCES.filter((s) => stats.srcData.find((d) => d.label === s && d.total > 0))
+
   return (
     <div className="page h-full overflow-y-auto p-[22px]" style={{ background: '#F5F0E8' }}>
+      {/* ─── HEADER ──────────────────────────────────────────── */}
       <div className="flex items-start justify-between mb-5 flex-wrap gap-3">
         <div>
           <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 22, color: ACCENT }}>Analytics</div>
@@ -689,180 +905,254 @@ export default function Analytics() {
         <div className="text-[13px] mb-4" style={{ color: '#888' }}>Chargement…</div>
       )}
 
+      {/* ═══ SECTION 1: FUNNEL DE CONVERSION ═══════════════════ */}
       <section className="mb-8">
-        <div style={sectionTitleStyle}>Pipeline</div>
-        <div className="analytics-pipeline-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, alignItems: 'start' }}>
+        <div style={sectionTitleStyle}>Funnel de conversion</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }}>
+
+          {/* Funnel cumulatif */}
+          <div style={cardStyle}>
+            <div style={cardLabelStyle}>Profils ayant atteint chaque étape</div>
+            <div style={{ fontSize: 11, color: '#aaa', marginBottom: 12 }}>Comptage cumulatif : inclut ceux qui sont passés à l'étape suivante</div>
+            {stats.funnelCounts.map((step, i) => (
+              <FunnelBar
+                key={step.stage}
+                stage={step.stage}
+                reached={step.n}
+                maxReached={Math.max(1, stats.funnelCounts[0]?.n || 1)}
+                prevReached={i > 0 ? stats.funnelCounts[i - 1].n : null}
+                isLast={i === stats.funnelCounts.length - 1}
+              />
+            ))}
+          </div>
+
+          {/* Taux de conversion inter-étapes */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div style={cardStyle}>
-              <div style={cardLabelStyle}>Funnel de conversion</div>
-              {stats.funnelCounts.map((step, i) => (
-                <div key={step.stage}>
-                  <FunnelBar step={step} funnelCounts={stats.funnelCounts} maxCount={Math.max(1, ...stats.funnelCounts.map((s) => s.n))} showRate={i < stats.funnelCounts.length - 1} />
-                </div>
-              ))}
+              <div style={cardLabelStyle}>Taux de conversion par étape</div>
+              <div style={{ fontSize: 11, color: '#aaa', marginBottom: 12 }}>% de profils passant d'une étape à la suivante</div>
+              <ConversionTable conversions={stats.conversions} />
             </div>
-            <div style={{ ...cardStyle, minHeight: 160 }}>
-              <div style={cardLabelStyle}>Objectif 2026</div>
-              <div style={{ fontSize: 28, fontWeight: 700, color: ACCENT }}>{stats.recrutes2026 ?? 0} / {stats.objectif2026 ?? 15}</div>
-              <div style={{ marginTop: 8, height: 8, background: 'rgba(0,0,0,0.08)', borderRadius: 6, overflow: 'hidden' }}>
-                <div style={{ width: `${Math.min(100, ((stats.recrutes2026 ?? 0) / (stats.objectif2026 ?? 15)) * 100)}%`, height: '100%', background: RECRUITED_GREEN, borderRadius: 6, transition: 'width 0.3s' }} />
-              </div>
-              <div style={{ fontSize: 12, color: '#888', marginTop: 6 }}>{Math.round(((stats.recrutes2026 ?? 0) / (stats.objectif2026 ?? 15)) * 100)}% de l'objectif atteint</div>
-              {isGlobalView && ownerEmails.length > 0 && (
-                <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {ownerEmails.map((em) => {
-                    const n = stats.recrutes2026ByOwner?.[em] ?? 0
-                    const pct = Math.min(100, (n / 15) * 100)
-                    const local = em.split('@')[0]
-                    const av = local.slice(0, 2).toUpperCase()
-                    return (
-                      <div key={em} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div style={{ width: 28, height: 28, borderRadius: '50%', background: ACCENT, color: GOLD, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>
-                          {av}
-                        </div>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: ACCENT, minWidth: 80 }}>{local}</span>
-                        <span style={{ fontSize: 12, color: '#888', minWidth: 36 }}>{n} / 15</span>
-                        <div style={{ flex: 1, minWidth: 60, height: 6, background: 'rgba(0,0,0,0.08)', borderRadius: 6, overflow: 'hidden' }}>
-                          <div style={{ width: `${pct}%`, height: '100%', background: RECRUITED_GREEN, borderRadius: 6, transition: 'width 0.3s' }} />
-                        </div>
+
+            {/* Étapes optionnelles */}
+            <div style={cardStyle}>
+              <div style={cardLabelStyle}>Étapes optionnelles</div>
+              <div style={{ fontSize: 11, color: '#aaa', marginBottom: 14 }}>Non comptées dans le funnel principal — calculées sur les profils éligibles uniquement</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {stats.optionalStageStats.map((s) => (
+                  <div key={s.stage}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: ACCENT }}>{s.stage}</span>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: '#D4EDE1', color: '#166534', fontWeight: 600 }}>
+                          {s.passed} ont fait · {s.taux}%
+                        </span>
+                        {s.skipped > 0 && (
+                          <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: '#F1F5F9', color: '#64748B', fontWeight: 500 }}>
+                            {s.skipped} non éligibles
+                          </span>
+                        )}
                       </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-            <div style={cardStyle}>
-              <div style={cardLabelStyle}>Délai moyen recrutement</div>
-              {stats.recrutesCountForDelai > 0 ? (
-                <>
-                  <div style={{ fontSize: 32, fontWeight: 700, color: ACCENT }}>{stats.delaiMoyenRecrutement != null ? stats.delaiMoyenRecrutement : '—'}</div>
-                  <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>jours en moyenne de R0 à Recruté</div>
-                </>
-              ) : (
-                <>
-                  <div style={{ fontSize: 32, fontWeight: 700, color: ACCENT }}>—</div>
-                  <div style={{ fontSize: 13, color: '#aaa', marginTop: 4 }}>Aucun recrutement finalisé</div>
-                </>
-              )}
+                    </div>
+                    <div style={{ height: 8, background: 'rgba(0,0,0,0.06)', borderRadius: 6, overflow: 'hidden' }}>
+                      <div style={{ width: `${Math.max(s.taux, 2)}%`, height: '100%', background: GOLD, borderRadius: 6, transition: 'width 0.3s' }} />
+                    </div>
+                    <div style={{ fontSize: 11, color: '#aaa', marginTop: 4 }}>
+                      sur {s.eligible} profils éligibles ayant atteint R1
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={cardStyle}>
-              <div style={cardLabelStyle}>Durée moyenne par stade</div>
-              {ANALYTICS_STAGES.map((s) => (
-                <DurationBarRow key={s} stage={s} days={stats.avgByStage[s]} />
-              ))}
+        </div>
+      </section>
+
+      {/* ═══ SECTION 2: VENTILATION PAR SOURCE ═════════════════ */}
+      <section className="mb-8">
+        <div style={sectionTitleStyle}>Ventilation par source</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }}>
+
+          {/* Source breakdown at each stage */}
+          <div style={cardStyle}>
+            <div style={cardLabelStyle}>Répartition des sources par étape</div>
+            <SourceLegend sources={activeSources} />
+            {stats.sourceByStage.map((s) => (
+              <SourceBreakdownRow
+                key={s.stage}
+                stage={s.stage}
+                sourceCounts={s.sourceCounts}
+                totalReached={s.totalReached}
+                maxReached={Math.max(1, stats.sourceByStage[0]?.totalReached || 1)}
+              />
+            ))}
+          </div>
+
+          {/* Source attribution for recruits */}
+          <div style={cardStyle}>
+            <div style={cardLabelStyle}>Attribution source → Recrutés</div>
+            <div style={{ fontSize: 11, color: '#aaa', marginBottom: 12 }}>D'où viennent les profils finalement recrutés ?</div>
+            <SourcesRecrutesBars srcData={stats.srcData.filter((s) => s.total > 0)} />
+          </div>
+        </div>
+      </section>
+
+      {/* ═══ SECTION 3: TAUX DE CASSE & ABANDONS ══════════════ */}
+      <section className="mb-8">
+        <div style={sectionTitleStyle}>Taux de casse</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, alignItems: 'start' }}>
+
+          {/* Drop-off by stage */}
+          <div style={cardStyle}>
+            <div style={cardLabelStyle}>Chutes par stade</div>
+            <div style={{ fontSize: 11, color: '#aaa', marginBottom: 12 }}>Nombre et % de profils perdus à chaque étape</div>
+            {(() => {
+              const maxChute = Math.max(1, ...stats.chuteByStage.map((b) => b.chuteCount))
+              return stats.chuteByStage.map((b) => <ChuteBarRow key={b.stage} data={b} maxChute={maxChute} onOpenModal={(m) => setChuteModal(m)} />)
+            })()}
+          </div>
+
+          {/* Raisons d'abandon */}
+          <div style={cardStyle}>
+            <div style={cardLabelStyle}>Raisons d'abandon</div>
+            {raisonsAbandonStats.totalChuteRaisons > 0 ? (
+              <RaisonsAbandonBarList
+                data={raisonsAbandonStats.raisonsAbandon}
+                onRowClick={async (r) => {
+                  if (r.count <= 0) return
+                  const ids = profileIdsForActivities ? profileIdsForActivities.split(',').filter(Boolean) : []
+                  let q = supabase
+                    .from('profiles')
+                    .select('id, first_name, last_name, chute_stade, chute_detail, chute_date, maturity')
+                    .eq('maturity', 'Chute')
+                    .eq('chute_type', r.type)
+                  const { data } = ids.length ? await q.in('id', ids) : await q
+                  const profiles = (data || []).map((p) => ({
+                    id: p.id,
+                    fn: p.first_name,
+                    ln: p.last_name,
+                    mat: p.maturity,
+                    chute_stade: p.chute_stade,
+                    chute_detail: p.chute_detail,
+                    chute_date: p.chute_date,
+                  }))
+                  setChuteModal({ title: r.type, profiles, columns: ['chute_stade', 'chute_detail', 'chute_date'] })
+                }}
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12" style={{ color: '#888' }}>
+                <span className="mb-3" style={{ color: '#bbb' }}><IconEmpty /></span>
+                <span className="text-[13px]">Aucun abandon enregistré</span>
+              </div>
+            )}
+          </div>
+
+          {/* Durée moyenne par stade */}
+          <div style={cardStyle}>
+            <div style={cardLabelStyle}>Durée moyenne par stade</div>
+            {ANALYTICS_STAGES.map((s) => (
+              <DurationBarRow key={s} stage={s} days={stats.avgByStage[s]} />
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ═══ SECTION 4: OBJECTIFS & QUALITÉ ═══════════════════ */}
+      <section className="mb-8">
+        <div style={sectionTitleStyle}>Objectifs & Qualité</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, alignItems: 'start' }}>
+
+          {/* Objectif 2026 */}
+          <div style={cardStyle}>
+            <div style={cardLabelStyle}>Objectif 2026</div>
+            <div style={{ fontSize: 28, fontWeight: 700, color: ACCENT }}>{stats.recrutes2026 ?? 0} / {stats.objectif2026 ?? 15}</div>
+            <div style={{ marginTop: 8, height: 8, background: 'rgba(0,0,0,0.08)', borderRadius: 6, overflow: 'hidden' }}>
+              <div style={{ width: `${Math.min(100, ((stats.recrutes2026 ?? 0) / (stats.objectif2026 ?? 15)) * 100)}%`, height: '100%', background: RECRUITED_GREEN, borderRadius: 6, transition: 'width 0.3s' }} />
             </div>
-            <div style={{ ...cardStyle, minHeight: 200 }}>
-              <div style={cardLabelStyle}>Raisons d'abandon</div>
-              {raisonsAbandonStats.totalChuteRaisons > 0 ? (
-                <RaisonsAbandonBarList
-                  data={raisonsAbandonStats.raisonsAbandon}
-                  onRowClick={async (r) => {
-                    if (r.count <= 0) return
-                    const ids = profileIdsForActivities ? profileIdsForActivities.split(',').filter(Boolean) : []
-                    let q = supabase
-                      .from('profiles')
-                      .select('id, first_name, last_name, chute_stade, chute_detail, chute_date, maturity')
-                      .eq('maturity', 'Chute')
-                      .eq('chute_type', r.type)
-                    const { data } = ids.length ? await q.in('id', ids) : await q
-                    const profiles = (data || []).map((p) => ({
-                      id: p.id,
-                      fn: p.first_name,
-                      ln: p.last_name,
-                      mat: p.maturity,
-                      chute_stade: p.chute_stade,
-                      chute_detail: p.chute_detail,
-                      chute_date: p.chute_date,
-                    }))
-                    setChuteModal({ title: r.type, profiles, columns: ['chute_stade', 'chute_detail', 'chute_date'] })
-                  }}
-                />
-              ) : (
-                <div className="flex flex-col items-center justify-center py-12" style={{ color: '#888' }}>
-                  <span className="mb-3" style={{ color: '#bbb' }}><IconEmpty /></span>
-                  <span className="text-[13px]">Aucun abandon enregistré</span>
+            <div style={{ fontSize: 12, color: '#888', marginTop: 6 }}>{Math.round(((stats.recrutes2026 ?? 0) / (stats.objectif2026 ?? 15)) * 100)}% de l'objectif atteint</div>
+            {isGlobalView && ownerEmails.length > 0 && (
+              <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {ownerEmails.map((em) => {
+                  const n = stats.recrutes2026ByOwner?.[em] ?? 0
+                  const pct = Math.min(100, (n / 15) * 100)
+                  const local = em.split('@')[0]
+                  const av = local.slice(0, 2).toUpperCase()
+                  return (
+                    <div key={em} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 28, height: 28, borderRadius: '50%', background: ACCENT, color: GOLD, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>
+                        {av}
+                      </div>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: ACCENT, minWidth: 80 }}>{local}</span>
+                      <span style={{ fontSize: 12, color: '#888', minWidth: 36 }}>{n} / 15</span>
+                      <div style={{ flex: 1, minWidth: 60, height: 6, background: 'rgba(0,0,0,0.08)', borderRadius: 6, overflow: 'hidden' }}>
+                        <div style={{ width: `${pct}%`, height: '100%', background: RECRUITED_GREEN, borderRadius: 6, transition: 'width 0.3s' }} />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Délai moyen recrutement */}
+          <div style={cardStyle}>
+            <div style={cardLabelStyle}>Délai moyen recrutement</div>
+            {stats.recrutesCountForDelai > 0 ? (
+              <>
+                <div style={{ fontSize: 32, fontWeight: 700, color: ACCENT }}>{stats.delaiMoyenRecrutement != null ? stats.delaiMoyenRecrutement : '—'}</div>
+                <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>jours en moyenne de R0 à Recruté</div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: 32, fontWeight: 700, color: ACCENT }}>—</div>
+                <div style={{ fontSize: 13, color: '#aaa', marginTop: 4 }}>Aucun recrutement finalisé</div>
+              </>
+            )}
+            <div style={{ borderTop: '1px solid rgba(0,0,0,0.06)', marginTop: 16, paddingTop: 16 }}>
+              <div style={cardLabelStyle}>Score moyen</div>
+              <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ fontSize: 28, fontWeight: 700, color: ACCENT }}>{stats.avgScoreIntegres ?? '—'}</div>
+                  <div className="text-[12px]" style={{ color: '#999' }}>Profils recrutés</div>
                 </div>
-              )}
+                <div>
+                  <div style={{ fontSize: 28, fontWeight: 400, color: '#999' }}>{stats.avgScoreAll ?? '—'}</div>
+                  <div className="text-[12px]" style={{ color: '#999' }}>Tous les profils</div>
+                </div>
+              </div>
             </div>
           </div>
+
+          {/* Prochaines sessions + secteur + expérience */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div style={cardStyle}>
               <div style={cardLabelStyle}>Prochaines sessions</div>
               <SessionsFormationCard sessions={upcomingSessions} goal={sessionGoal} />
             </div>
             <div style={cardStyle}>
-              <div style={cardLabelStyle}>Taux de chute par stade</div>
-              {(() => {
-                const maxChute = Math.max(1, ...stats.chuteByStage.map((b) => b.chuteCount))
-                return stats.chuteByStage.map((b) => <ChuteBarRow key={b.stage} data={b} maxChute={maxChute} onOpenModal={(m) => setChuteModal(m)} />)
-              })()}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="mb-8">
-        <div style={sectionTitleStyle}>Acquisition</div>
-        <div className="analytics-acquisition-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }}>
-          <div style={cardStyle}>
-            <div style={cardLabelStyle}>Sources de recrutement</div>
-            <SourcesRecrutesBars srcData={stats.srcData.filter((s) => s.total > 0)} />
-            {stats.srcData.filter((s) => s.total > 0).length === 0 && (
-              <div className="text-[13px] py-4" style={{ color: '#888' }}>Aucune donnée</div>
-            )}
-          </div>
-          <div style={cardStyle}>
-            <div style={cardLabelStyle}>% intégrés par secteur</div>
-            {stats.sectorData.length > 0 ? (
-              <div className="space-y-2">
-                {stats.sectorData.map((s) => (
-                  <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <span className="text-[12px] w-[140px] shrink-0" style={{ color: '#444' }}>{s.label}</span>
-                    <div style={{ flex: 1, maxWidth: '100%', height: 8, background: 'rgba(0,0,0,0.06)', borderRadius: 6, overflow: 'hidden' }}>
-                      <div style={{ width: `${s.pct}%`, height: '100%', background: GOLD, borderRadius: 6 }} />
+              <div style={cardLabelStyle}>% recrutés par secteur</div>
+              {stats.sectorData.length > 0 ? (
+                <div className="space-y-2">
+                  {stats.sectorData.map((s) => (
+                    <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <span className="text-[12px] w-[120px] shrink-0" style={{ color: '#444' }}>{s.label}</span>
+                      <div style={{ flex: 1, maxWidth: '100%', height: 8, background: 'rgba(0,0,0,0.06)', borderRadius: 6, overflow: 'hidden' }}>
+                        <div style={{ width: `${s.pct}%`, height: '100%', background: GOLD, borderRadius: 6 }} />
+                      </div>
+                      <span className="text-[11px]" style={{ color: '#666' }}>{s.count} · {s.pct}%</span>
                     </div>
-                    <span className="text-[11px]" style={{ color: '#666' }}>{s.count} · {s.pct}%</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-[13px]" style={{ color: '#888' }}>Aucune donnée</div>
-            )}
-          </div>
-        </div>
-      </section>
-
-      <section className="mb-8">
-        <div style={sectionTitleStyle}>Qualité</div>
-        <div className="analytics-qualite-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }}>
-          <div style={cardStyle}>
-            <div style={cardLabelStyle}>Score moyen</div>
-            <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-              <div>
-                <div style={{ fontSize: 32, fontWeight: 700, color: ACCENT }}>{stats.avgScoreIntegres ?? '—'}</div>
-                <div className="text-[12px]" style={{ color: '#999' }}>Profils intégrés</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 32, fontWeight: 400, color: '#999' }}>{stats.avgScoreAll ?? '—'}</div>
-                <div className="text-[12px]" style={{ color: '#999' }}>Tous les profils</div>
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-[13px]" style={{ color: '#888' }}>Aucune donnée</div>
+              )}
             </div>
-          </div>
-          <div style={cardStyle}>
-            <div style={cardLabelStyle}>Années d'expérience moyenne</div>
-            {stats.avgYearsIntegres != null ? (
-              <>
-                <div style={{ fontSize: 32, fontWeight: 700, color: ACCENT }}>{stats.avgYearsIntegres} ans</div>
-                <div className="text-[12px] mt-1" style={{ color: '#999' }}>ans d'expérience en moyenne (profils recrutés)</div>
-                <div className="text-[11px] mt-2" style={{ color: '#aaa' }}>vs {stats.avgYearsAll ?? '—'} ans (tous les profils)</div>
-              </>
-            ) : (
-              <>
-                <div style={{ fontSize: 32, fontWeight: 700, color: ACCENT }}>—</div>
-                <div className="text-[13px] mt-2" style={{ color: '#aaa', fontStyle: 'italic' }}>Données insuffisantes — renseignez l'expérience sur les fiches profil</div>
-              </>
+            {stats.avgYearsIntegres != null && (
+              <div style={cardStyle}>
+                <div style={cardLabelStyle}>Expérience moyenne</div>
+                <div style={{ fontSize: 28, fontWeight: 700, color: ACCENT }}>{stats.avgYearsIntegres} ans</div>
+                <div className="text-[11px] mt-1" style={{ color: '#aaa' }}>recrutés vs {stats.avgYearsAll ?? '—'} ans (tous)</div>
+              </div>
             )}
           </div>
         </div>
@@ -878,11 +1168,8 @@ export default function Analytics() {
       )}
 
       <style>{`
-        @media (max-width: 768px) {
-          .analytics-pipeline-grid { grid-template-columns: 1fr !important; }
-          .analytics-pipeline-grid > div:last-child > div:first-child { grid-template-columns: 1fr !important; }
-          .analytics-pipeline-grid > div:last-child > div:last-child { flex-direction: column !important; align-items: center !important; }
-          .analytics-qualite-grid { grid-template-columns: 1fr !important; }
+        @media (max-width: 900px) {
+          .analytics-pipeline-grid, .analytics-acquisition-grid, .analytics-qualite-grid { grid-template-columns: 1fr !important; }
         }
       `}</style>
     </div>

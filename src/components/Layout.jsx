@@ -24,6 +24,7 @@ const TITLES = {
   '/': 'Tableau de bord',
   '/pipeline': 'Pipeline recrutement',
   '/profiles': 'Tous les profils',
+  '/contacted': 'Prospects',
   '/analytics': 'Analytics',
   '/import': 'Import & Scoring',
   '/tickets': 'Tickets',
@@ -115,6 +116,7 @@ export default function Layout() {
           <NavLink to="/" end className={({ isActive }) => `nitem flex items-center gap-2.5 py-2 px-2.5 rounded-lg cursor-pointer text-[13.5px] transition-all duration-[0.13s] mb-0.5 select-none ${isActive ? 'active bg-white/15 text-white font-medium' : 'text-white/60 hover:bg-white/[0.08] hover:text-white'}`}><span className="nico text-sm w-[18px] text-center shrink-0">⌂</span>Tableau de bord</NavLink>
           <NavLink to="/pipeline" className={({ isActive }) => `nitem flex items-center gap-2.5 py-2 px-2.5 rounded-lg cursor-pointer text-[13.5px] transition-all duration-[0.13s] mb-0.5 select-none ${isActive ? 'active bg-white/15 text-white font-medium' : 'text-white/60 hover:bg-white/[0.08] hover:text-white'}`}><span className="nico text-sm w-[18px] text-center shrink-0">◫</span>Pipeline</NavLink>
           <NavLink to="/profiles" className={({ isActive }) => `nitem flex items-center gap-2.5 py-2 px-2.5 rounded-lg cursor-pointer text-[13.5px] transition-all duration-[0.13s] mb-0.5 select-none ${isActive ? 'active bg-white/15 text-white font-medium' : 'text-white/60 hover:bg-white/[0.08] hover:text-white'}`}><span className="nico text-sm w-[18px] text-center shrink-0">◎</span>Tous les profils</NavLink>
+          <NavLink to="/contacted" className={({ isActive }) => `nitem flex items-center gap-2.5 py-2 px-2.5 rounded-lg cursor-pointer text-[13.5px] transition-all duration-[0.13s] mb-0.5 select-none ${isActive ? 'active bg-white/15 text-white font-medium' : 'text-white/60 hover:bg-white/[0.08] hover:text-white'}`}><span className="nico text-sm w-[18px] text-center shrink-0">✓</span>Prospects</NavLink>
           <NavLink to="/analytics" className={({ isActive }) => `nitem flex items-center gap-2.5 py-2 px-2.5 rounded-lg cursor-pointer text-[13.5px] transition-all duration-[0.13s] mb-0.5 select-none ${isActive ? 'active bg-white/15 text-white font-medium' : 'text-white/60 hover:bg-white/[0.08] hover:text-white'}`}><span className="nico text-sm w-[18px] shrink-0 inline-flex items-center justify-center"><IconArrowUp /></span>Analytics</NavLink>
         </div>
         <div className="nav-sec pt-3.5 px-3 pb-1.5">

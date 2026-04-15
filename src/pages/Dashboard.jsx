@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useCRM } from '../context/CRMContext'
 import { useAuth } from '../context/AuthContext'
@@ -102,17 +102,10 @@ export default function Dashboard() {
   const [sessionProfilsRefresh, setSessionProfilsRefresh] = useState(0)
   const [profileModalData, setProfileModalData] = useState(null)
   const [ownerFilter, setOwnerFilter] = useState('all')
-  const [stageCounts, setStageCounts] = useState([])
   const [r1CetteSemaine, setR1CetteSemaine] = useState([])
   const [r1Loading, setR1Loading] = useState(true)
   const [pointsEtapeCetteSemaine, setPointsEtapeCetteSemaine] = useState([])
   const [pointsEtapeLoading, setPointsEtapeLoading] = useState(true)
-  const [contactesCeMois, setContactesCeMois] = useState(null)
-  const [contactesDiff, setContactesDiff] = useState(null)
-  const [recrutes2026, setRecrutes2026] = useState(null)
-  const [recrutesCeMois, setRecrutesCeMois] = useState(null)
-  const [globalAdvisorBreakdown, setGlobalAdvisorBreakdown] = useState(null)
-  const [myAdvisorRecrutes2026, setMyAdvisorRecrutes2026] = useState(null)
 
   const allProfiles = [...filteredProfiles].filter((p) => p.mat !== 'Archivé')
   const P = ownerFilter === 'all' ? allProfiles : allProfiles.filter((p) => (p.owner_email || '') === ownerFilter)
@@ -172,12 +165,36 @@ export default function Dashboard() {
       }, 5000)
 
       try {
-        const { data: eventsR1 } = await supabase
+        // Run events + profiles queries in parallel
+        const eventsPromise = supabase
           .from('events')
           .select('*, profiles(first_name, last_name, company, city, region, owner_id)')
           .ilike('event_type', '%R1%')
           .gte('event_date', startOfWeek)
           .lte('event_date', endOfWeek)
+
+        let profilesPromise
+        if (!globalTeam && user?.id) {
+          profilesPromise = supabase
+            .from('profiles')
+            .select('id, first_name, last_name, company, city, region, next_event_date, owner_id')
+            .eq('owner_id', user.id)
+            .eq('next_event_label', 'R1')
+            .gte('next_event_date', startOfWeek)
+            .lte('next_event_date', endOfWeek)
+        } else if (globalTeam) {
+          profilesPromise = supabase
+            .from('profiles')
+            .select('id, first_name, last_name, company, city, region, next_event_date, owner_id')
+            .eq('next_event_label', 'R1')
+            .gte('next_event_date', startOfWeek)
+            .lte('next_event_date', endOfWeek)
+        }
+
+        const [{ data: eventsR1 }, profilesResult] = await Promise.all([
+          eventsPromise,
+          profilesPromise || Promise.resolve({ data: null }),
+        ])
 
         if (state.cancelled) return
 
@@ -196,9 +213,8 @@ export default function Dashboard() {
           })
         }
 
-        const mergeProfilesR1 = (rows) => {
-          if (!rows?.length) return
-          rows.forEach((p) => {
+        if (profilesResult?.data?.length) {
+          profilesResult.data.forEach((p) => {
             if (items.some((it) => String(it.profile_id) === String(p.id))) return
             items.push({
               id: `p-${p.id}`,
@@ -212,25 +228,6 @@ export default function Dashboard() {
               owner_id: p.owner_id ?? null,
             })
           })
-        }
-
-        if (!globalTeam && user?.id) {
-          const { data: myProfilesR1 } = await supabase
-            .from('profiles')
-            .select('id, first_name, last_name, company, city, region, next_event_date, owner_id')
-            .eq('owner_id', user.id)
-            .eq('next_event_label', 'R1')
-            .gte('next_event_date', startOfWeek)
-            .lte('next_event_date', endOfWeek)
-          if (!state.cancelled) mergeProfilesR1(myProfilesR1)
-        } else if (globalTeam) {
-          const { data: profilesR1 } = await supabase
-            .from('profiles')
-            .select('id, first_name, last_name, company, city, region, next_event_date, owner_id')
-            .eq('next_event_label', 'R1')
-            .gte('next_event_date', startOfWeek)
-            .lte('next_event_date', endOfWeek)
-          if (!state.cancelled) mergeProfilesR1(profilesR1)
         }
 
         let filtered = items
@@ -357,113 +354,94 @@ export default function Dashboard() {
     role,
   ])
 
-  useEffect(() => {
-    const loadContactesRecrutes = async () => {
-      const now = new Date()
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString()
-      const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString()
-      const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59).toISOString()
+  // Compute all stats from in-memory profiles (no extra Supabase queries)
+  const computedStats = useMemo(() => {
+    const now = new Date()
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59)
+    const globalDashboard = viewMode === 'global' && role === 'admin'
 
-      const globalDashboard = viewMode === 'global' && role === 'admin'
-      const ownerFilterForQuery = globalDashboard ? null : user?.id
+    // Base set: all profiles (RLS already applied in CRMContext)
+    const baseProfiles = globalDashboard ? allProfiles : allProfiles.filter((p) => p.owner_id && String(p.owner_id) === String(user?.id))
 
-      let qCeMois = supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', startOfMonth).lte('created_at', endOfMonth)
-      let qMoisPrec = supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', startOfLastMonth).lte('created_at', endOfLastMonth)
-      if (ownerFilterForQuery) {
-        qCeMois = qCeMois.eq('owner_id', ownerFilterForQuery)
-        qMoisPrec = qMoisPrec.eq('owner_id', ownerFilterForQuery)
-      }
-      const { count: contactesCeMoisVal } = await qCeMois
-      const { count: contactesMoisPrecedent } = await qMoisPrec
-      const diff = (contactesCeMoisVal || 0) - (contactesMoisPrecedent || 0)
-      setContactesCeMois(contactesCeMoisVal ?? 0)
-      setContactesDiff(diff)
+    // --- Contactés ce mois / mois précédent ---
+    const contactesCeMoisVal = baseProfiles.filter((p) => {
+      const d = new Date(p.created_at)
+      return d >= startOfMonth
+    }).length
+    const contactesMoisPrecedent = baseProfiles.filter((p) => {
+      const d = new Date(p.created_at)
+      return d >= startOfLastMonth && d <= endOfLastMonth
+    }).length
 
-      let qRecrutes2026 = supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('stage', 'Recruté').gte('created_at', '2026-01-01T00:00:00.000Z')
-      let qRecrutesCeMois = supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('stage', 'Recruté').gte('updated_at', startOfMonth)
-      if (ownerFilterForQuery) {
-        qRecrutes2026 = qRecrutes2026.eq('owner_id', ownerFilterForQuery)
-        qRecrutesCeMois = qRecrutesCeMois.eq('owner_id', ownerFilterForQuery)
-      }
-      const { count: recrutes2026Val } = await qRecrutes2026
-      const { count: recrutesCeMoisVal } = await qRecrutesCeMois
-      setRecrutes2026(recrutes2026Val ?? 0)
-      setRecrutesCeMois(recrutesCeMoisVal ?? 0)
-    }
-    loadContactesRecrutes()
-  }, [role, viewMode, user?.id])
+    // --- Prospects (passés en pipeline = ont un stade) ce mois ---
+    // On utilise updated_at car le passage en R0 met à jour le profil
+    const prospectsWithStage = baseProfiles.filter((p) => p.stg != null && p.stg !== '')
+    const prospectsCeMoisVal = prospectsWithStage.filter((p) => {
+      // Profils dont le stade a été mis à jour ce mois (passage en R0+)
+      const d = new Date(p.updated_at || p.created_at)
+      return d >= startOfMonth
+    }).length
+    const prospectsMoisPrecedentVal = prospectsWithStage.filter((p) => {
+      const d = new Date(p.updated_at || p.created_at)
+      return d >= startOfLastMonth && d <= endOfLastMonth
+    }).length
+    const prospectsPctChange = prospectsMoisPrecedentVal > 0
+      ? Math.round(((prospectsCeMoisVal - prospectsMoisPrecedentVal) / prospectsMoisPrecedentVal) * 100)
+      : prospectsCeMoisVal > 0 ? 100 : 0
 
-  useEffect(() => {
-    const loadStageCounts = async () => {
-      let query = supabase.from('profiles').select('stage').neq('maturity', 'Archivé')
-      if (viewMode === 'global' && role === 'admin') {
-        if (ownerFilter !== 'all') {
-          query = query.eq('owner_email', ownerFilter)
-        }
-      } else if (user?.id) {
-        query = query.eq('owner_id', user.id)
-      }
-      const { data } = await query
-      const counts = {}
-      STAGES.forEach((s) => { counts[s] = 0 })
-      ;(data || []).filter((p) => p.stage != null && p.stage !== '').forEach((p) => {
-        const s = p.stage || 'R0'
+    // --- Recrutés 2026 / ce mois ---
+    const recrutes2026Val = baseProfiles.filter((p) => p.stg === 'Recruté' && p.created_at && new Date(p.created_at).getFullYear() >= 2026).length
+    const recrutesCeMoisVal = baseProfiles.filter((p) => p.stg === 'Recruté' && p.updated_at && new Date(p.updated_at) >= startOfMonth).length
+
+    // --- Stage counts ---
+    const stageProfilesBase = globalDashboard
+      ? (ownerFilter === 'all' ? allProfiles : allProfiles.filter((p) => (p.owner_email || '') === ownerFilter))
+      : baseProfiles
+    const counts = {}
+    STAGES.forEach((s) => { counts[s] = 0 })
+    stageProfilesBase
+      .filter((p) => p.mat !== 'Archivé' && p.stg != null && p.stg !== '')
+      .forEach((p) => {
+        const s = p.stg || 'R0'
         if (counts[s] !== undefined) counts[s]++
         else counts[s] = 1
       })
-      setStageCounts(STAGES.map((s) => ({ stage: s, count: counts[s] })))
-    }
-    loadStageCounts()
-  }, [role, viewMode, ownerFilter, user?.id])
+    const stageCountsVal = STAGES.map((s) => ({ stage: s, count: counts[s] }))
 
-  useEffect(() => {
-    let cancelled = false
-    const loadAdvisorObjectifs = async () => {
-      const globalTeam = viewMode === 'global' && role === 'admin'
-      if (globalTeam) {
-        setGlobalAdvisorBreakdown(null)
-        const { data } = await supabase
-          .from('profiles')
-          .select('owner_id, owner_full_name, owner_email, created_at')
-          .eq('stage', 'Recruté')
-        if (cancelled) return
-        const byKey = {}
-        ;(data || []).forEach((row) => {
-          if (!row.created_at || new Date(row.created_at).getFullYear() !== 2026) return
-          const key = row.owner_id != null ? `id:${row.owner_id}` : (row.owner_email ? `em:${row.owner_email}` : 'none')
-          if (!byKey[key]) {
-            byKey[key] = {
-              key,
-              owner_id: row.owner_id,
-              owner_email: row.owner_email || '',
-              owner_full_name: row.owner_full_name || '',
-              count: 0,
-            }
-          }
-          byKey[key].count++
-        })
-        setGlobalAdvisorBreakdown(Object.values(byKey).sort((a, b) => b.count - a.count))
-        setMyAdvisorRecrutes2026(null)
-        return
-      }
-      setGlobalAdvisorBreakdown(null)
-      if (!user?.id) {
-        setMyAdvisorRecrutes2026(null)
-        return
-      }
-      const { count } = await supabase
-        .from('profiles')
-        .select('*', { count: 'exact', head: true })
-        .eq('owner_id', user.id)
-        .eq('stage', 'Recruté')
-        .gte('created_at', '2026-01-01T00:00:00.000Z')
-      if (!cancelled) setMyAdvisorRecrutes2026(count ?? 0)
+    // --- Advisor objectifs ---
+    let globalAdvisorBreakdownVal = null
+    let myAdvisorRecrutes2026Val = null
+    if (globalDashboard) {
+      const byKey = {}
+      allProfiles.filter((p) => p.stg === 'Recruté' && p.created_at && new Date(p.created_at).getFullYear() === 2026).forEach((p) => {
+        const key = p.owner_id != null ? `id:${p.owner_id}` : (p.owner_email ? `em:${p.owner_email}` : 'none')
+        if (!byKey[key]) {
+          byKey[key] = { key, owner_id: p.owner_id, owner_email: p.owner_email || '', owner_full_name: p.owner_full_name || '', count: 0 }
+        }
+        byKey[key].count++
+      })
+      globalAdvisorBreakdownVal = Object.values(byKey).sort((a, b) => b.count - a.count)
+    } else if (user?.id) {
+      myAdvisorRecrutes2026Val = baseProfiles.filter((p) => p.stg === 'Recruté' && p.created_at && new Date(p.created_at).getFullYear() >= 2026).length
     }
-    loadAdvisorObjectifs()
-    return () => { cancelled = true }
-  }, [viewMode, role, user?.id])
 
+    return {
+      contactesCeMois: contactesCeMoisVal,
+      contactesDiff: contactesCeMoisVal - contactesMoisPrecedent,
+      prospectsCeMois: prospectsCeMoisVal,
+      prospectsMoisPrecedent: prospectsMoisPrecedentVal,
+      prospectsPctChange,
+      recrutes2026: recrutes2026Val,
+      recrutesCeMois: recrutesCeMoisVal,
+      stageCounts: stageCountsVal,
+      globalAdvisorBreakdown: globalAdvisorBreakdownVal,
+      myAdvisorRecrutes2026: myAdvisorRecrutes2026Val,
+    }
+  }, [allProfiles, viewMode, role, user?.id, ownerFilter])
+
+  const { contactesCeMois, contactesDiff, prospectsCeMois, prospectsMoisPrecedent, prospectsPctChange, recrutes2026, recrutesCeMois, stageCounts, globalAdvisorBreakdown, myAdvisorRecrutes2026 } = computedStats
   const maxStageCount = Math.max(1, ...stageCounts.map((s) => s.count))
 
   const cardStyle = {
@@ -498,9 +476,9 @@ export default function Dashboard() {
         )}
       </div>
 
-      <div className="stats-row grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
+      <div className="stats-row grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
         <div style={cardStyle}>
-          <div style={sectionTitleStyle}>Contactés ce mois</div>
+          <div style={sectionTitleStyle}>Profils importés ce mois</div>
           <div style={valueStyle}>{contactesCeMois ?? '—'}</div>
           <div
             className="text-xs mt-1"
@@ -521,6 +499,30 @@ export default function Dashboard() {
                   ? `${contactesDiff} vs mois dernier`
                   : 'Stable vs mois dernier'
               : '—'}
+          </div>
+        </div>
+        <div style={cardStyle}>
+          <div style={sectionTitleStyle}>Prospects ce mois</div>
+          <div style={valueStyle}>{prospectsCeMois}</div>
+          <div
+            className="text-xs mt-1"
+            style={{
+              color: prospectsPctChange > 0
+                ? '#15803d'
+                : prospectsPctChange < 0
+                  ? '#dc2626'
+                  : '#aaa',
+            }}
+          >
+            {prospectsMoisPrecedent > 0
+              ? prospectsPctChange > 0
+                ? `+${prospectsPctChange}% vs mois dernier (${prospectsMoisPrecedent})`
+                : prospectsPctChange < 0
+                  ? `${prospectsPctChange}% vs mois dernier (${prospectsMoisPrecedent})`
+                  : `Stable vs mois dernier (${prospectsMoisPrecedent})`
+              : prospectsCeMois > 0
+                ? 'Pas de données mois dernier'
+                : '—'}
           </div>
         </div>
         <div style={cardStyle}>

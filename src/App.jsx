@@ -13,6 +13,7 @@ import ResetPassword from './pages/ResetPassword'
 import Dashboard from './pages/Dashboard'
 import Pipeline from './pages/Pipeline'
 import Profiles from './pages/Profiles'
+import ContactedProfiles from './pages/ContactedProfiles'
 import EventPage from './pages/EventPage'
 import Analytics from './pages/Analytics'
 import Import from './pages/Import'
@@ -76,6 +77,7 @@ function AppContent() {
           <Route index element={<Dashboard />} />
           <Route path="pipeline" element={<Pipeline />} />
           <Route path="profiles" element={<Profiles />} />
+          <Route path="contacted" element={<ContactedProfiles />} />
           <Route path="profiles/:id" element={<ProfilePage />} />
           <Route path="events/:eventId" element={<EventPage />} />
           <Route path="analytics" element={<Analytics />} />

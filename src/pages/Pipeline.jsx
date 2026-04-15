@@ -18,6 +18,26 @@ import {
 } from '../lib/data'
 
 const SESSION_CIBLE_STAGES = ['Point Business Plan', "Point d'étape téléphonique", "Point d'étape", 'Démission reconversion', 'R2 Amaury', 'Point juridique', 'Intégration', 'Recruté']
+
+/**
+ * Returns the list of stages between fromStage and toStage (exclusive).
+ * Used to show the intermediate stages checklist when jumping stages.
+ */
+function getIntermediateStages(fromStage, toStage) {
+  const normalize = (s) => {
+    if (s === "Point d'étape téléphonique") return "Point d'étape"
+    if (s === 'R2 Baptiste') return 'R2 Amaury'
+    return s || ''
+  }
+  const from = STAGES.indexOf(normalize(fromStage))
+  const to = STAGES.indexOf(normalize(toStage))
+  if (from < 0 || to < 0 || to - from <= 1) return []
+  return STAGES.slice(from + 1, to).map((stage) => ({
+    stage,
+    checked: true,
+    date: '',
+  }))
+}
 const INTEG_MODAL_STAGES = ["Point d'étape", "Point d'étape téléphonique", 'Démission reconversion', 'R2 Amaury', 'Point juridique', 'Recruté']
 const INTEG_DATE_STAGES = ["Point d'étape", "Point d'étape téléphonique", 'Démission reconversion', 'R2 Amaury', 'Point juridique', 'Intégration', 'Recruté']
 const MOIS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
@@ -138,8 +158,13 @@ function formatDateWithYear(dateStr) {
   return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
-function KanbanCard({ profile, stage, onClick, isSelected, ownerBadge, nextEvent }) {
+function KanbanCard({ profile, stage, onClick, isSelected, ownerBadge, nextEvent, onEditDate }) {
+  const [expanded, setExpanded] = useState(false)
   const handleClick = () => onClick?.(profile)
+  const handleToggle = (e) => {
+    e.stopPropagation()
+    setExpanded((v) => !v)
+  }
 
   const hasNextEventDate = profile.next_event_date
   const displayDate = hasNextEventDate
@@ -159,12 +184,14 @@ function KanbanCard({ profile, stage, onClick, isSelected, ownerBadge, nextEvent
       ? 'Session assignée'
       : null
 
+  // Owner color for left border
+  const ownerColor = ownerBadge?.text || borderColor
+
   return (
     <div
       className={`kanban-card${isSelected ? ' selected' : ''}`}
       draggable={true}
       onDragStart={(e) => e.dataTransfer.setData('profileId', String(profile.id))}
-      onClick={handleClick}
       onMouseEnter={(e) => {
         if (!isSelected) {
           e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)'
@@ -179,11 +206,11 @@ function KanbanCard({ profile, stage, onClick, isSelected, ownerBadge, nextEvent
       }}
       style={{
         background: '#ffffff',
-        borderRadius: 12,
+        borderRadius: expanded ? 12 : 8,
         border: `1px solid rgba(0,0,0,0.06)`,
-        borderLeft: `3px ${(isChute || isPasInteresse) ? 'dashed' : 'solid'} ${borderColor}`,
-        padding: 14,
-        marginBottom: 8,
+        borderLeft: `4px ${(isChute || isPasInteresse) ? 'dashed' : 'solid'} ${ownerColor}`,
+        padding: expanded ? 14 : '8px 12px',
+        marginBottom: expanded ? 8 : 4,
         cursor: 'pointer',
         transition: 'all 0.15s',
         position: 'relative',
@@ -193,71 +220,96 @@ function KanbanCard({ profile, stage, onClick, isSelected, ownerBadge, nextEvent
         width: '100%',
       }}
     >
-      {/* Ligne 1 - Avatar + Nom | Score */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+      {/* Ligne compacte (toujours visible) */}
+      <div
+        onClick={handleToggle}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
-          <div
-            style={{
-              width: 30,
-              height: 30,
-              borderRadius: '50%',
-              background: '#173731',
-              color: '#D2AB76',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 11,
-              fontWeight: 600,
-              flexShrink: 0,
-            }}
-          >
-            {(profile.fn?.[0] || '') + (profile.ln?.[0] || '')}
+          {ownerBadge && (
+            <span style={{ fontSize: 8, fontWeight: 700, width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: ownerBadge.bg, color: ownerBadge.text, flexShrink: 0, letterSpacing: '-0.5px' }} title={ownerBadge.name}>
+              {ownerBadge.initial}
+            </span>
+          )}
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#173731', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile.fn} {profile.ln}</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 6, ...scoreStyle }}>{profile.sc ?? '—'}</span>
+          <span style={{ fontSize: 10, color: '#bbb', transition: 'transform 0.15s', transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>▾</span>
+        </div>
+      </div>
+
+      {/* Contenu déplié */}
+      {expanded && (
+        <div style={{ marginTop: 10 }}>
+          {/* Employeur + Ville */}
+          <div style={{ background: 'var(--color-background-secondary)', borderRadius: 6, padding: '6px 10px', marginBottom: 8 }}>
+            <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-primary)', margin: '0 0 1px' }}>
+              {profile.co || profile.company || '—'}
+            </p>
+            <p style={{ fontSize: 11, color: 'var(--color-text-secondary)', margin: 0 }}>
+              {[profile.city, profile.region].filter(Boolean).join(' · ') || '—'}
+            </p>
           </div>
-          <span style={{ fontSize: 12, fontWeight: 700, color: '#173731', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile.fn} {profile.ln}</span>
+
+          {/* Badge source */}
+          {profile.src && (
+            <div style={{ marginBottom: 6 }}>
+              <span style={{ display: 'inline-block', borderRadius: 20, padding: '3px 7px', fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...(SOURCE_STYLES[profile.src] || { backgroundColor: '#f8fafc', color: '#94a3b8' }) }}>
+                {profile.src}
+              </span>
+            </div>
+          )}
+
+          {/* Maturité | Date */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
+            <span style={{ fontSize: 10, borderRadius: 20, padding: '2px 7px', fontWeight: 600, ...matStyle }}>
+              {profile.mat}
+            </span>
+            {stage === 'Recruté' ? (
+              <span style={{ fontSize: 10, fontWeight: 600, color: '#16a34a' }}>Intégré ✓</span>
+            ) : (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onEditDate?.(profile, stage) }}
+                title={dateTitle || 'Modifier la date du prochain RDV'}
+                style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', borderRadius: 4, color: dateColor }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.05)' }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'none' }}
+              >
+                <span style={{ fontSize: 10, fontWeight: 600 }}>{displayDate}</span>
+                <span style={{ fontSize: 9, opacity: 0.6 }}>✎</span>
+              </button>
+            )}
+          </div>
+
+          {/* Badge session */}
+          {sessionLabel && (
+            <div style={{ marginTop: 6 }}>
+              <span style={{ display: 'inline-block', background: '#f0fdf4', color: '#15803d', fontSize: 9, fontWeight: 600, padding: '2px 6px', borderRadius: 20 }}>
+                {sessionLabel}
+              </span>
+            </div>
+          )}
+
+          {/* Propriétaire */}
+          {ownerBadge && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 6 }}>
+              <span style={{ fontSize: 10, color: ownerBadge.text, fontWeight: 500 }}>{ownerBadge.name}</span>
+            </div>
+          )}
+
+          {/* Bouton voir profil */}
+          <div style={{ marginTop: 10, textAlign: 'right' }}>
+            <button
+              type="button"
+              onClick={handleClick}
+              style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, border: '1px solid #173731', color: '#173731', background: 'transparent', cursor: 'pointer', fontWeight: 500 }}
+            >
+              Voir le profil →
+            </button>
+          </div>
         </div>
-        <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 6, flexShrink: 0, ...scoreStyle }}>{profile.sc ?? '—'}</span>
-      </div>
-
-      {/* Employeur + Ville · Région (bloc groupé) */}
-      <div style={{ background: 'var(--color-background-secondary)', borderRadius: 6, padding: '6px 10px', marginBottom: 8 }}>
-        <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-primary)', margin: '0 0 1px' }}>
-          {profile.co || profile.company || '—'}
-        </p>
-        <p style={{ fontSize: 11, color: 'var(--color-text-secondary)', margin: 0 }}>
-          {[profile.city, profile.region].filter(Boolean).join(' · ') || '—'}
-        </p>
-      </div>
-
-      {/* Badge source (même styles que Profiles.jsx) */}
-      {profile.src && (
-        <div style={{ marginBottom: 6 }}>
-          <span style={{ display: 'inline-block', borderRadius: 20, padding: '3px 7px', fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...(SOURCE_STYLES[profile.src] || { backgroundColor: '#f8fafc', color: '#94a3b8' }) }}>
-            {profile.src}
-          </span>
-        </div>
-      )}
-
-      {/* Ligne 4 - Badge maturité | Date */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
-        <span style={{ fontSize: 10, borderRadius: 20, padding: '2px 7px', fontWeight: 600, ...matStyle }}>
-          {profile.mat}
-        </span>
-        <span style={{ fontSize: 10, fontWeight: 600, color: dateColor }} title={dateTitle}>
-          {stage === 'Recruté' ? 'Intégré ✓' : displayDate}
-        </span>
-      </div>
-
-      {/* Badge session si session_formation_id ou période renseignée */}
-      {sessionLabel && (
-        <div style={{ marginTop: 6 }}>
-          <span style={{ display: 'inline-block', background: '#f0fdf4', color: '#15803d', fontSize: 9, fontWeight: 600, padding: '2px 6px', borderRadius: 20 }}>
-            {sessionLabel}
-          </span>
-        </div>
-      )}
-
-      {ownerBadge && (
-        <span style={{ position: 'absolute', top: 10, right: 10, fontSize: 10, fontWeight: 600, width: 18, height: 18, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: ownerBadge.bg, color: ownerBadge.text }} title={profile.owner_full_name || profile.owner_email || ''}>{ownerBadge.initial}</span>
       )}
     </div>
   )
@@ -270,7 +322,7 @@ function hexWithOpacity(hex, opacity) {
   return `rgba(${r},${g},${b},${opacity})`
 }
 
-function DroppableColumn({ stage, cards, onCardClick, selectedCardId, onDrop, showOwnerBadge, nextEventsByProfileId }) {
+function DroppableColumn({ stage, cards, onCardClick, selectedCardId, onDrop, showOwnerBadge, nextEventsByProfileId, onEditDate }) {
   const stageColor = STAGE_BORDER_COLORS[stage] || '#94a3b8'
 
   return (
@@ -310,11 +362,13 @@ function DroppableColumn({ stage, cards, onCardClick, selectedCardId, onDrop, sh
           </div>
         ) : (
           cards.map((p) => {
-            const ownerBadge = showOwnerBadge && (p.owner_email || p.owner_id) ? {
-              initial: (p.owner_full_name?.trim()?.[0] || (p.owner_email || '').split('@')[0]?.[0] || '?').toUpperCase(),
+            const ownerName = p.owner_full_name?.trim() || (p.owner_email || '').split('@')[0] || ''
+            const ownerBadge = (p.owner_email || p.owner_id) ? {
+              initial: (ownerName[0] || '?').toUpperCase(),
+              name: ownerName,
               ...hashToColor(p.owner_email || String(p.owner_id)),
             } : null
-            return <KanbanCard key={p.id} profile={p} stage={stage} onClick={onCardClick} isSelected={p.id === selectedCardId} ownerBadge={ownerBadge} nextEvent={nextEventsByProfileId?.[p.id]} />
+            return <KanbanCard key={p.id} profile={p} stage={stage} onClick={onCardClick} isSelected={p.id === selectedCardId} ownerBadge={ownerBadge} nextEvent={nextEventsByProfileId?.[p.id]} onEditDate={onEditDate} />
           })
         )}
       </div>
@@ -381,6 +435,15 @@ export default function Pipeline() {
   const [stageChangeRdType, setStageChangeRdType] = useState('Google Meet')
   const [stageChangeNotes, setStageChangeNotes] = useState('')
   const [stageChangeSkipStep, setStageChangeSkipStep] = useState(false)
+  const [r1ScoringConfirmed, setR1ScoringConfirmed] = useState(false)
+  const [intermediateStages, setIntermediateStages] = useState([]) // [{ stage, checked, date }]
+  // Date edit modal
+  const [dateEditProfile, setDateEditProfile] = useState(null) // { profile, stage }
+  const [dateEditValue, setDateEditValue] = useState('')
+  const [dateEditTime, setDateEditTime] = useState('')
+  const [dateEditRdvType, setDateEditRdvType] = useState('Google Meet')
+  const [dateEditNotes, setDateEditNotes] = useState('')
+  const [dateEditSaving, setDateEditSaving] = useState(false)
   const [editingInteg, setEditingInteg] = useState(false)
   const [editIntegPeriode, setEditIntegPeriode] = useState('')
   const [editIntegAnnee, setEditIntegAnnee] = useState('')
@@ -477,7 +540,7 @@ export default function Pipeline() {
     setLoadingDetail(true)
     Promise.all([
       supabase.from('notes').select('*').eq('profile_id', modalProfile.id).order('created_at', { ascending: false }),
-      supabase.from('activities').select('*').eq('profile_id', modalProfile.id).order('created_at', { ascending: false }).limit(10),
+      supabase.from('activities').select('*').eq('profile_id', modalProfile.id).order('created_at', { ascending: false }).limit(50),
       supabase.from('events').select('*').eq('profile_id', modalProfile.id).order('created_at', { ascending: false }),
     ]).then(([notesRes, actsRes, evtsRes]) => {
       setNotes(notesRes.data || [])
@@ -577,7 +640,7 @@ export default function Pipeline() {
 
   const loadActivities = async () => {
     if (!modalProfile?.id) return
-    const { data } = await supabase.from('activities').select('*').eq('profile_id', modalProfile.id).order('created_at', { ascending: false }).limit(10)
+    const { data } = await supabase.from('activities').select('*').eq('profile_id', modalProfile.id).order('created_at', { ascending: false }).limit(50)
     setActivities(data || [])
   }
 
@@ -655,14 +718,19 @@ export default function Pipeline() {
 
   const handleAddEvent = async () => {
     if (!modalProfile?.id) return
-    const content = evType + (evDetail.trim() ? ' — ' + evDetail.trim() : '')
-    const date = evDate || today()
-    await supabase.from('events').insert({ profile_id: modalProfile.id, content, date })
+    const dateVal = evDate || today()
+    await supabase.from('events').insert({
+      profile_id: modalProfile.id,
+      event_type: evType,
+      event_date: dateVal,
+      description: evDetail.trim() || null,
+    })
     await supabase.from('activities').insert({
       profile_id: modalProfile.id,
       type: 'event_added',
-      note: content,
-      date,
+      activity_type: 'event_added',
+      note: evType + (evDetail.trim() ? ' — ' + evDetail.trim() : ''),
+      date: dateVal,
       icon: 'event',
       source: 'manual',
     })
@@ -674,17 +742,19 @@ export default function Pipeline() {
   }
 
   const startEditEvent = (e) => {
-    const parts = (e.content || '').split(' — ')
     setEditingEventId(e.id)
-    setEditingEventType(EVENT_TYPES.includes(parts[0]) ? parts[0] : 'Autre')
-    setEditingEventDate(e.date || today())
-    setEditingEventDetail(parts.slice(1).join(' — ').trim())
+    setEditingEventType(e.event_type || 'Autre')
+    setEditingEventDate(e.event_date ? e.event_date.split('T')[0] : today())
+    setEditingEventDetail(e.description || '')
   }
 
   const handleSaveEventEdit = async () => {
     if (!editingEventId || !modalProfile?.id) return
-    const content = editingEventType + (editingEventDetail ? ' — ' + editingEventDetail : '')
-    await supabase.from('events').update({ content, date: editingEventDate }).eq('id', editingEventId)
+    await supabase.from('events').update({
+      event_type: editingEventType,
+      event_date: editingEventDate,
+      description: editingEventDetail || null,
+    }).eq('id', editingEventId)
     setEditingEventId(null)
     setEditingEventType('R0')
     setEditingEventDate('')
@@ -697,10 +767,29 @@ export default function Pipeline() {
     if (!profileId) return
     const oldValue = displayProfile?.stg ?? '—'
     if (oldValue === v) return
+
+    // Detect stage jump — route through pendingStageChange modal if jumping
+    const intermediate = getIntermediateStages(oldValue, v)
+    if (intermediate.length > 0) {
+      setIntermediateStages(intermediate)
+      setPendingStageChange({ profileId, profile: displayProfile, newStage: v })
+      setStageChangeDate('')
+      setStageChangeTime('')
+      setStageChangeRdType('Google Meet')
+      setStageChangeNotes('')
+      setStageChangeSkipStep(false)
+      setR1ScoringConfirmed(false)
+      return
+    }
+
+    // Direct 1-step change — apply immediately as before
     changeStage(profileId, v)
     await supabase.from('activities').insert({
       profile_id: profileId,
+      activity_type: 'stage_change',
       type: 'stage_change',
+      old_value: oldValue,
+      new_value: v,
       note: `${oldValue} → ${v}`,
       date: new Date().toISOString().split('T')[0],
       icon: 'refresh',
@@ -754,57 +843,139 @@ export default function Pipeline() {
     if (useSupabase) await fetchProfiles()
   }
 
+  const handleSaveDateEdit = async () => {
+    if (!dateEditProfile || !dateEditValue) return
+    const { profile, stage } = dateEditProfile
+    setDateEditSaving(true)
+    const today = new Date().toISOString().split('T')[0]
+    const heureParts = (dateEditTime || '09:00').split(':')
+    const heure = `${String(parseInt(heureParts[0], 10) || 9).padStart(2, '0')}:${String(parseInt(heureParts[1], 10) || 0).padStart(2, '0')}`
+    const newDatetime = `${dateEditValue}T${heure}:00`
+    const oldDate = profile.next_event_date ? profile.next_event_date.split('T')[0] : '—'
+
+    // 1. Update profile
+    await supabase.from('profiles').update({
+      next_event_date: dateEditValue,
+      next_event_label: profile.next_event_label || stage,
+    }).eq('id', profile.id)
+    updateProfile(profile.id, { next_event_date: dateEditValue, next_event_label: profile.next_event_label || stage })
+
+    // 2. Upsert event in events table
+    const { data: existingEvent } = await supabase
+      .from('events')
+      .select('id')
+      .eq('profile_id', profile.id)
+      .eq('event_type', profile.next_event_label || stage)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    const eventDesc = [dateEditRdvType, dateEditNotes].filter(Boolean).join(' · ') || undefined
+    if (existingEvent?.id) {
+      await supabase.from('events').update({
+        event_date: newDatetime,
+        ...(eventDesc ? { description: eventDesc } : {}),
+      }).eq('id', existingEvent.id)
+    } else {
+      await supabase.from('events').insert({
+        profile_id: profile.id,
+        event_type: profile.next_event_label || stage,
+        event_date: newDatetime,
+        description: eventDesc,
+      })
+    }
+
+    // 3. Activity for traceability
+    await supabase.from('activities').insert({
+      profile_id: profile.id,
+      activity_type: 'stage_change',
+      type: 'field_edit',
+      old_value: oldDate,
+      new_value: dateEditValue,
+      note: `Date ${profile.next_event_label || stage} modifiée : ${oldDate} → ${dateEditValue}`,
+      date: today,
+      icon: 'calendar',
+      source: 'manual',
+    })
+
+    // 4. Reload events & activities if modal is open on this profile
+    if (modalProfile?.id === profile.id) {
+      const [actsRes, evtsRes] = await Promise.all([
+        supabase.from('activities').select('*').eq('profile_id', profile.id).order('created_at', { ascending: false }).limit(50),
+        supabase.from('events').select('*').eq('profile_id', profile.id).order('created_at', { ascending: false }),
+      ])
+      setActivities(actsRes.data || [])
+      setEvents(evtsRes.data || [])
+    }
+
+    window.dispatchEvent(new CustomEvent('evolve:event-added'))
+    setDateEditSaving(false)
+    setDateEditProfile(null)
+    fetchProfiles()
+  }
+
   const handleDrop = async (profileId, newStage) => {
     const profile = all.find((p) => String(p.id) === String(profileId))
     if (!profile || profile.stg === newStage) return
-    if (newStage === 'Recruté') {
-      const oldStage = profile.stg ?? '—'
-      changeStage(profileId, newStage)
-      if (useSupabase) {
-        await supabase.from('profiles').update({ stage: 'Recruté' }).eq('id', profile.id)
-        await supabase.from('activities').insert({
-          profile_id: profile.id,
-          type: 'stage_change',
-          note: `${oldStage} → Recruté`,
-          date: new Date().toISOString().split('T')[0],
-          icon: 'refresh',
-          source: 'manual',
-        })
-        fetchProfiles()
-      }
-      setProfileToAssign({ id: profile.id, fn: profile.fn, ln: profile.ln, session_formation_id: profile.session_formation_id, stg: 'Recruté' })
-      setShowSessionModal(true)
-      return
-    }
+
+    // Always route through pendingStageChange to allow intermediate stage selection
+    const intermediate = getIntermediateStages(profile.stg, newStage)
+    setIntermediateStages(intermediate)
     setPendingStageChange({ profileId, profile, newStage })
     setStageChangeDate('')
     setStageChangeTime('')
     setStageChangeRdType('Google Meet')
     setStageChangeNotes('')
     setStageChangeSkipStep(false)
+    setR1ScoringConfirmed(false)
     setPendingSessionId(profile.session_formation_id || '')
   }
 
   const handleConfirmStageChange = async () => {
     if (!pendingStageChange) return
     const { profileId, profile, newStage } = pendingStageChange
+    const today = new Date().toISOString().split('T')[0]
+
+    // Helper: insert activities for checked intermediate stages
+    const insertIntermediateActivities = async () => {
+      const checked = intermediateStages.filter((s) => s.checked)
+      if (checked.length === 0) return
+      await supabase.from('activities').insert(
+        checked.map((s) => ({
+          profile_id: profile.id,
+          activity_type: 'stage_change',
+          type: 'stage_change',
+          new_value: s.stage,
+          note: `Passage en ${s.stage} (rétrospectif)`,
+          date: s.date || today,
+          icon: 'refresh',
+          source: 'manual',
+        }))
+      )
+    }
+
     if (newStage === 'Recruté') {
       const oldStage = profile.stg ?? '—'
       changeStage(profileId, newStage)
       if (useSupabase) {
+        await insertIntermediateActivities()
         const recruteUpdates = { stage: 'Recruté', integration_confirmed: true }
         await supabase.from('profiles').update(recruteUpdates).eq('id', profile.id)
         await supabase.from('activities').insert({
           profile_id: profile.id,
+          activity_type: 'stage_change',
           type: 'stage_change',
+          old_value: oldStage,
+          new_value: 'Recruté',
           note: `${oldStage} → Recruté`,
-          date: new Date().toISOString().split('T')[0],
+          date: today,
           icon: 'refresh',
           source: 'manual',
         })
         fetchProfiles()
       }
       setPendingStageChange(null)
+      setIntermediateStages([])
       setStageChangeDate('')
       setStageChangeNotes('')
       setProfileToAssign({ id: profile.id, fn: profile.fn, ln: profile.ln, session_formation_id: profile.session_formation_id, stg: 'Recruté' })
@@ -865,8 +1036,7 @@ export default function Pipeline() {
                 profile_id: profile.id,
                 event_type: targetStage,
                 event_date: `${selectedDate}T${selectedTime || '09:00'}:00`,
-                description: [selectedRdvType, notes].filter(Boolean).join(' · '),
-                owner_id: user?.id,
+                description: [selectedRdvType, notes].filter(Boolean).join(' · ') || null,
               })
               .select()
             if (eventError) console.error('ERROR event insert:', eventError)
@@ -891,14 +1061,23 @@ export default function Pipeline() {
         }).eq('id', profile.id)
         updateProfile(profile.id, { session_formation_id: pendingSessionId, integration_periode: session?.periode, integration_annee: session?.annee, integration_confirmed: false })
       }
+      await insertIntermediateActivities()
       await supabase.from('activities').insert({
         profile_id: profile.id,
+        activity_type: 'stage_change',
         type: 'stage_change',
+        old_value: oldStage,
+        new_value: newStage,
         note: `${oldStage} → ${newStage}`,
-        date: new Date().toISOString().split('T')[0],
+        date: today,
         icon: 'refresh',
         source: 'manual',
       })
+      // Reload activities for the open modal panel
+      if (modalProfile?.id === profile.id) {
+        const { data: freshActs } = await supabase.from('activities').select('*').eq('profile_id', profile.id).order('created_at', { ascending: false }).limit(50)
+        setActivities(freshActs || [])
+      }
       fetchProfiles()
     }
     setStageChangeDate('')
@@ -908,29 +1087,54 @@ export default function Pipeline() {
     setStageChangeSkipStep(false)
     setPendingSessionId('')
     setPendingSessions([])
+    setIntermediateStages([])
     setPendingStageChange(null)
   }
 
   const handleSkipStageChangeDate = async () => {
     if (!pendingStageChange) return
     const { profileId, profile, newStage } = pendingStageChange
+    const today = new Date().toISOString().split('T')[0]
+
+    const insertIntermediateActivities = async () => {
+      const checked = intermediateStages.filter((s) => s.checked)
+      if (checked.length === 0) return
+      await supabase.from('activities').insert(
+        checked.map((s) => ({
+          profile_id: profile.id,
+          activity_type: 'stage_change',
+          type: 'stage_change',
+          new_value: s.stage,
+          note: `Passage en ${s.stage} (rétrospectif)`,
+          date: s.date || today,
+          icon: 'refresh',
+          source: 'manual',
+        }))
+      )
+    }
+
     if (newStage === 'Recruté') {
       const oldStage = profile.stg ?? '—'
       changeStage(profileId, newStage)
       if (useSupabase) {
+        await insertIntermediateActivities()
         const recruteUpdates = { stage: 'Recruté', integration_confirmed: true }
         await supabase.from('profiles').update(recruteUpdates).eq('id', profile.id)
         await supabase.from('activities').insert({
           profile_id: profile.id,
+          activity_type: 'stage_change',
           type: 'stage_change',
+          old_value: oldStage,
+          new_value: 'Recruté',
           note: `${oldStage} → Recruté`,
-          date: new Date().toISOString().split('T')[0],
+          date: today,
           icon: 'refresh',
           source: 'manual',
         })
         fetchProfiles()
       }
       setPendingStageChange(null)
+      setIntermediateStages([])
       setStageChangeDate('')
       setStageChangeTime('')
       setStageChangeRdType('Google Meet')
@@ -956,14 +1160,27 @@ export default function Pipeline() {
         }).eq('id', profile.id)
         updateProfile(profile.id, { session_formation_id: pendingSessionId, integration_periode: session?.periode, integration_annee: session?.annee, integration_confirmed: false })
       }
+      await insertIntermediateActivities()
       await supabase.from('activities').insert({
         profile_id: profile.id,
+        activity_type: 'stage_change',
         type: 'stage_change',
+        old_value: oldStage,
+        new_value: newStage,
         note: `${oldStage} → ${newStage}`,
-        date: new Date().toISOString().split('T')[0],
+        date: today,
         icon: 'refresh',
         source: 'manual',
       })
+      // Reload activities + events pour le panneau profil ouvert
+      if (String(modalProfile?.id) === String(profile.id)) {
+        const [freshActs, freshEvts] = await Promise.all([
+          supabase.from('activities').select('*').eq('profile_id', profile.id).order('created_at', { ascending: false }).limit(50),
+          supabase.from('events').select('*').eq('profile_id', profile.id).order('created_at', { ascending: false }),
+        ])
+        setActivities(freshActs.data || [])
+        setEvents(freshEvts.data || [])
+      }
       fetchProfiles()
     }
     setStageChangeDate('')
@@ -973,6 +1190,7 @@ export default function Pipeline() {
     setStageChangeSkipStep(false)
     setPendingSessionId('')
     setPendingSessions([])
+    setIntermediateStages([])
     setPendingStageChange(null)
   }
 
@@ -1015,6 +1233,14 @@ export default function Pipeline() {
     await loadActivities()
   }
 
+  // Constantes partagées entre les modals
+  const TIME_SLOTS = Array.from({ length: 19 }, (_, i) => {
+    const h = 9 + Math.floor(i / 2)
+    const m = (i % 2) * 30
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+  })
+  const RDV_TYPES = ['Google Meet', 'Téléphone', 'Présentiel']
+
   return (
     <div id="pg-pipeline" className="h-full flex flex-col overflow-hidden">
       <div className="pipbar py-4 px-5 pt-4 flex items-center gap-3 shrink-0">
@@ -1031,13 +1257,30 @@ export default function Pipeline() {
                 stage={st}
                 cards={cards}
                 onCardClick={(p) => {
+                  // Force un rechargement si c'est le même profil déjà ouvert
+                  if (String(modalProfile?.id) === String(p.id)) {
+                    Promise.all([
+                      supabase.from('activities').select('*').eq('profile_id', p.id).order('created_at', { ascending: false }).limit(50),
+                      supabase.from('events').select('*').eq('profile_id', p.id).order('created_at', { ascending: false }),
+                    ]).then(([actsRes, evtsRes]) => {
+                      setActivities(actsRes.data || [])
+                      setEvents(evtsRes.data || [])
+                    })
+                  }
                   setModalProfile(p)
                   setSelectedCardId(p.id)
                 }}
                 selectedCardId={selectedCardId}
                 onDrop={handleDrop}
-                showOwnerBadge={isGlobalView}
+                showOwnerBadge={true}
                 nextEventsByProfileId={nextEventsByProfileId}
+                onEditDate={(p, stg) => {
+                  setDateEditProfile({ profile: p, stage: stg })
+                  setDateEditValue(p.next_event_date ? p.next_event_date.split('T')[0] : '')
+                  setDateEditTime(p.next_event_date ? (p.next_event_date.split('T')[1] || '').slice(0, 5) || '' : '')
+                  setDateEditRdvType('Google Meet')
+                  setDateEditNotes('')
+                }}
               />
             )
           })}
@@ -1193,7 +1436,6 @@ export default function Pipeline() {
                               event_type: 'Modification session',
                               event_date: new Date().toISOString(),
                               description: `Session modifiée → ${sessionLabel}`,
-                              ...(user?.id && { owner_id: user.id }),
                             })
                             updateProfile(displayProfile.id, updates)
                             fetchProfiles?.()
@@ -1427,19 +1669,26 @@ export default function Pipeline() {
                     <>
                       {activities.map((a) => {
                         const typeLabel = a.activity_type === 'score_corrected' ? 'Score' : { stage_change: 'Stade', note_added: 'Note', maturity_change: 'Maturité', source_change: 'Source', region_change: 'Région', field_edit: 'Modification' }[a.type] || 'Activité'
-                        const title = a.note || a.activity_type || a.old_value || a.new_value || '—'
+                        const rawNote = a.note || a.activity_type || a.old_value || a.new_value || '—'
+                        const isRetro = typeof rawNote === 'string' && rawNote.includes('(rétrospectif)')
+                        const title = isRetro ? rawNote.replace(' (rétrospectif)', '') : rawNote
                         return (
                           <div key={a.id} style={{ position: 'relative', marginBottom: 16 }}>
-                            <div style={{ position: 'absolute', left: -22, top: 4, width: 10, height: 10, borderRadius: '50%', background: '#173731', border: '2px solid #fff' }} />
-                            <div style={{ background: '#F9F7F4', borderRadius: 8, border: '0.5px solid #E5E0D8', padding: '10px 14px' }}>
+                            <div style={{ position: 'absolute', left: -22, top: 4, width: 10, height: 10, borderRadius: '50%', background: isRetro ? '#D2AB76' : '#173731', border: '2px solid #fff' }} />
+                            <div style={{ background: isRetro ? '#FFFDF7' : '#F9F7F4', borderRadius: 8, border: `0.5px solid ${isRetro ? '#F0DDB0' : '#E5E0D8'}`, padding: '10px 14px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                                   <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: '#EEF4FB', color: '#185FA5', border: '0.5px solid #B5D4F4', fontWeight: 500 }}>
                                     {typeLabel}
                                   </span>
+                                  {isRetro && (
+                                    <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 20, background: '#FEF3C7', color: '#92400E', fontWeight: 600 }}>
+                                      rétrospectif
+                                    </span>
+                                  )}
                                   <span style={{ fontSize: 13, fontWeight: 500, color: '#0D1117' }}>{title}</span>
                                 </div>
-                                <span style={{ fontSize: 11, color: '#9CA3AF' }}>{formatActivityDate(a.created_at)}</span>
+                                <span style={{ fontSize: 11, color: '#9CA3AF', flexShrink: 0 }}>{formatActivityDate(a.created_at)}</span>
                               </div>
                               <p style={{ fontSize: 12, color: '#6B7280', margin: 0 }}>
                                 Modifié par <span style={{ fontWeight: 500, color: '#0D1117' }}>{a.author || 'Baptiste PATERAC'}</span>
@@ -1526,7 +1775,7 @@ export default function Pipeline() {
                       </button>
                     )}
                   </div>
-                  {!showEventForm && events.length === 0 && (
+                  {!showEventForm && events.length === 0 && activities.filter((a) => (a.type === 'stage_change' || a.activity_type === 'stage_change') && a.new_value).length === 0 && (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 48, gap: 12 }}>
                       <span style={{ width: 48, height: 48, display: 'flex', color: '#bbb' }}><IconDocument /></span>
                       <div style={{ fontSize: 12, color: '#bbb' }}>Cliquez sur + Nouvel événement pour commencer</div>
@@ -1542,62 +1791,121 @@ export default function Pipeline() {
                       <button type="button" onClick={handleAddEvent} style={{ padding: '8px 16px', borderRadius: 8, background: '#D2AB76', color: '#173731', border: 'none', cursor: 'pointer', fontSize: 13 }}>Ajouter</button>
                     </div>
                   )}
-                  {events.map((e) => (
-                    <div
-                      key={e.id}
-                      className="pipeline-event-card"
-                      style={{
-                        background: 'white',
-                        border: '1px solid #E5E0D8',
-                        borderRadius: 10,
-                        padding: 14,
-                        marginBottom: 10,
-                        transition: 'background 0.2s',
-                        position: 'relative',
-                        cursor: 'pointer',
-                      }}
-                      onMouseEnter={(ev) => { if (expandedEventId !== e.id) ev.currentTarget.style.background = '#F8F5F1' }}
-                      onMouseLeave={(ev) => { if (expandedEventId !== e.id) ev.currentTarget.style.background = 'white' }}
-                    >
-                      {editingEventId === e.id ? (
-                        <div onClick={(ev) => ev.stopPropagation()}>
-                          <select value={editingEventType} onChange={(ev) => setEditingEventType(ev.target.value)} style={{ width: '100%', padding: 8, marginBottom: 12, borderRadius: 6, border: '1px solid #E5E0D8' }}>
-                            {EVENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                          </select>
-                          <input type="date" value={editingEventDate} onChange={(ev) => setEditingEventDate(ev.target.value)} style={{ width: '100%', padding: 8, marginBottom: 12, borderRadius: 6, border: '1px solid #E5E0D8' }} />
-                          <textarea value={editingEventDetail} onChange={(ev) => setEditingEventDetail(ev.target.value)} placeholder="Décrivez le déroulé, les points clés, les prochaines étapes..." style={{ width: '100%', minHeight: 200, padding: 8, marginBottom: 12, borderRadius: 6, border: '1px solid #E5E0D8', resize: 'vertical' }} />
-                          <div style={{ display: 'flex', gap: 8 }}>
-                            <button type="button" onClick={handleSaveEventEdit} style={{ padding: '8px 16px', borderRadius: 8, background: '#D2AB76', color: '#173731', border: 'none', cursor: 'pointer', fontSize: 13 }}>Enregistrer</button>
-                            <button type="button" onClick={() => { setEditingEventId(null); setEditingEventType('R0'); setEditingEventDate(''); setEditingEventDetail(''); setExpandedEventId(null); }} style={{ padding: '8px 16px', borderRadius: 8, background: '#E5E0D8', color: '#6B6B6B', border: 'none', cursor: 'pointer', fontSize: 13 }}>Annuler</button>
-                          </div>
+                  {/* ── PARCOURS PIPELINE (dérivé des activités stage_change) ── */}
+                  {(() => {
+                    // Cherche dans activity_type ET type (CRMContext n'insère que activity_type,
+                    // Pipeline insère les deux — on veut capturer les deux sources)
+                    const stageActs = activities
+                      .filter((a) => (a.type === 'stage_change' || a.activity_type === 'stage_change') && a.new_value)
+                      // Déduplique si les deux inserts ont créé un doublon pour la même transition
+                      .filter((a, i, arr) => arr.findIndex((b) => b.new_value === a.new_value && Math.abs(new Date(b.created_at) - new Date(a.created_at)) < 5000) === i)
+                      .slice()
+                      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+                    if (stageActs.length === 0) return null
+                    const STAGE_ICONS = { 'R0': '📞', 'R1': '🤝', 'Point Business Plan': '📊', "Point d'étape": '🔄', 'Démission reconversion': '✈️', 'R2 Amaury': '🏆', 'Point juridique': '⚖️', 'Recruté': '🎉' }
+                    return (
+                      <div style={{ background: '#F5F3EE', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: '#173731', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          🗺️ Parcours pipeline
+                          <span style={{ fontSize: 10, fontWeight: 400, color: '#888' }}>— historique des étapes</span>
                         </div>
-                      ) : (
-                        <>
-                          <div
-                            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}
-                            onClick={() => setExpandedEventId((prev) => (prev === e.id ? null : e.id))}
-                          >
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontSize: 13, fontWeight: 600, color: '#1A1A1A' }}>{(e.content || '').split(' — ')[0] || 'Événement'}</div>
-                              <div style={{ fontSize: 12, color: '#6B6B6B', marginTop: 4 }}>{e.date ? new Date(e.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : (e.created_at ? new Date(e.created_at).toLocaleDateString('fr-FR') : '')}</div>
-                              {expandedEventId === e.id && (
-                                <div style={{ marginTop: 12, padding: 12, background: '#F8F5F1', borderRadius: 8, fontSize: 13, color: '#1A1A1A', whiteSpace: 'pre-wrap' }} onClick={(ev) => ev.stopPropagation()}>
-                                  {e.content || '—'}
+                        <div style={{ position: 'relative', paddingLeft: 20 }}>
+                          <div style={{ position: 'absolute', left: 4, top: 4, bottom: 4, width: 1, background: '#D2AB76' }} />
+                          {stageActs.map((a, i) => {
+                            const isRetro = (a.note || '').includes('rétrospectif')
+                            const dateStr = a.created_at ? new Date(a.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
+                            const icon = STAGE_ICONS[a.new_value] || '📍'
+                            const isLast = i === stageActs.length - 1
+                            return (
+                              <div key={a.id} style={{ position: 'relative', marginBottom: isLast ? 0 : 8 }}>
+                                <div style={{ position: 'absolute', left: -16, top: 3, width: 8, height: 8, borderRadius: '50%', background: isLast ? '#173731' : '#D2AB76', border: '2px solid #F5F3EE' }} />
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <span style={{ fontSize: 13 }}>{icon}</span>
+                                    <span style={{ fontSize: 12, fontWeight: isLast ? 700 : 500, color: isLast ? '#173731' : '#444' }}>{a.new_value}</span>
+                                    {isRetro && <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 20, background: '#FEF3C7', color: '#92400E', fontWeight: 600 }}>retro</span>}
+                                  </div>
+                                  <span style={{ fontSize: 11, color: '#9CA3AF', flexShrink: 0 }}>{dateStr}</span>
                                 </div>
-                              )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })()}
+
+                  {/* ── ÉVÉNEMENTS MANUELS ── */}
+                  {events.map((e) => {
+                    // Compatibilité anciens champs (content/date) et nouveaux (event_type/event_date/description)
+                    const evTitle = e.event_type || (e.content || '').split(' — ')[0] || 'Événement'
+                    const evDateRaw = e.event_date || e.date
+                    const evDateStr = evDateRaw
+                      ? new Date(evDateRaw).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+                      : (e.created_at ? new Date(e.created_at).toLocaleDateString('fr-FR') : '')
+                    const evTimeStr = e.event_date && e.event_date.includes('T')
+                      ? new Date(e.event_date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+                      : null
+                    const evBody = e.description || e.content || null
+                    return (
+                      <div
+                        key={e.id}
+                        className="pipeline-event-card"
+                        style={{
+                          background: 'white',
+                          border: '1px solid #E5E0D8',
+                          borderRadius: 10,
+                          padding: 14,
+                          marginBottom: 10,
+                          transition: 'background 0.2s',
+                          position: 'relative',
+                          cursor: 'pointer',
+                        }}
+                        onMouseEnter={(ev) => { if (expandedEventId !== e.id) ev.currentTarget.style.background = '#F8F5F1' }}
+                        onMouseLeave={(ev) => { if (expandedEventId !== e.id) ev.currentTarget.style.background = 'white' }}
+                      >
+                        {editingEventId === e.id ? (
+                          <div onClick={(ev) => ev.stopPropagation()}>
+                            <select value={editingEventType} onChange={(ev) => setEditingEventType(ev.target.value)} style={{ width: '100%', padding: 8, marginBottom: 12, borderRadius: 6, border: '1px solid #E5E0D8' }}>
+                              {EVENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                            <input type="date" value={editingEventDate} onChange={(ev) => setEditingEventDate(ev.target.value)} style={{ width: '100%', padding: 8, marginBottom: 12, borderRadius: 6, border: '1px solid #E5E0D8' }} />
+                            <textarea value={editingEventDetail} onChange={(ev) => setEditingEventDetail(ev.target.value)} placeholder="Décrivez le déroulé, les points clés, les prochaines étapes..." style={{ width: '100%', minHeight: 200, padding: 8, marginBottom: 12, borderRadius: 6, border: '1px solid #E5E0D8', resize: 'vertical' }} />
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              <button type="button" onClick={handleSaveEventEdit} style={{ padding: '8px 16px', borderRadius: 8, background: '#D2AB76', color: '#173731', border: 'none', cursor: 'pointer', fontSize: 13 }}>Enregistrer</button>
+                              <button type="button" onClick={() => { setEditingEventId(null); setEditingEventType('R0'); setEditingEventDate(''); setEditingEventDetail(''); setExpandedEventId(null); }} style={{ padding: '8px 16px', borderRadius: 8, background: '#E5E0D8', color: '#6B6B6B', border: 'none', cursor: 'pointer', fontSize: 13 }}>Annuler</button>
                             </div>
-                            <span style={{ flexShrink: 0, fontSize: 12, color: '#6B6B6B', transition: 'transform 0.2s', transform: expandedEventId === e.id ? 'rotate(180deg)' : 'none' }}>▾</span>
                           </div>
-                          {expandedEventId === e.id && (
-                            <div className="pipeline-event-actions" style={{ display: 'flex', gap: 6, marginTop: 12 }} onClick={(ev) => ev.stopPropagation()}>
-                              <button type="button" onClick={() => startEditEvent(e)} style={{ padding: '3px 10px', fontSize: 12, color: '#173731', background: 'transparent', border: '1px solid #E5E0D8', borderRadius: 6, cursor: 'pointer' }}>Éditer</button>
-                              <button type="button" onClick={() => setConfirmDeleteEvent({ id: e.id })} style={{ padding: 3, background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626', display: 'inline-flex' }} title="Supprimer"><IconTrash /></button>
+                        ) : (
+                          <>
+                            <div
+                              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}
+                              onClick={() => setExpandedEventId((prev) => (prev === e.id ? null : e.id))}
+                            >
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 13, fontWeight: 600, color: '#1A1A1A' }}>{evTitle}</div>
+                                <div style={{ fontSize: 12, color: '#6B6B6B', marginTop: 4 }}>
+                                  {evDateStr}{evTimeStr ? ` · ${evTimeStr}` : ''}
+                                </div>
+                                {expandedEventId === e.id && evBody && (
+                                  <div style={{ marginTop: 12, padding: 12, background: '#F8F5F1', borderRadius: 8, fontSize: 13, color: '#1A1A1A', whiteSpace: 'pre-wrap' }} onClick={(ev) => ev.stopPropagation()}>
+                                    {evBody}
+                                  </div>
+                                )}
+                              </div>
+                              <span style={{ flexShrink: 0, fontSize: 12, color: '#6B6B6B', transition: 'transform 0.2s', transform: expandedEventId === e.id ? 'rotate(180deg)' : 'none' }}>▾</span>
                             </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  ))}
+                            {expandedEventId === e.id && (
+                              <div className="pipeline-event-actions" style={{ display: 'flex', gap: 6, marginTop: 12 }} onClick={(ev) => ev.stopPropagation()}>
+                                <button type="button" onClick={() => startEditEvent(e)} style={{ padding: '3px 10px', fontSize: 12, color: '#173731', background: 'transparent', border: '1px solid #E5E0D8', borderRadius: 6, cursor: 'pointer' }}>Éditer</button>
+                                <button type="button" onClick={() => setConfirmDeleteEvent({ id: e.id })} style={{ padding: 3, background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626', display: 'inline-flex' }} title="Supprimer"><IconTrash /></button>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -1631,25 +1939,21 @@ export default function Pipeline() {
         </div>
       )}
       {pendingStageChange && pendingStageChange.newStage !== 'Recruté' && (() => {
-        const TIME_SLOTS = Array.from({ length: 19 }, (_, i) => {
-          const h = 9 + Math.floor(i / 2)
-          const m = (i % 2) * 30
-          return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
-        })
-        const RDV_TYPES = ['Google Meet', 'Téléphone', 'Présentiel']
         const { profile, newStage } = pendingStageChange
         const currentStage = profile.stg || 'R0'
         return (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setPendingStageChange(null)}>
-            <div style={{ background: 'white', borderRadius: 12, boxShadow: '0 4px 20px rgba(0,0,0,0.15)', minWidth: 380, maxWidth: 440, overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
-              <div style={{ background: '#173731', padding: '16px 20px' }}>
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }} onClick={() => setPendingStageChange(null)}>
+            <div style={{ background: 'white', borderRadius: 12, boxShadow: '0 4px 20px rgba(0,0,0,0.15)', width: '100%', maxWidth: 440, maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
+              {/* Header — fixe */}
+              <div style={{ background: '#173731', padding: '16px 20px', flexShrink: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                   <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', color: '#D2AB76', padding: '4px 10px', borderRadius: 20, border: '1px solid rgba(210,171,118,0.5)' }}>Pipeline</span>
                 </div>
                 <div style={{ fontFamily: 'Palatino, "Palatino Linotype", "Book Antiqua", serif', fontSize: 18, fontWeight: 600, color: '#E7E0D0' }}>Passage en {newStage}</div>
                 <div style={{ fontSize: 13, color: 'rgba(231,224,208,0.9)', marginTop: 4 }}>{profile.fn} {profile.ln} · {profile.co || '—'}</div>
               </div>
-              <div style={{ padding: 20 }}>
+              {/* Corps — scrollable */}
+              <div style={{ padding: 20, overflowY: 'auto', flex: 1 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flexShrink: 0 }}>
                     <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#E5E0D8', border: '2px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }} />
@@ -1661,6 +1965,83 @@ export default function Pipeline() {
                     <span style={{ fontSize: 10, fontWeight: 500, color: '#D2AB76', textAlign: 'center', maxWidth: 70 }}>{newStage === "Point d'étape téléphonique" ? "Point d'étape" : newStage}</span>
                   </div>
                 </div>
+
+                {/* ── ÉTAPES INTERMÉDIAIRES SAUTÉES ── */}
+                {intermediateStages.length > 0 && (
+                  <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '12px 14px', marginBottom: 16 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: '#92400E', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span>⚡</span>
+                      <span>Étapes sautées — lesquelles ont eu lieu ?</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#B45309', marginBottom: 10 }}>
+                      Cochez les étapes réalisées (même informellement) pour ne pas biaiser les analytics.
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {intermediateStages.map((s, i) => (
+                        <div key={s.stage} style={{ background: 'white', border: `1px solid ${s.checked ? '#D2AB76' : '#E5E0D8'}`, borderRadius: 6, padding: '8px 10px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: s.checked ? 6 : 0 }}>
+                            <input
+                              type="checkbox"
+                              id={`inter-${i}`}
+                              checked={s.checked}
+                              onChange={(e) => {
+                                setIntermediateStages((prev) => prev.map((p, pi) => pi === i ? { ...p, checked: e.target.checked } : p))
+                              }}
+                              style={{ width: 15, height: 15, accentColor: '#173731', flexShrink: 0 }}
+                            />
+                            <label htmlFor={`inter-${i}`} style={{ fontSize: 12, fontWeight: 600, color: '#173731', cursor: 'pointer', flex: 1 }}>{s.stage}</label>
+                          </div>
+                          {s.checked && (
+                            <div style={{ marginLeft: 23 }}>
+                              <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 3 }}>Date (optionnel)</label>
+                              <input
+                                type="date"
+                                value={s.date}
+                                onChange={(e) => {
+                                  setIntermediateStages((prev) => prev.map((p, pi) => pi === i ? { ...p, date: e.target.value } : p))
+                                }}
+                                style={{ padding: '4px 8px', fontSize: 12, border: '1px solid #E5E0D8', borderRadius: 4, width: '100%' }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── RAPPEL GRILLE DE NOTATION (R1 → étape suivante) ── */}
+                {currentStage === 'R1' && (
+                  <div style={{
+                    background: r1ScoringConfirmed ? '#F0FDF4' : '#FFFBEB',
+                    border: `1px solid ${r1ScoringConfirmed ? '#BBF7D0' : '#FDE68A'}`,
+                    borderRadius: 8,
+                    padding: '12px 14px',
+                    marginBottom: 16,
+                  }}>
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                      <span style={{ fontSize: 18, lineHeight: 1, flexShrink: 0 }}>{r1ScoringConfirmed ? '✅' : '📋'}</span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: r1ScoringConfirmed ? '#166534' : '#92400E', marginBottom: 4 }}>
+                          Grille de notation — à remplir avant de passer à l'étape suivante
+                        </div>
+                        <div style={{ fontSize: 11, color: r1ScoringConfirmed ? '#15803D' : '#B45309', marginBottom: 10, lineHeight: 1.4 }}>
+                          Assurez-vous d'avoir évalué ce profil dans l'onglet <strong>Grille de notation</strong> : motivation, projet, expérience, potentiel réseau.
+                        </div>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={r1ScoringConfirmed}
+                            onChange={(e) => setR1ScoringConfirmed(e.target.checked)}
+                            style={{ width: 15, height: 15, accentColor: '#173731' }}
+                          />
+                          <span style={{ fontSize: 12, color: '#444', fontWeight: 500 }}>J'ai bien rempli la grille de notation</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
                   <div style={{ flex: 1 }}>
                     <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 4 }}>Date</label>
@@ -1730,16 +2111,144 @@ export default function Pipeline() {
                     </select>
                   </div>
                 )}
-                <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', alignItems: 'center' }}>
-                  <button type="button" onClick={() => setPendingStageChange(null)} style={{ padding: '8px 16px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, background: 'white', cursor: 'pointer', color: '#6B6B6B' }}>Annuler</button>
-                  <button type="button" onClick={handleSkipStageChangeDate} style={{ padding: '6px 12px', fontSize: 12, border: 'none', background: 'transparent', cursor: 'pointer', color: '#9CA3AF' }}>Sans date</button>
-                  <button type="button" onClick={handleConfirmStageChange} disabled={!stageChangeDate.trim() || !stageChangeTime} style={{ padding: '8px 16px', fontSize: 13, border: 'none', borderRadius: 6, background: '#173731', color: '#E7E0D0', cursor: 'pointer', opacity: (stageChangeDate.trim() && stageChangeTime) ? 1 : 0.5 }}>Confirmer →</button>
-                </div>
+              </div>
+              {/* Footer — fixe */}
+              <div style={{ padding: '12px 20px', borderTop: '1px solid #E5E0D8', flexShrink: 0, display: 'flex', gap: 12, justifyContent: 'flex-end', alignItems: 'center', background: 'white' }}>
+                <button type="button" onClick={() => { setPendingStageChange(null); setIntermediateStages([]) }} style={{ padding: '8px 16px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, background: 'white', cursor: 'pointer', color: '#6B6B6B' }}>Annuler</button>
+                <button type="button" onClick={handleSkipStageChangeDate} style={{ padding: '6px 12px', fontSize: 12, border: 'none', background: 'transparent', cursor: 'pointer', color: '#9CA3AF' }}>Sans date</button>
+                <button
+                  type="button"
+                  onClick={handleConfirmStageChange}
+                  disabled={!stageChangeDate.trim() || !stageChangeTime || (currentStage === 'R1' && !r1ScoringConfirmed)}
+                  title={currentStage === 'R1' && !r1ScoringConfirmed ? 'Confirmez avoir rempli la grille de notation' : undefined}
+                  style={{
+                    padding: '8px 16px',
+                    fontSize: 13,
+                    border: 'none',
+                    borderRadius: 6,
+                    background: '#173731',
+                    color: '#E7E0D0',
+                    cursor: (stageChangeDate.trim() && stageChangeTime && (currentStage !== 'R1' || r1ScoringConfirmed)) ? 'pointer' : 'not-allowed',
+                    opacity: (stageChangeDate.trim() && stageChangeTime && (currentStage !== 'R1' || r1ScoringConfirmed)) ? 1 : 0.4,
+                  }}
+                >Confirmer →</button>
               </div>
             </div>
           </div>
         )
       })()}
+
+      {/* ── MODAL MODIFICATION DE DATE ── */}
+      {dateEditProfile && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => !dateEditSaving && setDateEditProfile(null)}
+        >
+          <div
+            style={{ background: 'white', borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.2)', width: 400, maxWidth: '92vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{ padding: '18px 20px 14px', borderBottom: '1px solid #E5E0D8', flexShrink: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 600, color: '#173731', marginBottom: 2 }}>
+                Modifier la date — {dateEditProfile.stage}
+              </div>
+              <div style={{ fontSize: 12, color: '#888' }}>
+                {dateEditProfile.profile.fn} {dateEditProfile.profile.ln}
+              </div>
+            </div>
+
+            {/* Body — scrollable */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
+              {/* Date + Time */}
+              <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 4 }}>Date</label>
+                  <input
+                    type="date"
+                    value={dateEditValue}
+                    onChange={(e) => setDateEditValue(e.target.value)}
+                    style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6 }}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 4 }}>Heure</label>
+                  <select
+                    value={dateEditTime}
+                    onChange={(e) => setDateEditTime(e.target.value)}
+                    style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, background: 'white' }}
+                  >
+                    <option value="">—</option>
+                    {TIME_SLOTS.map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Type de RDV */}
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 4 }}>Type de RDV</label>
+                <select
+                  value={dateEditRdvType}
+                  onChange={(e) => setDateEditRdvType(e.target.value)}
+                  style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, background: 'white' }}
+                >
+                  {RDV_TYPES.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Notes */}
+              <div style={{ marginBottom: 4 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 4 }}>Notes (optionnel)</label>
+                <textarea
+                  value={dateEditNotes}
+                  onChange={(e) => setDateEditNotes(e.target.value)}
+                  placeholder="Contexte, préparation…"
+                  rows={3}
+                  style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, resize: 'vertical' }}
+                />
+              </div>
+
+              {/* Info traçabilité */}
+              <div style={{ marginTop: 10, padding: '8px 10px', background: '#F5F3EE', borderRadius: 6, fontSize: 11, color: '#888', lineHeight: 1.4 }}>
+                📋 Cette modification sera enregistrée dans les événements et activités du profil pour la traçabilité.
+              </div>
+            </div>
+
+            {/* Footer — fixe */}
+            <div style={{ padding: '12px 20px', borderTop: '1px solid #E5E0D8', flexShrink: 0, display: 'flex', gap: 10, justifyContent: 'flex-end', background: 'white' }}>
+              <button
+                type="button"
+                onClick={() => setDateEditProfile(null)}
+                disabled={dateEditSaving}
+                style={{ padding: '8px 16px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, background: 'white', cursor: 'pointer', color: '#6B6B6B' }}
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveDateEdit}
+                disabled={!dateEditValue || dateEditSaving}
+                style={{
+                  padding: '8px 16px',
+                  fontSize: 13,
+                  border: 'none',
+                  borderRadius: 6,
+                  background: '#173731',
+                  color: '#E7E0D0',
+                  cursor: (!dateEditValue || dateEditSaving) ? 'not-allowed' : 'pointer',
+                  opacity: (!dateEditValue || dateEditSaving) ? 0.5 : 1,
+                }}
+              >
+                {dateEditSaving ? 'Enregistrement…' : 'Enregistrer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {confirmDeleteEvent && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setConfirmDeleteEvent(null)}>

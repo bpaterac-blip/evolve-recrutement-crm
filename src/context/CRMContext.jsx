@@ -127,13 +127,23 @@ export function CRMProvider({ children }) {
       return
     }
     try {
-      let query = supabase.from(PROFILES_TABLE).select('*').order('created_at', { ascending: false })
-      if (role === 'admin' && viewMode === 'personal' && user?.id) {
-        query = query.eq('owner_id', user.id)
+      // Paginate to fetch ALL profiles (Supabase default limit is 1000)
+      const PAGE_SIZE = 1000
+      let allData = []
+      let from = 0
+      let hasMore = true
+      while (hasMore) {
+        let query = supabase.from(PROFILES_TABLE).select('*').order('created_at', { ascending: false }).range(from, from + PAGE_SIZE - 1)
+        if (role === 'admin' && viewMode === 'personal' && user?.id) {
+          query = query.eq('owner_id', user.id)
+        }
+        const { data, error } = await query
+        if (error) throw error
+        allData = allData.concat(data || [])
+        hasMore = (data || []).length === PAGE_SIZE
+        from += PAGE_SIZE
       }
-      const { data, error } = await query
-      if (error) throw error
-      setProfiles((data || []).map(mapRowToProfile))
+      setProfiles(allData.map(mapRowToProfile))
     } catch (err) {
       console.error('[Supabase] Erreur fetch profiles:', err)
       setProfiles(INITIAL_PROFILES)

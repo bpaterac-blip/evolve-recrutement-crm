@@ -34,7 +34,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [userProfile, setUserProfile] = useState(null)
   const [role, setRole] = useState(null)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const checkSession = async () => {
@@ -63,7 +63,7 @@ export function AuthProvider({ children }) {
         setUser(null)
         setUserProfile(null)
         setRole('user')
-        setLoading(false)
+        if (!cancelled) setLoading(false)
         return
       }
       try {
@@ -72,9 +72,8 @@ export function AuthProvider({ children }) {
           fetchUserProfile(session.user.id),
         ])
         if (cancelled) return
-        console.log('Role chargé (applySession):', r)
         if (status === 'suspended') {
-          supabase.auth.signOut()
+          await supabase.auth.signOut()
           setUser(null)
           setUserProfile(null)
           setRole('user')
@@ -84,7 +83,7 @@ export function AuthProvider({ children }) {
           setRole(r ?? 'user')
         }
       } catch (err) {
-        console.warn('AuthContext applySession fetch failed:', err)
+        console.warn('AuthContext applySession error:', err)
         if (!cancelled) {
           setUser(session.user)
           setUserProfile(null)
@@ -95,77 +94,23 @@ export function AuthProvider({ children }) {
       }
     }
 
-    const sessionPromise = supabase.auth.getSession()
-    const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve({ timeout: true }), SAFETY_TIMEOUT_MS))
-    Promise.race([sessionPromise, timeoutPromise]).then((result) => {
-      if (cancelled) return
-      clearTimeout(safetyTimeoutId)
-      if (result?.timeout) {
-        setLoading(false)
-        sessionPromise.then((sessionResult) => {
-          if (!cancelled && sessionResult?.data?.session) applySession(sessionResult.data.session)
-        })
-        return
-      }
-      const session = result?.data?.session
-      applySession(session ?? null)
-    }).catch(() => {
-      if (!cancelled) {
-        clearTimeout(safetyTimeoutId)
-        setLoading(false)
-        setUser(null)
-        setRole('user')
-      }
-    })
-
+    // onAuthStateChange fires INITIAL_SESSION automatically (Supabase v2),
+    // so no need for a separate getSession() call.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (cancelled) return
       clearTimeout(safetyTimeoutId)
-      try {
-        if (event === 'PASSWORD_RECOVERY') {
-          const target = `${window.location.origin}/reset-password${window.location.hash || ''}`
-          if (!window.location.pathname.startsWith('/reset-password')) {
-            window.location.replace(target)
-          }
-          setLoading(false)
-          return
+
+      if (event === 'PASSWORD_RECOVERY') {
+        const target = `${window.location.origin}/reset-password${window.location.hash || ''}`
+        if (!window.location.pathname.startsWith('/reset-password')) {
+          window.location.replace(target)
         }
-        if (!session?.user) {
-          setUser(null)
-          setUserProfile(null)
-          setRole('user')
-          setLoading(false)
-          return
-        }
-        Promise.all([
-          fetchUserRoleAndStatus(session.user.id),
-          fetchUserProfile(session.user.id),
-        ]).then(([{ role: r, status }, profile]) => {
-          if (cancelled) return
-          console.log('Role chargé (onAuthStateChange):', r)
-          if (status === 'suspended') {
-            supabase.auth.signOut()
-            setUser(null)
-            setUserProfile(null)
-            setRole('user')
-          } else {
-            setUser(session.user)
-            setUserProfile(profile)
-            setRole(r ?? 'user')
-          }
-        }).catch((err) => {
-          console.warn('AuthContext onAuthStateChange fetch failed:', err)
-          if (!cancelled) {
-            setUser(session.user)
-            setUserProfile(null)
-            setRole('user')
-          }
-        }).finally(() => {
-          if (!cancelled) setLoading(false)
-        })
-      } finally {
-        if (!cancelled) setLoading(false)
+        setLoading(false)
+        return
       }
+
+      // Delegate all session processing to applySession (handles loading state)
+      applySession(session ?? null)
     })
 
     return () => {

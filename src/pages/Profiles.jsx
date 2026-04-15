@@ -8,6 +8,7 @@ import { STAGES, MATURITIES, SOURCES } from '../lib/data'
 import InlineDropdown from '../components/InlineDropdown'
 import PasInteresseModal from '../components/PasInteresseModal'
 import ChuteRaisonModal from '../components/ChuteRaisonModal'
+import R0ConfirmModal from '../components/R0ConfirmModal'
 
 const ACCENT = '#173731'
 const GOLD = '#D2AB76'
@@ -106,7 +107,7 @@ function formatAddedDate(p) {
   return p?.dt || '—'
 }
 
-export default function Profiles() {
+export default function Profiles({ contactedOnly = false }) {
   const navigate = useNavigate()
   const { role, user } = useAuth()
   const { viewMode } = useViewMode()
@@ -120,6 +121,7 @@ export default function Profiles() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [pasInteresseModalProfile, setPasInteresseModalProfile] = useState(null)
   const [chuteModalProfile, setChuteModalProfile] = useState(null)
+  const [r0ConfirmProfile, setR0ConfirmProfile] = useState(null)
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -137,6 +139,8 @@ export default function Profiles() {
   }, [])
 
   const P = filteredProfiles.filter((p) => {
+    // En mode "contactés", ne montrer que les profils avec un stade (passés en pipeline)
+    if (contactedOnly && !p.stg) return false
     if (srcFilter && p.src !== srcFilter) return false
     if (stgFilter && p.stg !== stgFilter) return false
     if (matFilter === 'Sans archivés' && p.mat === 'Archivé') return false
@@ -185,16 +189,45 @@ export default function Profiles() {
     await fetchProfiles()
   }
 
-  const handleSendToR0 = async (e, profile) => {
+  const handleSendToR0 = (e, profile) => {
     e.stopPropagation()
-    if (!useSupabase) return
-    await supabase.from('profiles').update({ stage: 'R0' }).eq('id', profile.id)
-    const eventRow = { profile_id: profile.id, event_type: 'Ajout pipeline', event_date: new Date().toISOString(), description: 'Ajouté en R0 depuis Tous les profils' }
-    if (user?.id) eventRow.owner_id = user.id
-    await supabase.from('events').insert(eventRow)
+    setR0ConfirmProfile(profile)
+  }
+
+  const confirmSendToR0 = async (source, r0Date) => {
+    const profile = r0ConfirmProfile
+    if (!profile || !useSupabase) return
+    // Update source if changed
+    if (source && source !== profile.src) {
+      changeSource(profile.id, source)
+    }
+    // Update profile: stage R0 + next_event_date/label with the R0 date
+    await supabase.from('profiles').update({
+      stage: 'R0',
+      next_event_date: r0Date,
+      next_event_label: 'R0',
+    }).eq('id', profile.id)
+    // Create event for the R0 meeting
+    const r0EventRow = {
+      profile_id: profile.id,
+      event_type: 'R0',
+      event_date: r0Date,
+      description: `R0 planifié (source: ${source})`,
+    }
+    if (user?.id) r0EventRow.owner_id = user.id
+    // Create activity event for pipeline addition
+    const pipelineEventRow = {
+      profile_id: profile.id,
+      event_type: 'Ajout pipeline',
+      event_date: new Date().toISOString(),
+      description: `Ajouté en R0 depuis Tous les profils (source: ${source})`,
+    }
+    if (user?.id) pipelineEventRow.owner_id = user.id
+    await supabase.from('events').insert([r0EventRow, pipelineEventRow])
     changeStage(profile.id, 'R0')
     await fetchProfiles()
-    showNotif('Profil envoyé en R0')
+    setR0ConfirmProfile(null)
+    showNotif(`${profile.fn} ${profile.ln} → R0 le ${new Date(r0Date).toLocaleDateString('fr-FR')}`)
   }
 
   const handleExportCsv = () => {
@@ -247,7 +280,7 @@ export default function Profiles() {
       <div style={{ background: '#ffffff', borderRadius: 16, border: '1px solid rgba(0,0,0,0.06)', overflow: 'visible' }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '20px 24px', borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
-          <h1 style={{ fontSize: 18, fontWeight: 600, color: '#1A1A1A', margin: 0 }}>Tous les profils</h1>
+          <h1 style={{ fontSize: 18, fontWeight: 600, color: '#1A1A1A', margin: 0 }}>{contactedOnly ? 'Prospects' : 'Tous les profils'}</h1>
           <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 12px', borderRadius: 20, background: ACCENT, color: GOLD, fontSize: 12, fontWeight: 600 }}>
             {P.length} profils
           </span>
@@ -319,13 +352,15 @@ export default function Profiles() {
                     <td style={{ ...rowStyle, minWidth: 100, width: 100 }} onClick={(e) => e.stopPropagation()}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                         <input type="checkbox" checked={selectedIds.has(p.id)} onChange={() => toggleSelect(p.id)} style={{ cursor: 'pointer', flexShrink: 0 }} onClick={(e) => e.stopPropagation()} />
-                        <button
-                          type="button"
-                          onClick={(e) => handleSendToR0(e, p)}
-                          style={{ fontSize: 11, padding: '3px 10px', borderRadius: 20, border: '1px solid #173731', color: '#173731', background: 'transparent', cursor: 'pointer', position: 'relative', zIndex: 0, flexShrink: 0 }}
-                        >
-                          R0
-                        </button>
+                        {!contactedOnly && (
+                          <button
+                            type="button"
+                            onClick={(e) => handleSendToR0(e, p)}
+                            style={{ fontSize: 11, padding: '3px 10px', borderRadius: 20, border: '1px solid #173731', color: '#173731', background: 'transparent', cursor: 'pointer', position: 'relative', zIndex: 0, flexShrink: 0 }}
+                          >
+                            R0
+                          </button>
+                        )}
                       </div>
                     </td>
                     <td style={{ ...rowStyle, cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); navigate(`/profiles/${p.id}`) }}>
@@ -406,6 +441,13 @@ export default function Profiles() {
         </div>
       </div>
 
+      {r0ConfirmProfile && (
+        <R0ConfirmModal
+          profile={r0ConfirmProfile}
+          onClose={() => setR0ConfirmProfile(null)}
+          onConfirm={confirmSendToR0}
+        />
+      )}
       {pasInteresseModalProfile && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setPasInteresseModalProfile(null)}>
           <PasInteresseModal
