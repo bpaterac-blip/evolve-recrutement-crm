@@ -361,42 +361,70 @@ Deno.serve(async (req) => {
     const maxRecrutesBySource = Math.max(1, ...recrutesBySourceEntries.map(e => e.count))
 
     const recrutesBySourceHtml = recrutesBySourceEntries.length > 0
-      ? recrutesBySourceEntries.map(({ src, count }) => {
+      ? `<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">` +
+        recrutesBySourceEntries.map(({ src, count }) => {
           const barPct = Math.max(8, Math.round((count / maxRecrutesBySource) * 100))
+          const emptyPct = 100 - barPct
           const color = SOURCE_COLORS[src] || '#94a3b8'
-          return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-            <span style="font-size:12px;color:#444;width:140px;flex-shrink:0;display:flex;align-items:center;gap:6px">
-              <span style="width:10px;height:10px;border-radius:2px;background:${color};display:inline-block"></span>
-              ${src}
-            </span>
-            <div style="flex:1;height:18px;background:#E8E4DD;border-radius:4px;overflow:hidden">
-              <div style="width:${barPct}%;height:100%;background:${color};border-radius:4px"></div>
-            </div>
-            <span style="font-size:13px;font-weight:600;color:#173731;min-width:24px;text-align:right">${count}</span>
-          </div>`
-        }).join('')
+          return `<tr>
+            <td style="padding:6px 12px 6px 0;width:160px;vertical-align:middle;white-space:nowrap">
+              <table cellpadding="0" cellspacing="0" style="border-collapse:collapse"><tr>
+                <td style="width:12px;height:12px;background:${color};border-radius:2px"></td>
+                <td style="padding-left:6px;font-size:12px;color:#444">${src}</td>
+              </tr></table>
+            </td>
+            <td style="padding:6px 12px 6px 0;vertical-align:middle">
+              <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
+                <tr>
+                  <td width="${barPct}%" style="height:14px;background:${color};border-radius:4px 0 0 4px"></td>
+                  <td width="${emptyPct}%" style="height:14px;background:#E8E4DD;border-radius:0 4px 4px 0"></td>
+                </tr>
+              </table>
+            </td>
+            <td style="padding:6px 0;width:30px;vertical-align:middle;text-align:right">
+              <span style="font-size:13px;font-weight:700;color:#173731">${count}</span>
+            </td>
+          </tr>`
+        }).join('') + `</table>`
       : '<p style="color:#999;font-size:13px">Aucun recrutement confirmé</p>'
 
-    // — Taux de conversion inter-étapes (design amélioré) —
+    // — Taux de conversion inter-étapes (table-based pour email) —
     const conversionsHtml = conversions.map(c => {
       const barColor = c.rate >= 50 ? '#16a34a' : c.rate >= 25 ? '#D2AB76' : '#ef4444'
       const barPct = Math.max(6, Math.min(100, c.rate))
+      const emptyPct = 100 - barPct
       const isGlobal = c.label.includes('global')
-      const rowBg = isGlobal ? '#F5F3EF' : 'transparent'
-      const borderTop = isGlobal ? 'border-top:2px solid #D2AB76;padding-top:14px;margin-top:8px;' : ''
-      return `<div style="padding:10px 16px;border-radius:8px;background:${rowBg};margin-bottom:4px;${borderTop}">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-          <span style="font-size:${isGlobal ? '14px' : '13px'};font-weight:${isGlobal ? '700' : '500'};color:#173731">${c.label}</span>
-          <div style="display:flex;align-items:center;gap:8px">
-            <span style="font-size:${isGlobal ? '22px' : '18px'};font-weight:700;color:${barColor}">${c.rate}%</span>
-            <span style="font-size:11px;color:#888">(${c.from} → ${c.to})</span>
-          </div>
-        </div>
-        <div style="height:${isGlobal ? '14px' : '10px'};background:#E8E4DD;border-radius:6px;overflow:hidden">
-          <div style="width:${barPct}%;height:100%;background:${barColor};border-radius:6px"></div>
-        </div>
-      </div>`
+      const rowBg = isGlobal ? '#EAE6DF' : 'transparent'
+      const topBorder = isGlobal ? `<tr><td colspan="3" style="padding-top:12px;border-top:2px solid #D2AB76"></td></tr>` : ''
+      const fontSize = isGlobal ? '14px' : '13px'
+      const fontWeight = isGlobal ? '700' : '500'
+      const pctSize = isGlobal ? '22px' : '17px'
+      const barH = isGlobal ? '14' : '10'
+      return `${topBorder}
+      <tr style="background:${rowBg}">
+        <td style="padding:10px 12px 4px 12px;width:200px;vertical-align:middle">
+          <span style="font-size:${fontSize};font-weight:${fontWeight};color:#173731">${c.label}</span>
+        </td>
+        <td style="padding:10px 8px 4px 0;width:80px;vertical-align:middle;text-align:right;white-space:nowrap">
+          <span style="font-size:${pctSize};font-weight:700;color:${barColor}">${c.rate}%</span>
+        </td>
+        <td style="padding:10px 12px 4px 0;vertical-align:middle;text-align:right;white-space:nowrap">
+          <span style="font-size:11px;color:#999">${c.from} → ${c.to}</span>
+        </td>
+      </tr>
+      <tr style="background:${rowBg}">
+        <td colspan="3" style="padding:2px 12px 10px 12px">
+          <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
+            <tr>
+              <td width="${barPct}%" style="height:${barH}px;background:${barColor};border-radius:6px 0 0 6px"></td>
+              <td width="${emptyPct}%" style="height:${barH}px;background:#E8E4DD;border-radius:0 6px 6px 0"></td>
+            </tr>
+          </table>
+        </td>
+      </tr>`
     }).join('')
+
+    const conversionsTable = `<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">${conversionsHtml}</table>`
 
     // ═══════════════════════════════════════════════
     // ASSEMBLAGE FINAL DU HTML
@@ -454,7 +482,7 @@ Deno.serve(async (req) => {
         <div style="margin-bottom:28px;background:#F5F3EF;border-radius:12px;padding:24px 28px;border:1px solid #E8E4DD">
           <div style="font-size:17px;font-weight:700;color:#173731;margin-bottom:4px">Taux de conversion par étape</div>
           <div style="font-size:12px;color:#888;margin-bottom:16px">% de profils passant d'une étape à la suivante</div>
-          ${conversionsHtml}
+          ${conversionsTable}
         </div>
 
       </div>
