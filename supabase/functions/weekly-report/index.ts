@@ -134,11 +134,12 @@ Deno.serve(async (req) => {
       .not('stage', 'in', '("R0","R1","Pas intéressé","Chute")')
       .not('maturity', 'eq', 'Chute')
 
-    // Recrutés 2026
+    // Recrutés 2026 (hors archivés — cohérent avec le funnel)
     const { data: recrutes } = await supabase
       .from('profiles')
       .select('first_name, last_name, owner_full_name, source')
       .eq('stage', 'Recruté')
+      .neq('maturity', 'Archivé')
 
     const totalRecrutes = recrutes?.length || 0
     const recrutesAurelien = recrutes?.filter(r =>
