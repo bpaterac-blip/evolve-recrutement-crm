@@ -46,7 +46,7 @@ Deno.serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: 'Baptiste Paterac <baptiste@evolve-investissement.fr>',
+        from: 'Baptiste Paterac <baptiste@evolveinvestissement.com>',
         to: [to],
         subject,
         html: htmlBody,
