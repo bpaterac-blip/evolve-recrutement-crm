@@ -79,3 +79,15 @@ button:not(:disabled) {
 button:not(:disabled) > * {
   pointer-events: none;
 }
+
+/* Rich note content rendering */
+.rich-note-content h3 { font-size: 14px; font-weight: 700; margin: 10px 0 4px; color: #173731; }
+.rich-note-content ul { list-style: disc; padding-left: 20px; margin: 4px 0; }
+.rich-note-content ol { list-style: decimal; padding-left: 20px; margin: 4px 0; }
+.rich-note-content li { margin-bottom: 2px; }
+.rich-note-content b, .rich-note-content strong { font-weight: 700; }
+.rich-note-content i, .rich-note-content em { font-style: italic; }
+.rich-note-content u { text-decoration: underline; }
+.rich-note-content s { text-decoration: line-through; }
+.rich-note-content p { margin: 0 0 6px; }
+.rich-note-content p:last-child { margin-bottom: 0; }

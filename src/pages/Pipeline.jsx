@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useCRM } from '../context/CRMContext'
@@ -156,6 +156,100 @@ function formatDateWithYear(dateStr) {
   if (!dateStr) return ''
   const d = new Date(dateStr)
   return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+}
+
+// ── Éditeur de texte riche (bold, italic, underline, listes, titre) ──────────
+function RichTextEditor({ value, onChange, placeholder = 'Saisir le contenu…', minHeight = 340 }) {
+  const editorRef = useRef(null)
+
+  // Sync contenu externe → éditeur (ex: changement de template)
+  useEffect(() => {
+    if (!editorRef.current) return
+    if (editorRef.current.innerHTML !== (value || '')) {
+      editorRef.current.innerHTML = value || ''
+    }
+  }, [value])
+
+  const exec = (cmd, val = null) => {
+    editorRef.current?.focus()
+    document.execCommand(cmd, false, val)
+    onChange(editorRef.current?.innerHTML || '')
+  }
+
+  const BTNS = [
+    { icon: 'G', cmd: 'bold', title: 'Gras (Ctrl+B)', s: { fontWeight: 800 } },
+    { icon: 'I', cmd: 'italic', title: 'Italique (Ctrl+I)', s: { fontStyle: 'italic' } },
+    { icon: 'S', cmd: 'underline', title: 'Souligné (Ctrl+U)', s: { textDecoration: 'underline' } },
+    { icon: null }, // séparateur
+    { icon: '•', cmd: 'insertUnorderedList', title: 'Liste à puces' },
+    { icon: '1.', cmd: 'insertOrderedList', title: 'Liste numérotée', s: { fontSize: 10, fontFamily: 'monospace' } },
+    { icon: null },
+    { icon: 'H', cmd: '__heading', title: 'Titre de section', s: { fontWeight: 700, fontFamily: 'serif', fontSize: 13 } },
+    { icon: '✕', cmd: 'removeFormat', title: 'Effacer la mise en forme', s: { fontSize: 9, color: '#888' } },
+  ]
+
+  const btnStyle = (extra = {}) => ({
+    minWidth: 28, height: 28, border: '1px solid #E5E0D8', borderRadius: 4,
+    background: 'white', cursor: 'pointer', fontSize: 12,
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    padding: '0 6px', transition: 'background 0.1s',
+    ...extra,
+  })
+
+  const isEmpty = !value || value.replace(/<[^>]*>/g, '').trim() === ''
+
+  return (
+    <div style={{ border: '1px solid #E5E0D8', borderRadius: 8, overflow: 'hidden', background: 'white' }}>
+      {/* Toolbar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '6px 10px', background: '#F5F3EE', borderBottom: '1px solid #E5E0D8', flexWrap: 'wrap' }}>
+        {BTNS.map((b, i) => {
+          if (!b.icon) return <span key={i} style={{ width: 1, height: 18, background: '#D5D0CA', margin: '0 3px', display: 'inline-block' }} />
+          return (
+            <button
+              key={i}
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault()
+                if (b.cmd === '__heading') exec('formatBlock', '<h3>')
+                else exec(b.cmd)
+              }}
+              title={b.title}
+              style={btnStyle(b.s || {})}
+              onMouseEnter={(e) => { e.currentTarget.style.background = '#E8E4DF' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'white' }}
+            >
+              {b.icon}
+            </button>
+          )
+        })}
+      </div>
+      {/* Zone de saisie */}
+      <div style={{ position: 'relative' }}>
+        {isEmpty && (
+          <div style={{ position: 'absolute', top: 12, left: 13, fontSize: 13, color: '#bbb', pointerEvents: 'none', userSelect: 'none' }}>
+            {placeholder}
+          </div>
+        )}
+        <div
+          ref={editorRef}
+          contentEditable
+          suppressContentEditableWarning
+          onInput={() => onChange(editorRef.current?.innerHTML || '')}
+          style={{ minHeight, padding: 12, fontSize: 13, lineHeight: 1.7, outline: 'none', color: '#1A1A1A', overflowY: 'auto' }}
+        />
+      </div>
+    </div>
+  )
+}
+
+// Helper: affiche le contenu d'une note (HTML ou plain text)
+function renderNote(content) {
+  if (!content) return '—'
+  if (/<[a-z][\s\S]*>/i.test(content)) return content // HTML riche
+  // Plain text → convertit les sauts de ligne en <br>
+  return content
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\n/g, '<br>')
 }
 
 function KanbanCard({ profile, stage, onClick, isSelected, ownerBadge, nextEvent, onEditDate }) {
@@ -653,17 +747,18 @@ export default function Pipeline() {
   const today = () => new Date().toISOString().split('T')[0]
 
   const handleSaveNote = async () => {
-    if (!modalProfile?.id || !noteContent.trim()) return
+    const plainText = noteContent.replace(/<[^>]*>/g, '').trim()
+    if (!modalProfile?.id || !plainText) return
     await supabase.from('notes').insert({
       profile_id: modalProfile.id,
-      content: noteContent.trim(),
+      content: noteContent, // HTML ou plain text
       template: noteTemplate,
       author: userProfile?.full_name?.trim() || user?.email || null,
     })
     await supabase.from('activities').insert({
       profile_id: modalProfile.id,
       type: 'note_added',
-      note: noteContent.trim().slice(0, 200),
+      note: plainText.slice(0, 200),
       date: new Date().toISOString().split('T')[0],
       icon: 'document',
       source: 'manual',
@@ -1489,6 +1584,23 @@ export default function Pipeline() {
                   )}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ flexShrink: 0, fontSize: 13, lineHeight: 1 }}>📞</span>
+                  {editingField === 'phone' ? (
+                    <div style={{ display: 'flex', gap: 6, flex: 1, minWidth: 0 }}>
+                      <input type="tel" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSaveFieldEdit()} autoFocus style={{ flex: 1, padding: '4px 8px', fontSize: 12, border: '2px solid #173731', borderRadius: 6, outline: 'none' }} />
+                      <button type="button" onClick={handleSaveFieldEdit} style={{ padding: '4px 10px', background: '#173731', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>✓</button>
+                    </div>
+                  ) : (
+                    <span
+                      onClick={() => startEditField('phone', displayProfile.phone)}
+                      style={{ color: displayProfile.phone ? '#173731' : '#bbb', cursor: 'pointer', fontSize: 12 }}
+                      title="Cliquer pour modifier"
+                    >
+                      {displayProfile.phone || '+ Ajouter un téléphone'}
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <span style={{ flexShrink: 0, width: 14, height: 14, display: 'flex' }}><IconLink /></span>
                   <a href={displayProfile.li?.startsWith('http') ? displayProfile.li : `https://${displayProfile.li}`} target="_blank" rel="noopener noreferrer" style={{ color: '#173731', textDecoration: 'underline' }}>{displayProfile.li || '—'}</a>
                 </div>
@@ -1595,11 +1707,11 @@ export default function Pipeline() {
                       >
                         {NOTE_TEMPLATE_OPTS.map((o) => <option key={o} value={o}>{o}</option>)}
                       </select>
-                      <textarea
+                      <RichTextEditor
                         value={noteContent}
-                        onChange={(e) => setNoteContent(e.target.value)}
-                        placeholder="Saisir le contenu de la note..."
-                        style={{ width: '100%', minHeight: 400, padding: 12, borderRadius: 6, border: '1px solid #E5E0D8', resize: 'vertical' }}
+                        onChange={setNoteContent}
+                        placeholder="Saisir le contenu de la note…"
+                        minHeight={340}
                       />
                       <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                         <button type="button" onClick={handleSaveNote} style={{ padding: '8px 16px', borderRadius: 8, background: '#D2AB76', color: '#173731', border: 'none', cursor: 'pointer', fontSize: 13 }}>Enregistrer</button>
@@ -1626,7 +1738,11 @@ export default function Pipeline() {
                     >
                       {editingNoteId === n.id ? (
                         <div onClick={(e) => e.stopPropagation()}>
-                          <textarea value={editingNoteContent} onChange={(e) => setEditingNoteContent(e.target.value)} style={{ width: '100%', minHeight: 400, padding: 12, fontSize: 13, borderRadius: 8, border: '1px solid #E5E0D8', resize: 'vertical' }} />
+                          <RichTextEditor
+                            value={editingNoteContent}
+                            onChange={setEditingNoteContent}
+                            minHeight={340}
+                          />
                           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                             <button type="button" onClick={handleUpdateNote} style={{ padding: '8px 16px', borderRadius: 8, background: '#D2AB76', color: '#173731', border: 'none', cursor: 'pointer', fontSize: 13 }}>Enregistrer</button>
                             <button type="button" onClick={() => { setEditingNoteId(null); setEditingNoteContent(''); setExpandedNoteId(null); }} style={{ padding: '8px 16px', borderRadius: 8, background: '#E5E0D8', color: '#6B6B6B', border: 'none', cursor: 'pointer', fontSize: 13 }}>Annuler</button>
@@ -1642,9 +1758,12 @@ export default function Pipeline() {
                               <div style={{ fontWeight: 600, fontSize: 13, color: '#1A1A1A' }}>{n.template || 'Note libre'}</div>
                               <div style={{ color: '#6B6B6B', fontSize: 12, marginTop: 4 }}>{formatActivityDate(n.created_at)}</div>
                               {expandedNoteId === n.id && (
-                                <div style={{ marginTop: 12, padding: 12, background: '#F8F5F1', borderRadius: 8, fontSize: 13, color: '#1A1A1A', whiteSpace: 'pre-wrap' }} onClick={(e) => e.stopPropagation()}>
-                                  {n.content || '—'}
-                                </div>
+                                <div
+                                  className="rich-note-content"
+                                  style={{ marginTop: 12, padding: 12, background: '#F8F5F1', borderRadius: 8, fontSize: 13, color: '#1A1A1A', lineHeight: 1.7 }}
+                                  onClick={(e) => e.stopPropagation()}
+                                  dangerouslySetInnerHTML={{ __html: renderNote(n.content) }}
+                                />
                               )}
                             </div>
                             <span style={{ flexShrink: 0, fontSize: 12, color: '#6B6B6B', transition: 'transform 0.2s', transform: expandedNoteId === n.id ? 'rotate(180deg)' : 'none' }}>▾</span>

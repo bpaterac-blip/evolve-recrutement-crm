@@ -436,6 +436,7 @@ export default function ProfilePage() {
     push(`Source : ${profile.src}`)
     push(`Session cible : ${profile.integration_periode && profile.integration_annee ? `${profile.integration_periode} ${profile.integration_annee}` : '—'}`)
     push(`Email : ${profile.mail}`)
+    push(`Téléphone : ${profile.phone || '—'}`)
     push(`LinkedIn : ${profile.li}`)
     y += 4
     doc.setFontSize(12)
@@ -659,6 +660,7 @@ export default function ProfilePage() {
             <FieldRow field="fn" value={profile.fn} label="Prénom" icon={<IconUser />} />
             <FieldRow field="ln" value={profile.ln} label="Nom" icon={<IconUser />} />
             <FieldRow field="mail" value={profile.mail} label="Email" icon={<IconEnvelope />} placeholder="email@…" />
+            <FieldRow field="phone" value={profile.phone} label="Téléphone" icon={<span style={{ fontSize: 14 }}>📞</span>} placeholder="+33 6 …" />
             <FieldRow field="li" value={profile.li} label="LinkedIn" icon={<IconLink />} placeholder="linkedin.com/in/…" isLink />
             <FieldRow field="city" value={profile.city} label="Ville" icon={<IconMapPin />} />
             {(profile.owner_full_name?.trim() || profile.owner_email?.trim()) && (

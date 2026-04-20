@@ -41,6 +41,7 @@ function mapRowToProfile(row) {
     dt: row.created_at ? new Date(row.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) : '',
     mail: row.email ?? '—',
     li: row.linkedin_url ?? '—',
+    phone: row.phone ?? '',
     experiences,
     dur: row.duration ?? '',
     notes: '',
@@ -81,6 +82,7 @@ function mapProfileToRow(profile) {
     region: profile.region ?? '',
     email: profile.mail ?? '—',
     linkedin_url: profile.li ?? '—',
+    phone: profile.phone ?? '',
     source: profile.src ?? 'Chasse LinkedIn',
     score: profile.sc ?? 0,
     stage: profile.stg ?? null,
@@ -374,7 +376,7 @@ export function CRMProvider({ children }) {
     showNotif(`Région ${p.fn} ${p.ln} → ${newRegion || '—'} ✓`)
   }, [profiles, showNotif, persistProfileUpdate, insertActivity])
 
-  const FIELD_LABELS = { fn: 'Prénom', ln: 'Nom', mail: 'Email', li: 'LinkedIn', co: 'Employeur', ti: 'Intitulé de poste', city: 'Ville', next_event_date: 'Prochain événement', next_event_label: 'Type d\'événement' }
+  const FIELD_LABELS = { fn: 'Prénom', ln: 'Nom', mail: 'Email', li: 'LinkedIn', phone: 'Téléphone', co: 'Employeur', ti: 'Intitulé de poste', city: 'Ville', next_event_date: 'Prochain événement', next_event_label: 'Type d\'événement' }
   const updateProfileField = useCallback((id, field, newValue) => {
     const p = profiles.find((x) => x.id === id)
     if (!p) return
@@ -550,7 +552,7 @@ export function CRMProvider({ children }) {
       const ownerFullName = userProfile?.full_name?.trim() || user.email || null
       const ownerPayload = { owner_id: user.id, owner_email: user.email || null, owner_full_name: ownerFullName }
       const rowsWithOwner = rows.map((r) => ({ ...r, ...ownerPayload }))
-      let { data, error } = await supabase.from(PROFILES_TABLE).insert(rowsWithOwner).select('id, first_name, last_name, company, title, city, region, email, linkedin_url, source, score, stage, maturity, integration_date, created_at, experiences, sequence_lemlist, lead_status, owner_id, owner_email, owner_full_name')
+      let { data, error } = await supabase.from(PROFILES_TABLE).insert(rowsWithOwner).select('id, first_name, last_name, company, title, city, region, email, linkedin_url, phone, source, score, stage, maturity, integration_date, created_at, experiences, sequence_lemlist, lead_status, owner_id, owner_email, owner_full_name')
       if (error && error.message && error.message.includes('region')) {
         const rowsWithoutRegion = rowsWithOwner.map((r) => { const { region: _r, ...rest } = r; return rest })
         const res = await supabase.from(PROFILES_TABLE).insert(rowsWithoutRegion).select('id, first_name, last_name, company, title, city, email, linkedin_url, source, score, stage, maturity, integration_date, created_at, experiences, sequence_lemlist, lead_status, owner_id, owner_email, owner_full_name')
