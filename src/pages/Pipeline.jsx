@@ -1906,7 +1906,9 @@ export default function Pipeline() {
                         {EVENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                       </select>
                       <input type="date" value={evDate} onChange={(e) => setEvDate(e.target.value)} style={{ width: '100%', padding: 8, marginBottom: 12, borderRadius: 6, border: '1px solid #E5E0D8' }} />
-                      <textarea value={evDetail} onChange={(e) => setEvDetail(e.target.value)} placeholder="Décrivez le déroulé, les points clés, les prochaines étapes..." style={{ width: '100%', minHeight: 200, padding: 8, marginBottom: 12, borderRadius: 6, border: '1px solid #E5E0D8', resize: 'vertical' }} />
+                      <div style={{ marginBottom: 12 }}>
+                        <RichTextEditor value={evDetail} onChange={setEvDetail} placeholder="Décrivez le déroulé, les points clés, les prochaines étapes..." minHeight={150} />
+                      </div>
                       <button type="button" onClick={handleAddEvent} style={{ padding: '8px 16px', borderRadius: 8, background: '#D2AB76', color: '#173731', border: 'none', cursor: 'pointer', fontSize: 13 }}>Ajouter</button>
                     </div>
                   )}
@@ -1989,7 +1991,9 @@ export default function Pipeline() {
                               {EVENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                             </select>
                             <input type="date" value={editingEventDate} onChange={(ev) => setEditingEventDate(ev.target.value)} style={{ width: '100%', padding: 8, marginBottom: 12, borderRadius: 6, border: '1px solid #E5E0D8' }} />
-                            <textarea value={editingEventDetail} onChange={(ev) => setEditingEventDetail(ev.target.value)} placeholder="Décrivez le déroulé, les points clés, les prochaines étapes..." style={{ width: '100%', minHeight: 200, padding: 8, marginBottom: 12, borderRadius: 6, border: '1px solid #E5E0D8', resize: 'vertical' }} />
+                            <div style={{ marginBottom: 12 }}>
+                              <RichTextEditor value={editingEventDetail} onChange={setEditingEventDetail} placeholder="Décrivez le déroulé, les points clés, les prochaines étapes..." minHeight={150} />
+                            </div>
                             <div style={{ display: 'flex', gap: 8 }}>
                               <button type="button" onClick={handleSaveEventEdit} style={{ padding: '8px 16px', borderRadius: 8, background: '#D2AB76', color: '#173731', border: 'none', cursor: 'pointer', fontSize: 13 }}>Enregistrer</button>
                               <button type="button" onClick={() => { setEditingEventId(null); setEditingEventType('R0'); setEditingEventDate(''); setEditingEventDetail(''); setExpandedEventId(null); }} style={{ padding: '8px 16px', borderRadius: 8, background: '#E5E0D8', color: '#6B6B6B', border: 'none', cursor: 'pointer', fontSize: 13 }}>Annuler</button>
@@ -2199,13 +2203,7 @@ export default function Pipeline() {
                 </div>
                 <div style={{ marginBottom: 16 }}>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 4 }}>Notes (optionnel)</label>
-                  <textarea
-                    value={stageChangeNotes}
-                    onChange={(e) => setStageChangeNotes(e.target.value)}
-                    placeholder="Notes…"
-                    rows={3}
-                    style={{ width: '100%', padding: 10, fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, resize: 'vertical' }}
-                  />
+                  <RichTextEditor value={stageChangeNotes} onChange={setStageChangeNotes} placeholder="Notes…" minHeight={90} />
                 </div>
                 {(newStage === 'Point Business Plan' || newStage === 'Démission reconversion') && (
                   <div style={{ marginBottom: 16 }}>
@@ -2322,13 +2320,7 @@ export default function Pipeline() {
               {/* Notes */}
               <div style={{ marginBottom: 4 }}>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 4 }}>Notes (optionnel)</label>
-                <textarea
-                  value={dateEditNotes}
-                  onChange={(e) => setDateEditNotes(e.target.value)}
-                  placeholder="Contexte, préparation…"
-                  rows={3}
-                  style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, resize: 'vertical' }}
-                />
+                <RichTextEditor value={dateEditNotes} onChange={setDateEditNotes} placeholder="Contexte, préparation…" minHeight={90} />
               </div>
 
               {/* Info traçabilité */}
@@ -2464,7 +2456,7 @@ export default function Pipeline() {
                     <div><label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 4 }}>Lieu</label><input type="text" value={newSession.lieu} onChange={(e) => setNewSession((s) => ({ ...s, lieu: e.target.value }))} placeholder="Lieu" style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6 }} /></div>
                     <div><label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 4 }}>Nombre de places</label><input type="number" value={newSession.places_total} onChange={(e) => setNewSession((s) => ({ ...s, places_total: parseInt(e.target.value, 10) || 6 }))} min={1} style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6 }} /></div>
                     <div><label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 4 }}>Statut</label><select value={newSession.statut} onChange={(e) => setNewSession((s) => ({ ...s, statut: e.target.value }))} style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6 }}><option value="planifiée">Planifiée</option><option value="confirmée">Confirmée</option></select></div>
-                    <div><label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 4 }}>Notes (optionnel)</label><textarea value={newSession.notes} onChange={(e) => setNewSession((s) => ({ ...s, notes: e.target.value }))} rows={2} style={{ width: '100%', padding: 8, fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, resize: 'vertical' }} /></div>
+                    <div><label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 4 }}>Notes (optionnel)</label><RichTextEditor value={newSession.notes} onChange={(v) => setNewSession((s) => ({ ...s, notes: v }))} placeholder="Notes…" minHeight={70} /></div>
                   </div>
                 </div>
               ) : (
