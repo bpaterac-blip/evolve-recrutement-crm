@@ -158,6 +158,69 @@ function formatDateWithYear(dateStr) {
   return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
+// ── Google Calendar URL ───────────────────────────────────────────────────────
+function buildGoogleCalendarUrl({ title, date, time, description }) {
+  if (!date) return null
+  const pad = (n) => String(n).padStart(2, '0')
+  const [y, m, d] = date.split('-')
+  const [h, min] = (time || '09:00').split(':')
+  const startStr = `${y}${m}${d}T${pad(h)}${pad(min)}00`
+  const endDate = new Date(`${date}T${time || '09:00'}:00`)
+  endDate.setHours(endDate.getHours() + 1)
+  const endStr = `${endDate.getFullYear()}${pad(endDate.getMonth() + 1)}${pad(endDate.getDate())}T${pad(endDate.getHours())}${pad(endDate.getMinutes())}00`
+  const params = new URLSearchParams({ action: 'TEMPLATE', text: title, dates: `${startStr}/${endStr}`, details: description || '' })
+  return `https://calendar.google.com/calendar/render?${params}`
+}
+
+// ── Templates email par étape ─────────────────────────────────────────────────
+function buildEmailForStage(profile, newStage, date, time, rdvType) {
+  const prenom = profile.fn || ''
+  const prenomNom = `${profile.fn || ''} ${profile.ln || ''}`.trim()
+  const dateStr = date ? new Date(date + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : ''
+  const timeStr = time && time !== '12:00' ? ` à ${time}` : ''
+  const rdv = rdvType || 'Google Meet'
+  const sig = `\n\nCordialement,\nBaptiste Paterac\nCo-fondateur — Evolve Investissement`
+
+  const TEMPLATES = {
+    'R0': {
+      subject: `Premier contact — Evolve Investissement`,
+      body: `Bonjour ${prenom},\n\nJ'espère que vous allez bien. Je me permets de vous contacter car votre profil a retenu notre attention.\n\nEvolve Investissement accompagne des conseillers en gestion de patrimoine dans leur transition vers l'indépendance. Je pense que votre expérience pourrait parfaitement correspondre à ce que nous proposons.\n\nSeriez-vous disponible pour un bref échange ?${sig}`,
+    },
+    'R1': {
+      subject: `Confirmation de notre rendez-vous — ${prenomNom}`,
+      body: `Bonjour ${prenom},\n\nJe vous confirme notre rendez-vous R1 :\n\n📅 ${dateStr}${timeStr}\n📞 Format : ${rdv}\n\nN'hésitez pas à me recontacter si vous avez des questions d'ici là.${sig}`,
+    },
+    'Point Business Plan': {
+      subject: `Point Business Plan — ${prenomNom}`,
+      body: `Bonjour ${prenom},\n\nJe vous confirme notre Point Business Plan :\n\n📅 ${dateStr}${timeStr}\n📞 Format : ${rdv}\n\nNous passerons en revue les éléments clés de votre projet d'indépendance.${sig}`,
+    },
+    "Point d'étape": {
+      subject: `Point d'étape — ${prenomNom}`,
+      body: `Bonjour ${prenom},\n\nJe vous confirme notre point d'étape :\n\n📅 ${dateStr}${timeStr}\n📞 Format : ${rdv}${sig}`,
+    },
+    'Démission reconversion': {
+      subject: `Félicitations pour votre décision — ${prenomNom}`,
+      body: `Bonjour ${prenom},\n\nFélicitations pour votre décision de vous lancer dans l'indépendance !\n\nNous sommes ravis de vous accompagner dans cette nouvelle étape. Toute l'équipe Evolve est à vos côtés pour rendre cette transition la plus sereine possible.${sig}`,
+    },
+    'R2 Amaury': {
+      subject: `Confirmation de votre rendez-vous avec Amaury Leroux`,
+      body: `Bonjour ${prenom},\n\nJe vous confirme votre rendez-vous R2 avec Amaury Leroux, co-fondateur d'Evolve Investissement :\n\n📅 ${dateStr}${timeStr}\n📞 Format : ${rdv}${sig}`,
+    },
+    'Point juridique': {
+      subject: `Point juridique — ${prenomNom}`,
+      body: `Bonjour ${prenom},\n\nJe vous confirme notre point juridique :\n\n📅 ${dateStr}${timeStr}\n📞 Format : ${rdv}${sig}`,
+    },
+    'Recruté': {
+      subject: `Bienvenue chez Evolve Investissement ! 🎉`,
+      body: `Bonjour ${prenom},\n\nC'est avec un immense plaisir que nous vous accueillons officiellement au sein d'Evolve Investissement !\n\nVotre parcours commence ici — nous sommes impatients de construire quelque chose de grand avec vous.${sig}`,
+    },
+  }
+  return TEMPLATES[newStage] || {
+    subject: `Mise à jour de votre parcours — Evolve Investissement`,
+    body: `Bonjour ${prenom},\n\nJe vous contacte concernant votre parcours au sein d'Evolve Investissement.${sig}`,
+  }
+}
+
 // ── Éditeur de texte riche (bold, italic, underline, listes, titre) ──────────
 function RichTextEditor({ value, onChange, placeholder = 'Saisir le contenu…', minHeight = 340 }) {
   const editorRef = useRef(null)
@@ -556,6 +619,11 @@ export default function Pipeline() {
     statut: 'planifiée',
     notes: '',
   })
+  const [emailPreviewModal, setEmailPreviewModal] = useState(null) // { profile, newStage, calendarUrl }
+  const [emailSubject, setEmailSubject] = useState('')
+  const [emailBody, setEmailBody] = useState('')
+  const [emailSending, setEmailSending] = useState(false)
+  const [emailSent, setEmailSent] = useState(false)
   const [chuteModalProfile, setChuteModalProfile] = useState(null)
   const [pasInteresseModalProfile, setPasInteresseModalProfile] = useState(null)
   const [showStadeDropdown, setShowStadeDropdown] = useState(false)
@@ -1175,6 +1243,25 @@ export default function Pipeline() {
       }
       fetchProfiles()
     }
+    // ── Email preview + Google Calendar ─────────────────────────────────────
+    const _dateChoisie = stageChangeDate ? String(stageChangeDate).split('T')[0].trim() : ''
+    const _heureParts = (stageChangeTime || '12:00').trim().split(':')
+    const _heureChoisie = _heureParts.length >= 2
+      ? `${String(parseInt(_heureParts[0], 10) || 0).padStart(2, '0')}:${String(parseInt(_heureParts[1], 10) || 0).padStart(2, '0')}`
+      : '12:00'
+    const _rdvType = stageChangeRdType || 'Google Meet'
+    const calUrl = _dateChoisie ? buildGoogleCalendarUrl({
+      title: `${newStage} — ${profile.fn || ''} ${profile.ln || ''}`.trim(),
+      date: _dateChoisie,
+      time: _heureChoisie,
+      description: `${profile.fn || ''} ${profile.ln || ''} — ${profile.co || ''}`.trim(),
+    }) : null
+    const emailData = buildEmailForStage(profile, newStage, _dateChoisie, _heureChoisie, _rdvType)
+    setEmailSubject(emailData.subject)
+    setEmailBody(emailData.body)
+    setEmailSent(false)
+    setEmailPreviewModal({ profile, newStage, calendarUrl: calUrl })
+    // ────────────────────────────────────────────────────────────────────────
     setStageChangeDate('')
     setStageChangeTime('')
     setStageChangeRdType('Google Meet')
@@ -1278,6 +1365,13 @@ export default function Pipeline() {
       }
       fetchProfiles()
     }
+    // ── Email preview (pas de date dans ce cas) ──────────────────────────────
+    const emailData = buildEmailForStage(profile, newStage, '', '', '')
+    setEmailSubject(emailData.subject)
+    setEmailBody(emailData.body)
+    setEmailSent(false)
+    setEmailPreviewModal({ profile, newStage, calendarUrl: null })
+    // ────────────────────────────────────────────────────────────────────────
     setStageChangeDate('')
     setStageChangeTime('')
     setStageChangeRdType('Google Meet')
@@ -1326,6 +1420,37 @@ export default function Pipeline() {
     setEditingField(null)
     setEditValue('')
     await loadActivities()
+  }
+
+  // ── Envoi email via Edge Function Resend ─────────────────────────────────
+  const handleSendEmail = async () => {
+    if (!emailPreviewModal?.profile?.mail) return
+    setEmailSending(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-profile-email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({
+          to: emailPreviewModal.profile.mail,
+          subject: emailSubject,
+          body: emailBody,
+        }),
+      })
+      const result = await res.json()
+      if (result.success) {
+        setEmailSent(true)
+      } else {
+        alert(`Erreur envoi : ${JSON.stringify(result.error || result)}`)
+      }
+    } catch (e) {
+      alert(`Erreur : ${e.message}`)
+    } finally {
+      setEmailSending(false)
+    }
   }
 
   // Constantes partagées entre les modals
@@ -2477,6 +2602,89 @@ export default function Pipeline() {
                 <button type="button" onClick={async () => { if (!selectedSession || !profileToAssign?.id) return; const sess = sessionsWithCount.find((s) => s.id === selectedSession); const updates = { integration_confirmed: true }; if (!profileToAssign.session_formation_id) { updates.session_formation_id = selectedSession; updates.integration_periode = sess?.periode ?? null; updates.integration_annee = sess?.annee ?? null; } await supabase.from('profiles').update(updates).eq('id', profileToAssign.id); setShowSessionModal(false); setProfileToAssign(null); fetchProfiles(); window.dispatchEvent(new CustomEvent('evolve:session-updated')); }} disabled={!selectedSession} style={{ padding: '10px 16px', fontSize: 13, border: 'none', borderRadius: 6, background: ACCENT, color: 'white', cursor: 'pointer', opacity: selectedSession ? 1 : 0.6 }}>Assigner à cette session</button>
               )}
               <button type="button" onClick={() => { setShowSessionModal(false); setProfileToAssign(null); setShowCreateSession(false); fetchProfiles(); }} style={{ padding: '10px 16px', fontSize: 13, border: `1px solid ${ACCENT}`, borderRadius: 6, background: 'transparent', color: ACCENT, cursor: 'pointer' }}>Passer sans assigner</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODALE EMAIL PREVIEW ────────────────────────────────────────────── */}
+      {emailPreviewModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div style={{ background: 'white', borderRadius: 16, width: '100%', maxWidth: 560, boxShadow: '0 20px 60px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+            {/* Header */}
+            <div style={{ padding: '18px 24px', borderBottom: '1px solid #E5E0D8', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+              <div>
+                <div style={{ fontFamily: 'Palatino, serif', fontSize: 16, fontWeight: 600, color: '#173731' }}>
+                  ✉️ Email au profil
+                </div>
+                <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>
+                  {emailPreviewModal.profile.fn} {emailPreviewModal.profile.ln} · Passage en {emailPreviewModal.newStage}
+                </div>
+              </div>
+              <button type="button" onClick={() => setEmailPreviewModal(null)} style={{ background: 'none', border: 'none', fontSize: 18, color: '#999', cursor: 'pointer', lineHeight: 1 }}>✕</button>
+            </div>
+
+            {/* Body */}
+            <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1 }}>
+              {/* Avertissement si pas d'email */}
+              {!emailPreviewModal.profile.mail && (
+                <div style={{ background: '#FFF3CD', border: '1px solid #FFC107', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: '#856404' }}>
+                  ⚠️ Ce profil n'a pas d'adresse email renseignée. Ajoutez-en une sur sa fiche avant d'envoyer.
+                </div>
+              )}
+
+              {/* Google Calendar */}
+              {emailPreviewModal.calendarUrl && (
+                <a href={emailPreviewModal.calendarUrl} target="_blank" rel="noopener noreferrer"
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 8, marginBottom: 16, textDecoration: 'none', color: '#15803D', fontSize: 13, fontWeight: 500 }}>
+                  📅 <span>Ajouter au Google Calendar</span>
+                  <span style={{ marginLeft: 'auto', fontSize: 11, color: '#22C55E' }}>Ouvre Google Calendar →</span>
+                </a>
+              )}
+
+              {/* Sujet */}
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#666', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Objet</label>
+                <input
+                  type="text"
+                  value={emailSubject}
+                  onChange={(e) => setEmailSubject(e.target.value)}
+                  style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, outline: 'none', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              {/* Corps */}
+              <div>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#666', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Message</label>
+                <textarea
+                  value={emailBody}
+                  onChange={(e) => setEmailBody(e.target.value)}
+                  rows={12}
+                  style={{ width: '100%', padding: '10px 12px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, resize: 'vertical', outline: 'none', lineHeight: 1.6, fontFamily: 'inherit', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              {emailSent && (
+                <div style={{ marginTop: 12, padding: '10px 14px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 8, fontSize: 13, color: '#15803D', fontWeight: 500 }}>
+                  ✅ Email envoyé avec succès à {emailPreviewModal.profile.mail}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div style={{ padding: '14px 24px', borderTop: '1px solid #E5E0D8', display: 'flex', gap: 10, justifyContent: 'flex-end', flexShrink: 0 }}>
+              <button type="button" onClick={() => setEmailPreviewModal(null)}
+                style={{ padding: '9px 18px', borderRadius: 8, border: '1px solid #E5E0D8', background: 'white', color: '#666', cursor: 'pointer', fontSize: 13 }}>
+                {emailSent ? 'Fermer' : 'Passer'}
+              </button>
+              {!emailSent && (
+                <button type="button"
+                  onClick={handleSendEmail}
+                  disabled={emailSending || !emailPreviewModal.profile.mail}
+                  style={{ padding: '9px 20px', borderRadius: 8, border: 'none', background: emailPreviewModal.profile.mail ? '#173731' : '#ccc', color: 'white', cursor: emailPreviewModal.profile.mail ? 'pointer' : 'not-allowed', fontSize: 13, fontWeight: 500, minWidth: 120 }}>
+                  {emailSending ? 'Envoi…' : '✉️ Envoyer'}
+                </button>
+              )}
             </div>
           </div>
         </div>
