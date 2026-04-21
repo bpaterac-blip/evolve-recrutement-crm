@@ -174,7 +174,7 @@ function buildGoogleCalendarUrl({ title, date, time, description, guest }) {
 }
 
 // ── Templates email par étape ─────────────────────────────────────────────────
-function buildEmailForStage(profile, newStage, date, time, rdvType, meetLink, transferLink, cgpContact, bpLink) {
+function buildEmailForStage(profile, newStage, date, time, rdvType, meetLink, transferLink, cgpContact, bpLink, skipBP) {
   const prenom = profile.fn || ''
   const prenomNom = `${profile.fn || ''} ${profile.ln || ''}`.trim()
   const d = date ? new Date(date + 'T12:00:00') : null
@@ -196,7 +196,12 @@ function buildEmailForStage(profile, newStage, date, time, rdvType, meetLink, tr
       subject: `Suite présentation Evolve`,
       body: `${prenom},\n\nJe vous remercie pour notre échange du jour. Comme convenu, je vous confirme notre point Business Plan du ${dateStr}${heure ? ' à ' + heure : ''}${meetLink ? ' via ce lien : ' + meetLink : ''}.\n\nVous retrouverez le lien de la présentation téléchargeable sous 3 jours ici : ${transferLink || '[ lien Transfer ]'}\n\nJe reste à votre disposition pour tout complément d'information d'ici là,\n\nBonne journée à vous,${sig}`,
     },
-    "Point d'étape": {
+    "Point d'étape": skipBP ? {
+      // Cas : R1 → Point d'étape (BP sauté)
+      subject: `Suite présentation Evolve`,
+      body: `${prenom},\n\nJe vous remercie pour notre échange du jour.\n\nVous pouvez retrouver le lien de la présentation téléchargeable sous 3 jours ici : ${transferLink || '[ lien Transfer ]'}\n\nComme convenu, je vous reconfirme notre point d'étape téléphonique du ${dateStr}${heure ? ' à ' + heure : ''}.\n\nJ'ai transmis vos coordonnées à ${cgpContact || '[ Prénom NOM ]'} qui va vous contacter pour fixer un créneau d'échange avec vous.\n\nJe reste à votre disposition pour tout complément d'information d'ici là,\n\nBonne journée à vous !${sig}`,
+    } : {
+      // Cas standard : Point BP → Point d'étape
       subject: `Suite point Business Plan`,
       body: `${prenom},\n\nJe vous remercie pour notre point Business Plan du jour.\n\nComme convenu, vous pouvez retrouver via ce lien le Business Plan modifiable : ${bpLink || '[ lien Google Drive ]'}\n\nJ'ai transmis vos coordonnées à ${cgpContact || '[ Prénom NOM ]'} qui va vous contacter pour fixer un créneau afin d'échanger avec vous.\n\nJe vous reconfirme notre point d'étape le ${dateStr}${heure ? ' à ' + heure : ''}, d'ici là je reste disponible en cas de besoin.\n\nBonne journée à vous et à très vite !${sig}`,
     },
@@ -1265,7 +1270,7 @@ export default function Pipeline() {
       description: calDesc,
       guest: profile.mail?.trim() || '',
     }) : null
-    const emailData = buildEmailForStage(profile, newStage, _dateChoisie, _heureChoisie, _rdvType, _meetLink, stageChangeTransferLink?.trim(), stageChangeCGPContact?.trim(), stageChangeBPLink?.trim())
+    const emailData = buildEmailForStage(profile, newStage, _dateChoisie, _heureChoisie, _rdvType, _meetLink, stageChangeTransferLink?.trim(), stageChangeCGPContact?.trim(), stageChangeBPLink?.trim(), profile.skip_business_plan)
     setEmailSubject(emailData.subject)
     setEmailBody(emailData.body)
     setEmailSent(false)
@@ -1375,7 +1380,7 @@ export default function Pipeline() {
       fetchProfiles()
     }
     // ── Email preview (pas de date dans ce cas) ──────────────────────────────
-    const emailData = buildEmailForStage(profile, newStage, '', '', '', '', stageChangeTransferLink?.trim(), stageChangeCGPContact?.trim(), stageChangeBPLink?.trim())
+    const emailData = buildEmailForStage(profile, newStage, '', '', '', '', stageChangeTransferLink?.trim(), stageChangeCGPContact?.trim(), stageChangeBPLink?.trim(), profile.skip_business_plan)
     setEmailSubject(emailData.subject)
     setEmailBody(emailData.body)
     setEmailSent(false)
