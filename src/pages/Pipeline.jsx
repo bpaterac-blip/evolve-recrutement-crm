@@ -2679,14 +2679,6 @@ export default function Pipeline() {
                 </div>
               )}
 
-              {/* Google Calendar */}
-              {emailPreviewModal.calendarUrl && (
-                <a href={emailPreviewModal.calendarUrl} target="_blank" rel="noopener noreferrer"
-                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 8, marginBottom: 16, textDecoration: 'none', color: '#15803D', fontSize: 13, fontWeight: 500 }}>
-                  📅 <span>Ajouter au Google Calendar</span>
-                  <span style={{ marginLeft: 'auto', fontSize: 11, color: '#22C55E' }}>Ouvre Google Calendar →</span>
-                </a>
-              )}
 
               {/* Sujet */}
               <div style={{ marginBottom: 12 }}>
