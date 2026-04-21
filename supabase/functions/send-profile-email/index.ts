@@ -7,24 +7,45 @@ const PHOTO_URL = 'https://fcwzzrjhmjodterwjbbl.supabase.co/storage/v1/object/pu
 const LOGO_URL  = 'https://fcwzzrjhmjodterwjbbl.supabase.co/storage/v1/object/public/email-assets/unnamed%20(2).png'
 
 const SIGNATURE_HTML = `
-  <table cellpadding="0" cellspacing="0" border="0" style="margin-top:24px;border-top:1px solid #E5E0D8;padding-top:18px">
+  <table cellpadding="0" cellspacing="0" border="0" style="margin-top:24px;border-top:2px solid #D2AB76;padding-top:18px">
     <tr>
       <td style="padding-right:16px;vertical-align:top">
         <img src="${PHOTO_URL}" width="64" height="64"
           style="border-radius:50%;object-fit:cover;display:block"
           alt="Baptiste PATERAC" />
       </td>
-      <td style="vertical-align:top;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#1A1A1A;line-height:1.6">
-        <div style="font-weight:700;font-size:14px;color:#173731">Baptiste PATERAC</div>
-        <div style="color:#555;font-size:12px">Associé &amp; Co-fondateur · Responsable de réseau régions</div>
-        <div style="margin-top:6px">
-          <img src="${LOGO_URL}" height="28" alt="Evolve" style="display:block;margin-bottom:8px" />
-        </div>
-        <div style="font-size:12px;color:#444">
-          <a href="mailto:bpaterac@evolveinvestissement.com" style="color:#173731;text-decoration:none">📧 bpaterac@evolveinvestissement.com</a><br>
-          <span>📱 06 38 37 59 60</span><br>
-          <a href="https://groupe-evolve.fr" style="color:#173731;text-decoration:none">🌐 groupe-evolve.fr</a>
-        </div>
+      <td style="vertical-align:top;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#1A1A1A;line-height:1.7">
+        <div style="font-weight:700;font-size:14px;color:#173731;letter-spacing:0.3px">Baptiste PATERAC</div>
+        <div style="color:#666;font-size:12px;margin-bottom:8px">Associé &amp; Co-fondateur &nbsp;|&nbsp; Responsable de réseau régions</div>
+        <img src="${LOGO_URL}" height="26" alt="Evolve" style="display:block;margin-bottom:10px" />
+        <table cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td style="padding-right:8px;vertical-align:middle">
+              <div style="width:16px;height:16px;background:#173731;border-radius:3px;text-align:center;line-height:16px">
+                <span style="color:#D2AB76;font-size:10px;font-family:Arial">@</span>
+              </div>
+            </td>
+            <td><a href="mailto:bpaterac@evolveinvestissement.com" style="color:#173731;text-decoration:none;font-size:12px">bpaterac@evolveinvestissement.com</a></td>
+          </tr>
+          <tr><td colspan="2" style="height:4px"></td></tr>
+          <tr>
+            <td style="padding-right:8px;vertical-align:middle">
+              <div style="width:16px;height:16px;background:#173731;border-radius:3px;text-align:center;line-height:16px">
+                <span style="color:#D2AB76;font-size:9px;font-family:Arial;font-weight:bold">T</span>
+              </div>
+            </td>
+            <td><span style="color:#444;font-size:12px">06 38 37 59 60</span></td>
+          </tr>
+          <tr><td colspan="2" style="height:4px"></td></tr>
+          <tr>
+            <td style="padding-right:8px;vertical-align:middle">
+              <div style="width:16px;height:16px;background:#173731;border-radius:3px;text-align:center;line-height:16px">
+                <span style="color:#D2AB76;font-size:9px;font-family:Arial;font-weight:bold">W</span>
+              </div>
+            </td>
+            <td><a href="https://groupe-evolve.fr" style="color:#173731;text-decoration:none;font-size:12px">groupe-evolve.fr</a></td>
+          </tr>
+        </table>
       </td>
     </tr>
   </table>
