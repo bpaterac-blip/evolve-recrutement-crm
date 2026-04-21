@@ -194,6 +194,8 @@ export default function Profiles({ contactedOnly = false }) {
   const [emailPreviewModal, setEmailPreviewModal] = useState(null)
   const [emailSubject, setEmailSubject] = useState('')
   const [emailBody, setEmailBody] = useState('')
+  const [emailTo, setEmailTo] = useState('')
+  const [emailPreviewTab, setEmailPreviewTab] = useState('edit')
   const [emailSending, setEmailSending] = useState(false)
   const [emailSent, setEmailSent] = useState(false)
 
@@ -316,15 +318,17 @@ export default function Profiles({ contactedOnly = false }) {
     })
     setEmailSubject(emailData.subject)
     setEmailBody(emailData.body)
+    setEmailTo(profile.mail || '')
+    setEmailPreviewTab('edit')
     setEmailSent(false)
     setEmailPreviewModal({ profile, newStage: 'R0', calendarUrl: calUrl })
   }
 
   // ── Envoi email via Edge Function Resend ─────────────────────────────────
   const handleSendEmail = async () => {
-    const toEmail = (emailPreviewModal?.profile?.mail || '').trim()
+    const toEmail = emailTo.trim()
     if (!toEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(toEmail)) {
-      alert(`Adresse email invalide : "${toEmail}". Corrigez-la sur la fiche du profil.`)
+      alert(`Adresse email invalide : "${toEmail}".`)
       return
     }
     setEmailSending(true)
@@ -637,81 +641,130 @@ export default function Profiles({ contactedOnly = false }) {
       )}
 
       {/* ── MODALE EMAIL PREVIEW ────────────────────────────────────────────── */}
-      {emailPreviewModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-          <div style={{ background: 'white', borderRadius: 16, width: '100%', maxWidth: 560, boxShadow: '0 20px 60px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
-            {/* Header */}
-            <div style={{ padding: '18px 24px', borderBottom: '1px solid #E5E0D8', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-              <div>
-                <div style={{ fontFamily: 'Palatino, serif', fontSize: 16, fontWeight: 600, color: '#173731' }}>
-                  ✉️ Email au profil
+      {emailPreviewModal && (() => {
+        const p = emailPreviewModal.profile
+        const hasMail2 = !!(p.mail2?.trim())
+        const validEmail = emailTo.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTo.trim())
+        const previewHtml = emailBody
+          .replace(/\n\nBaptiste PATERAC[\s\S]*$/, '')
+          .replace(/\n\nAurélien GOUTARD[\s\S]*$/, '')
+          .trim()
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          .replace(/🔗 Lien de connexion : (https?:\/\/\S+)/g, '🔗 <a href="$1" style="color:#173731">Lien de connexion</a>')
+          .replace(/\n\n/g, '</p><p style="margin:14px 0">')
+          .replace(/\n/g, '<br>')
+        return (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+            <div style={{ background: 'white', borderRadius: 16, width: '100%', maxWidth: 600, boxShadow: '0 20px 60px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', maxHeight: '92vh' }}>
+              {/* Header */}
+              <div style={{ padding: '18px 24px', borderBottom: '1px solid #E5E0D8', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+                <div>
+                  <div style={{ fontFamily: 'Palatino, serif', fontSize: 16, fontWeight: 600, color: '#173731' }}>✉️ Email au profil</div>
+                  <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>{p.fn} {p.ln} · Passage en {emailPreviewModal.newStage}</div>
                 </div>
-                <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>
-                  {emailPreviewModal.profile.fn} {emailPreviewModal.profile.ln} · Passage en {emailPreviewModal.newStage}
-                </div>
+                <button type="button" onClick={() => setEmailPreviewModal(null)} style={{ background: 'none', border: 'none', fontSize: 18, color: '#999', cursor: 'pointer' }}>✕</button>
               </div>
-              <button type="button" onClick={() => setEmailPreviewModal(null)} style={{ background: 'none', border: 'none', fontSize: 18, color: '#999', cursor: 'pointer', lineHeight: 1 }}>✕</button>
-            </div>
-            {/* Body */}
-            <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1 }}>
-              {!emailPreviewModal.profile.mail && (
-                <div style={{ background: '#FFF3CD', border: '1px solid #FFC107', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: '#856404' }}>
-                  ⚠️ Ce profil n'a pas d'adresse email renseignée. Ajoutez-en une sur sa fiche avant d'envoyer.
-                </div>
-              )}
-              {emailPreviewModal.calendarUrl && (
-                <a
-                  href={emailPreviewModal.calendarUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 8, marginBottom: 16, textDecoration: 'none', color: '#15803D', fontSize: 12, fontWeight: 500 }}
-                >
-                  📅 <span>Ajouter au Google Calendar</span>
-                  <span style={{ marginLeft: 'auto', fontSize: 11, opacity: 0.7 }}>↗</span>
-                </a>
-              )}
-              <div style={{ marginBottom: 12 }}>
-                <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#666', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Objet</label>
-                <input
-                  type="text"
-                  value={emailSubject}
-                  onChange={(e) => setEmailSubject(e.target.value)}
-                  style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, outline: 'none', boxSizing: 'border-box' }}
-                />
+              {/* Onglets */}
+              <div style={{ display: 'flex', borderBottom: '1px solid #E5E0D8', flexShrink: 0 }}>
+                {['edit', 'preview'].map((tab) => (
+                  <button key={tab} type="button" onClick={() => setEmailPreviewTab(tab)}
+                    style={{ flex: 1, padding: '10px 0', fontSize: 12, fontWeight: 600, border: 'none', background: 'none', cursor: 'pointer',
+                      color: emailPreviewTab === tab ? '#173731' : '#999',
+                      borderBottom: emailPreviewTab === tab ? '2px solid #173731' : '2px solid transparent' }}>
+                    {tab === 'edit' ? '✏️ Rédiger' : '👁️ Aperçu'}
+                  </button>
+                ))}
               </div>
-              <div>
-                <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#666', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Message</label>
-                <textarea
-                  value={emailBody}
-                  onChange={(e) => setEmailBody(e.target.value)}
-                  rows={12}
-                  style={{ width: '100%', padding: '10px 12px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, resize: 'vertical', outline: 'none', lineHeight: 1.6, fontFamily: 'inherit', boxSizing: 'border-box' }}
-                />
-              </div>
-              {emailSent && (
-                <div style={{ marginTop: 12, padding: '10px 14px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 8, fontSize: 13, color: '#15803D', fontWeight: 500 }}>
-                  ✅ Email envoyé avec succès à {emailPreviewModal.profile.mail}
+              {/* Body */}
+              <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1 }}>
+                {/* Destinataire */}
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#666', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Destinataire</label>
+                  {hasMail2 && (
+                    <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                      {[{ label: 'Pro', val: p.mail }, { label: 'Personnel', val: p.mail2 }].map(({ label, val }) => (
+                        <button key={label} type="button" onClick={() => setEmailTo(val || '')}
+                          style={{ padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 500, cursor: 'pointer', border: '1px solid',
+                            background: emailTo === val ? '#173731' : 'white',
+                            color: emailTo === val ? 'white' : '#173731',
+                            borderColor: '#173731' }}>
+                          {label} {val ? `(${val})` : '—'}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <input type="email" value={emailTo} onChange={(e) => setEmailTo(e.target.value)}
+                    placeholder="adresse@email.com"
+                    style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: `1px solid ${validEmail ? '#E5E0D8' : '#FCA5A5'}`, borderRadius: 6, outline: 'none', boxSizing: 'border-box', background: validEmail || !emailTo ? 'white' : '#FFF5F5' }} />
+                  {emailTo && !validEmail && <div style={{ fontSize: 11, color: '#EF4444', marginTop: 4 }}>Adresse email invalide</div>}
                 </div>
-              )}
-            </div>
-            {/* Footer */}
-            <div style={{ padding: '14px 24px', borderTop: '1px solid #E5E0D8', display: 'flex', gap: 10, justifyContent: 'flex-end', flexShrink: 0 }}>
-              <button type="button" onClick={() => setEmailPreviewModal(null)}
-                style={{ padding: '9px 18px', borderRadius: 8, border: '1px solid #E5E0D8', background: 'white', color: '#666', cursor: 'pointer', fontSize: 13 }}>
-                {emailSent ? 'Fermer' : 'Passer'}
-              </button>
-              {!emailSent && (
-                <button type="button"
-                  onClick={handleSendEmail}
-                  disabled={emailSending || !emailPreviewModal.profile.mail}
-                  style={{ padding: '9px 20px', borderRadius: 8, border: 'none', background: emailPreviewModal.profile.mail ? '#173731' : '#ccc', color: 'white', cursor: emailPreviewModal.profile.mail ? 'pointer' : 'not-allowed', fontSize: 13, fontWeight: 500, minWidth: 120 }}>
-                  {emailSending ? 'Envoi…' : '✉️ Envoyer'}
+                {emailPreviewTab === 'edit' ? (
+                  <>
+                    <div style={{ marginBottom: 12 }}>
+                      <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#666', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Objet</label>
+                      <input type="text" value={emailSubject} onChange={(e) => setEmailSubject(e.target.value)}
+                        style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, outline: 'none', boxSizing: 'border-box' }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#666', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Message</label>
+                      <textarea value={emailBody} onChange={(e) => setEmailBody(e.target.value)} rows={11}
+                        style={{ width: '100%', padding: '10px 12px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, resize: 'vertical', outline: 'none', lineHeight: 1.6, fontFamily: 'inherit', boxSizing: 'border-box' }} />
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ border: '1px solid #E5E0D8', borderRadius: 8, overflow: 'hidden' }}>
+                    <div style={{ background: '#F5F3EE', padding: '8px 14px', fontSize: 11, color: '#888', borderBottom: '1px solid #E5E0D8' }}>
+                      <strong>À :</strong> {emailTo || '—'} &nbsp;·&nbsp; <strong>Objet :</strong> {emailSubject}
+                    </div>
+                    <div style={{ padding: '20px 24px', background: '#f9f7f4' }}>
+                      <div style={{ maxWidth: 540, background: 'white', padding: '24px 28px', fontFamily: 'Arial,sans-serif', fontSize: 14, color: '#1A1A1A', lineHeight: 1.7, borderRadius: 4 }}>
+                        <p style={{ margin: '0 0 14px' }} dangerouslySetInnerHTML={{ __html: previewHtml }} />
+                        <table cellPadding="0" cellSpacing="0" style={{ marginTop: 24, borderTop: '2px solid #D2AB76', paddingTop: 18, width: '100%' }}>
+                          <tbody><tr>
+                            <td style={{ paddingRight: 14, verticalAlign: 'top' }}>
+                              <img src="https://fcwzzrjhmjodterwjbbl.supabase.co/storage/v1/object/public/email-assets/unnamed%20(1).png" width="56" height="56" style={{ borderRadius: '50%' }} alt="" />
+                            </td>
+                            <td style={{ fontFamily: 'Arial,sans-serif', fontSize: 12, color: '#1A1A1A', lineHeight: 1.6 }}>
+                              <div style={{ fontWeight: 700, fontSize: 13, color: '#173731' }}>Baptiste PATERAC</div>
+                              <div style={{ color: '#666', fontSize: 11 }}>Associé & Co-fondateur | Responsable de réseau régions</div>
+                              <div style={{ color: '#666', fontSize: 11, marginBottom: 6 }}>Groupe Evolve</div>
+                              <img src="https://fcwzzrjhmjodterwjbbl.supabase.co/storage/v1/object/public/email-assets/unnamed%20(2).png" height="20" alt="Evolve" />
+                            </td>
+                          </tr></tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {emailSent && (
+                  <div style={{ marginTop: 14, padding: '10px 14px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 8, fontSize: 13, color: '#15803D', fontWeight: 500 }}>
+                    ✅ Email envoyé avec succès à {emailTo}
+                  </div>
+                )}
+              </div>
+              {/* Footer */}
+              <div style={{ padding: '14px 24px', borderTop: '1px solid #E5E0D8', display: 'flex', gap: 10, justifyContent: 'flex-end', flexShrink: 0 }}>
+                {emailPreviewModal.calendarUrl && !emailSent && (
+                  <a href={emailPreviewModal.calendarUrl} target="_blank" rel="noopener noreferrer"
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 8, border: '1px solid #BBF7D0', background: '#F0FDF4', color: '#15803D', textDecoration: 'none', fontSize: 12, fontWeight: 500 }}>
+                    📅 Google Calendar
+                  </a>
+                )}
+                <button type="button" onClick={() => setEmailPreviewModal(null)}
+                  style={{ padding: '9px 18px', borderRadius: 8, border: '1px solid #E5E0D8', background: 'white', color: '#666', cursor: 'pointer', fontSize: 13 }}>
+                  {emailSent ? 'Fermer' : 'Passer'}
                 </button>
-              )}
+                {!emailSent && (
+                  <button type="button" onClick={handleSendEmail} disabled={emailSending || !validEmail}
+                    style={{ padding: '9px 20px', borderRadius: 8, border: 'none', background: validEmail ? '#173731' : '#ccc', color: 'white', cursor: validEmail ? 'pointer' : 'not-allowed', fontSize: 13, fontWeight: 500, minWidth: 120 }}>
+                    {emailSending ? 'Envoi…' : '✉️ Envoyer'}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }
