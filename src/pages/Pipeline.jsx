@@ -1836,14 +1836,12 @@ export default function Pipeline() {
                   )}
                 </div>
               </div>
-              <div style={{ flex: 1, minHeight: 24 }} />
-
               {/* ── Paternité ── */}
               {(() => {
                 const ownerName = displayProfile.owner_full_name?.trim() || (displayProfile.owner_email || '').split('@')[0] || null
-                const isOwner = displayProfile.owner_id === user?.id
+                const isOwner = !displayProfile.owner_id || displayProfile.owner_id === user?.id
                 return (
-                  <div style={{ marginBottom: 10, padding: '10px 12px', borderRadius: 8, background: isOwner ? '#F0FDF4' : '#FFF7ED', border: `1px solid ${isOwner ? '#BBF7D0' : '#FED7AA'}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <div style={{ marginTop: 14, padding: '10px 12px', borderRadius: 8, background: isOwner ? '#F0FDF4' : '#FFF7ED', border: `1px solid ${isOwner ? '#BBF7D0' : '#FED7AA'}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                     <div style={{ fontSize: 11, color: isOwner ? '#15803D' : '#92400E' }}>
                       <span style={{ fontWeight: 600 }}>Paternité :</span>{' '}
                       {isOwner ? 'Vous' : (ownerName || 'Autre')}
@@ -1865,6 +1863,7 @@ export default function Pipeline() {
                 )
               })()}
 
+              <div style={{ flex: 1, minHeight: 16 }} />
               <button
                 type="button"
                 onClick={() => { setModalProfile(null); navigate(`/profiles/${displayProfile.id}`) }}
