@@ -2336,7 +2336,33 @@ export default function Pipeline() {
                 </div>
                 {stageChangeRdType === 'Google Meet' && (
                   <div style={{ marginBottom: 16 }}>
-                    <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 4 }}>🔗 Lien Google Meet (optionnel)</label>
+                    {/* Bouton créer dans Google Calendar pour récupérer le lien Meet */}
+                    {stageChangeDate && (() => {
+                      const heureParts = (stageChangeTime || '09:00').split(':')
+                      const h = String(parseInt(heureParts[0]) || 9).padStart(2, '0')
+                      const min = String(parseInt(heureParts[1]) || 0).padStart(2, '0')
+                      const calUrl = buildGoogleCalendarUrl({
+                        title: `${newStage} — ${pendingStageChange?.profile?.fn || ''} ${pendingStageChange?.profile?.ln || ''}`.trim(),
+                        date: String(stageChangeDate).split('T')[0],
+                        time: `${h}:${min}`,
+                        description: `${pendingStageChange?.profile?.fn || ''} ${pendingStageChange?.profile?.ln || ''} — ${pendingStageChange?.profile?.co || ''}`.trim(),
+                      })
+                      return (
+                        <a
+                          href={calUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 8, marginBottom: 10, textDecoration: 'none', color: '#15803D', fontSize: 12, fontWeight: 500 }}
+                        >
+                          📅 <span>Créer l'événement dans Google Calendar</span>
+                          <span style={{ marginLeft: 'auto', fontSize: 11, opacity: 0.7 }}>↗ Génère un lien Meet</span>
+                        </a>
+                      )
+                    })()}
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 4 }}>
+                      🔗 Lien Google Meet
+                      <span style={{ fontWeight: 400, color: '#AAA', marginLeft: 4 }}>(coller après création de l'événement)</span>
+                    </label>
                     <input
                       type="url"
                       value={stageChangeMeetLink}
