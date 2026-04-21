@@ -173,12 +173,13 @@ function buildGoogleCalendarUrl({ title, date, time, description }) {
 }
 
 // ── Templates email par étape ─────────────────────────────────────────────────
-function buildEmailForStage(profile, newStage, date, time, rdvType) {
+function buildEmailForStage(profile, newStage, date, time, rdvType, meetLink) {
   const prenom = profile.fn || ''
   const prenomNom = `${profile.fn || ''} ${profile.ln || ''}`.trim()
   const dateStr = date ? new Date(date + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : ''
   const timeStr = time && time !== '12:00' ? ` à ${time}` : ''
   const rdv = rdvType || 'Google Meet'
+  const meetLine = meetLink ? `\n🔗 Lien de connexion : ${meetLink}` : ''
   const sig = `\n\nBien cordialement,\n\nBaptiste PATERAC\nAssocié & Co-fondateur | Responsable de réseau régions\nEvolve Investissement\n📧 bpaterac@evolveinvestissement.com\n📱 06 38 37 59 60\n🌐 groupe-evolve.fr`
 
   const TEMPLATES = {
@@ -188,15 +189,15 @@ function buildEmailForStage(profile, newStage, date, time, rdvType) {
     },
     'R1': {
       subject: `Confirmation de notre rendez-vous — ${prenomNom}`,
-      body: `Bonjour ${prenom},\n\nJe vous confirme notre rendez-vous R1 :\n\n📅 ${dateStr}${timeStr}\n📞 Format : ${rdv}\n\nN'hésitez pas à me recontacter si vous avez des questions d'ici là.${sig}`,
+      body: `Bonjour ${prenom},\n\nJe vous confirme notre rendez-vous R1 :\n\n📅 ${dateStr}${timeStr}\n📞 Format : ${rdv}${meetLine}\n\nN'hésitez pas à me recontacter si vous avez des questions d'ici là.${sig}`,
     },
     'Point Business Plan': {
       subject: `Point Business Plan — ${prenomNom}`,
-      body: `Bonjour ${prenom},\n\nJe vous confirme notre Point Business Plan :\n\n📅 ${dateStr}${timeStr}\n📞 Format : ${rdv}\n\nNous passerons en revue les éléments clés de votre projet d'indépendance.${sig}`,
+      body: `Bonjour ${prenom},\n\nJe vous confirme notre Point Business Plan :\n\n📅 ${dateStr}${timeStr}\n📞 Format : ${rdv}${meetLine}\n\nNous passerons en revue ensemble les éléments clés de votre projet d'indépendance.${sig}`,
     },
     "Point d'étape": {
       subject: `Point d'étape — ${prenomNom}`,
-      body: `Bonjour ${prenom},\n\nJe vous confirme notre point d'étape :\n\n📅 ${dateStr}${timeStr}\n📞 Format : ${rdv}${sig}`,
+      body: `Bonjour ${prenom},\n\nJe vous confirme notre point d'étape :\n\n📅 ${dateStr}${timeStr}\n📞 Format : ${rdv}${meetLine}${sig}`,
     },
     'Démission reconversion': {
       subject: `Félicitations pour votre décision — ${prenomNom}`,
@@ -204,11 +205,11 @@ function buildEmailForStage(profile, newStage, date, time, rdvType) {
     },
     'R2 Amaury': {
       subject: `Confirmation de votre rendez-vous avec Amaury Leroux`,
-      body: `Bonjour ${prenom},\n\nJe vous confirme votre rendez-vous R2 avec Amaury Leroux, co-fondateur d'Evolve Investissement :\n\n📅 ${dateStr}${timeStr}\n📞 Format : ${rdv}${sig}`,
+      body: `Bonjour ${prenom},\n\nJe vous confirme votre rendez-vous R2 avec Amaury Leroux, co-fondateur d'Evolve Investissement :\n\n📅 ${dateStr}${timeStr}\n📞 Format : ${rdv}${meetLine}${sig}`,
     },
     'Point juridique': {
       subject: `Point juridique — ${prenomNom}`,
-      body: `Bonjour ${prenom},\n\nJe vous confirme notre point juridique :\n\n📅 ${dateStr}${timeStr}\n📞 Format : ${rdv}${sig}`,
+      body: `Bonjour ${prenom},\n\nJe vous confirme notre point juridique :\n\n📅 ${dateStr}${timeStr}\n📞 Format : ${rdv}${meetLine}${sig}`,
     },
     'Recruté': {
       subject: `Bienvenue chez Evolve Investissement ! 🎉`,
@@ -619,6 +620,7 @@ export default function Pipeline() {
     statut: 'planifiée',
     notes: '',
   })
+  const [stageChangeMeetLink, setStageChangeMeetLink] = useState('')
   const [emailPreviewModal, setEmailPreviewModal] = useState(null) // { profile, newStage, calendarUrl }
   const [emailSubject, setEmailSubject] = useState('')
   const [emailBody, setEmailBody] = useState('')
@@ -1250,13 +1252,15 @@ export default function Pipeline() {
       ? `${String(parseInt(_heureParts[0], 10) || 0).padStart(2, '0')}:${String(parseInt(_heureParts[1], 10) || 0).padStart(2, '0')}`
       : '12:00'
     const _rdvType = stageChangeRdType || 'Google Meet'
+    const _meetLink = stageChangeMeetLink?.trim() || ''
+    const calDesc = [`${profile.fn || ''} ${profile.ln || ''} — ${profile.co || ''}`.trim(), _meetLink].filter(Boolean).join('\n')
     const calUrl = _dateChoisie ? buildGoogleCalendarUrl({
       title: `${newStage} — ${profile.fn || ''} ${profile.ln || ''}`.trim(),
       date: _dateChoisie,
       time: _heureChoisie,
-      description: `${profile.fn || ''} ${profile.ln || ''} — ${profile.co || ''}`.trim(),
+      description: calDesc,
     }) : null
-    const emailData = buildEmailForStage(profile, newStage, _dateChoisie, _heureChoisie, _rdvType)
+    const emailData = buildEmailForStage(profile, newStage, _dateChoisie, _heureChoisie, _rdvType, _meetLink)
     setEmailSubject(emailData.subject)
     setEmailBody(emailData.body)
     setEmailSent(false)
@@ -1376,6 +1380,7 @@ export default function Pipeline() {
     setStageChangeTime('')
     setStageChangeRdType('Google Meet')
     setStageChangeNotes('')
+    setStageChangeMeetLink('')
     setStageChangeSkipStep(false)
     setPendingSessionId('')
     setPendingSessions([])
@@ -1424,7 +1429,11 @@ export default function Pipeline() {
 
   // ── Envoi email via Edge Function Resend ─────────────────────────────────
   const handleSendEmail = async () => {
-    if (!emailPreviewModal?.profile?.mail) return
+    const toEmail = (emailPreviewModal?.profile?.mail || '').trim()
+    if (!toEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(toEmail)) {
+      alert(`Adresse email invalide : "${toEmail}". Corrigez-la sur la fiche du profil.`)
+      return
+    }
     setEmailSending(true)
     try {
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-profile-email`, {
@@ -1434,7 +1443,7 @@ export default function Pipeline() {
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
         },
         body: JSON.stringify({
-          to: emailPreviewModal.profile.mail,
+          to: toEmail,
           subject: emailSubject,
           body: emailBody,
         }),
@@ -2325,6 +2334,18 @@ export default function Pipeline() {
                     ))}
                   </select>
                 </div>
+                {stageChangeRdType === 'Google Meet' && (
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 4 }}>🔗 Lien Google Meet (optionnel)</label>
+                    <input
+                      type="url"
+                      value={stageChangeMeetLink}
+                      onChange={(e) => setStageChangeMeetLink(e.target.value)}
+                      placeholder="https://meet.google.com/xxx-xxxx-xxx"
+                      style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, boxSizing: 'border-box' }}
+                    />
+                  </div>
+                )}
                 <div style={{ marginBottom: 16 }}>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 4 }}>Notes (optionnel)</label>
                   <RichTextEditor value={stageChangeNotes} onChange={setStageChangeNotes} placeholder="Notes…" minHeight={90} />
