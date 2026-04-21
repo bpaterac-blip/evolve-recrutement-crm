@@ -158,6 +158,22 @@ function formatDateWithYear(dateStr) {
   return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
+// ── Durée Google Calendar par étape (en minutes) ─────────────────────────────
+function getCalendarDuration(stage) {
+  const DURATIONS = {
+    'R0': 30,
+    'R1': 60,
+    'Point Business Plan': 30,
+    "Point d'étape": 30,
+    "Point d'étape téléphonique": 30,
+    'R2 Amaury': 60,
+    'Point juridique': 60,
+    'Démission reconversion': 60,
+    'Recruté': 60,
+  }
+  return DURATIONS[stage] ?? 60
+}
+
 // ── Titre Google Calendar par étape ──────────────────────────────────────────
 function getCalendarTitle(stage, profile) {
   const prenomNom = `${profile?.fn || ''} ${profile?.ln || ''}`.trim()
@@ -176,14 +192,14 @@ function getCalendarTitle(stage, profile) {
 }
 
 // ── Google Calendar URL ───────────────────────────────────────────────────────
-function buildGoogleCalendarUrl({ title, date, time, description, guest }) {
+function buildGoogleCalendarUrl({ title, date, time, description, guest, durationMin = 60 }) {
   if (!date) return null
   const pad = (n) => String(n).padStart(2, '0')
   const [y, m, d] = date.split('-')
   const [h, min] = (time || '09:00').split(':')
   const startStr = `${y}${m}${d}T${pad(h)}${pad(min)}00`
   const endDate = new Date(`${date}T${time || '09:00'}:00`)
-  endDate.setHours(endDate.getHours() + 1)
+  endDate.setMinutes(endDate.getMinutes() + durationMin)
   const endStr = `${endDate.getFullYear()}${pad(endDate.getMonth() + 1)}${pad(endDate.getDate())}T${pad(endDate.getHours())}${pad(endDate.getMinutes())}00`
   const params = new URLSearchParams({ action: 'TEMPLATE', text: title, dates: `${startStr}/${endStr}`, details: description || '' })
   if (guest) params.append('add', guest)
@@ -198,41 +214,42 @@ function buildEmailForStage(profile, newStage, date, time, rdvType, meetLink, tr
   const dateStr = d ? d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : ''
   const heure = time && time !== '12:00' ? time : ''
   const meetLine = meetLink ? `\n🔗 Lien de connexion : ${meetLink}` : ''
-  const sig = `\n\nBien cordialement,\n\nBaptiste PATERAC\nAssocié & Co-fondateur | Responsable de réseau régions\nGroupe Evolve\nbpaterac@evolveinvestissement.com | 06 38 37 59 60 | https://groupe-evolve.fr`
+  const closing = `\n\nBonne journée à vous,\nBien cordialement,`
+  const sig = `\n\nBaptiste PATERAC\nAssocié & Co-fondateur | Responsable de réseau régions\nGroupe Evolve\nbpaterac@evolveinvestissement.com | 06 38 37 59 60 | https://groupe-evolve.fr`
 
   const TEMPLATES = {
     'R0': {
       subject: `Premier échange téléphonique Evolve – ${dateStr}${heure ? ' à ' + heure : ''}`,
-      body: `Bonjour ${prenom},\n\nComme convenu, je vous confirme notre premier échange téléphonique de 15 minutes le ${dateStr}${heure ? ' à ' + heure : ''}.\n\nExcellente journée à vous,${sig}`,
+      body: `Bonjour ${prenom},\n\nComme convenu, je vous confirme notre premier échange téléphonique de 15 minutes le ${dateStr}${heure ? ' à ' + heure : ''}.${closing}${sig}`,
     },
     'R1': {
       subject: `Suite premier échange téléphonique – Présentation visio du ${dateStr}${heure ? ' à ' + heure : ''}`,
-      body: `${prenom},\n\nJe vous remercie pour notre premier échange. Comme convenu, je vous confirme notre présentation visio du ${dateStr}${heure ? ' à ' + heure : ''}${meetLink ? ' via ce lien : ' + meetLink : ''}.\n\nVous pouvez retrouver ci-dessous différents liens qui vous donneront plus d'informations sur Evolve et ses conseillers :\nSite : https://www.groupe-evolve.fr/\nLinkedIn : https://www.linkedin.com/company/evolvefr/\nYoutube : https://www.youtube.com/@Amaury_Dufresnoy\n\nBonne fin de journée à vous et à très vite,${sig}`,
+      body: `${prenom},\n\nJe vous remercie pour notre premier échange. Comme convenu, je vous confirme notre présentation visio du ${dateStr}${heure ? ' à ' + heure : ''}${meetLink ? ' via ce lien : ' + meetLink : ''}.\n\nVous pouvez retrouver ci-dessous différents liens qui vous donneront plus d'informations sur Evolve et ses conseillers :\nSite : https://www.groupe-evolve.fr/\nLinkedIn : https://www.linkedin.com/company/evolvefr/\nYoutube : https://www.youtube.com/@Amaury_Dufresnoy${closing}${sig}`,
     },
     'Point Business Plan': {
       subject: `Suite présentation Evolve`,
-      body: `${prenom},\n\nJe vous remercie pour notre échange du jour. Comme convenu, je vous confirme notre point Business Plan du ${dateStr}${heure ? ' à ' + heure : ''}${meetLink ? ' via ce lien : ' + meetLink : ''}.\n\nVous retrouverez le lien de la présentation téléchargeable sous 3 jours ici : ${transferLink || '[ lien Transfer ]'}\n\nJe reste à votre disposition pour tout complément d'information d'ici là,\n\nBonne journée à vous,${sig}`,
+      body: `${prenom},\n\nJe vous remercie pour notre échange du jour. Comme convenu, je vous confirme notre point Business Plan du ${dateStr}${heure ? ' à ' + heure : ''}${meetLink ? ' via ce lien : ' + meetLink : ''}.\n\nVous retrouverez le lien de la présentation téléchargeable sous 3 jours ici : ${transferLink || '[ lien Transfer ]'}\n\nJe reste à votre disposition pour tout complément d'information d'ici là,${closing}${sig}`,
     },
     "Point d'étape": skipBP ? {
       // Cas : R1 → Point d'étape (BP sauté)
       subject: `Suite présentation Evolve`,
-      body: `${prenom},\n\nJe vous remercie pour notre échange du jour.\n\nVous pouvez retrouver le lien de la présentation téléchargeable sous 3 jours ici : ${transferLink || '[ lien Transfer ]'}\n\nComme convenu, je vous reconfirme notre point d'étape téléphonique du ${dateStr}${heure ? ' à ' + heure : ''}.\n\nJ'ai transmis vos coordonnées à ${cgpContact || '[ Prénom NOM ]'} qui va vous contacter pour fixer un créneau d'échange avec vous.\n\nJe reste à votre disposition pour tout complément d'information d'ici là,\n\nBonne journée à vous !${sig}`,
+      body: `${prenom},\n\nJe vous remercie pour notre échange du jour.\n\nVous pouvez retrouver le lien de la présentation téléchargeable sous 3 jours ici : ${transferLink || '[ lien Transfer ]'}\n\nComme convenu, je vous reconfirme notre point d'étape téléphonique du ${dateStr}${heure ? ' à ' + heure : ''}.\n\nJ'ai transmis vos coordonnées à ${cgpContact || '[ Prénom NOM ]'} qui va vous contacter pour fixer un créneau d'échange avec vous.\n\nJe reste à votre disposition pour tout complément d'information d'ici là,${closing}${sig}`,
     } : {
       // Cas standard : Point BP → Point d'étape
       subject: `Suite point Business Plan`,
-      body: `${prenom},\n\nJe vous remercie pour notre point Business Plan du jour.\n\nComme convenu, vous pouvez retrouver via ce lien le Business Plan modifiable : ${bpLink || '[ lien Google Drive ]'}\n\nJ'ai transmis vos coordonnées à ${cgpContact || '[ Prénom NOM ]'} qui va vous contacter pour fixer un créneau afin d'échanger avec vous.\n\nJe vous reconfirme notre point d'étape le ${dateStr}${heure ? ' à ' + heure : ''}, d'ici là je reste disponible en cas de besoin.\n\nBonne journée à vous et à très vite !${sig}`,
+      body: `${prenom},\n\nJe vous remercie pour notre point Business Plan du jour.\n\nComme convenu, vous pouvez retrouver via ce lien le Business Plan modifiable : ${bpLink || '[ lien Google Drive ]'}\n\nJ'ai transmis vos coordonnées à ${cgpContact || '[ Prénom NOM ]'} qui va vous contacter pour fixer un créneau afin d'échanger avec vous.\n\nJe vous reconfirme notre point d'étape le ${dateStr}${heure ? ' à ' + heure : ''}, d'ici là je reste disponible en cas de besoin.${closing}${sig}`,
     },
     'Démission reconversion': {
       subject: `Félicitations pour votre décision — ${prenomNom}`,
-      body: `${prenom},\n\nFélicitations pour votre décision de vous lancer dans l'indépendance !\n\nNous sommes ravis de vous accompagner dans cette nouvelle étape. Toute l'équipe Evolve est à vos côtés pour rendre cette transition la plus sereine possible.${sig}`,
+      body: `${prenom},\n\nFélicitations pour votre décision de vous lancer dans l'indépendance !\n\nNous sommes ravis de vous accompagner dans cette nouvelle étape. Toute l'équipe Evolve est à vos côtés pour rendre cette transition la plus sereine possible.${closing}${sig}`,
     },
     'R2 Amaury': {
       subject: `Confirmation de votre rendez-vous avec Amaury Leroux`,
-      body: `${prenom},\n\nJe vous confirme votre rendez-vous avec Amaury Leroux, co-fondateur d'Evolve Investissement :\n\n📅 ${dateStr}${heure ? ' à ' + heure : ''}${meetLine}${sig}`,
+      body: `${prenom},\n\nJe vous confirme votre rendez-vous avec Amaury Leroux, co-fondateur d'Evolve Investissement :\n\n📅 ${dateStr}${heure ? ' à ' + heure : ''}${meetLine}${closing}${sig}`,
     },
     'Point juridique': {
       subject: `Point juridique — ${prenomNom}`,
-      body: `${prenom},\n\nJe vous confirme notre point juridique :\n\n📅 ${dateStr}${heure ? ' à ' + heure : ''}${meetLine}${sig}`,
+      body: `${prenom},\n\nJe vous confirme notre point juridique :\n\n📅 ${dateStr}${heure ? ' à ' + heure : ''}${meetLine}${closing}${sig}`,
     },
     'Recruté': {
       subject: `Bienvenue chez Evolve Investissement ! 🎉`,
@@ -1303,6 +1320,7 @@ export default function Pipeline() {
       time: _heureChoisie,
       description: emailData.body,
       guest: profile.mail?.trim() || '',
+      durationMin: getCalendarDuration(newStage),
     }) : null
     setEmailSubject(emailData.subject)
     setEmailBody(emailData.body)
@@ -2408,6 +2426,7 @@ export default function Pipeline() {
                         time: _timeStr,
                         description: previewEmail.body,
                         guest: pendingStageChange?.profile?.mail?.trim() || '',
+                        durationMin: getCalendarDuration(newStage),
                       })
                       return (
                         <a
