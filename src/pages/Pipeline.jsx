@@ -173,52 +173,52 @@ function buildGoogleCalendarUrl({ title, date, time, description }) {
 }
 
 // ── Templates email par étape ─────────────────────────────────────────────────
-function buildEmailForStage(profile, newStage, date, time, rdvType, meetLink) {
+function buildEmailForStage(profile, newStage, date, time, rdvType, meetLink, transferLink, cgpContact, bpLink) {
   const prenom = profile.fn || ''
   const prenomNom = `${profile.fn || ''} ${profile.ln || ''}`.trim()
-  const dateStr = date ? new Date(date + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : ''
-  const timeStr = time && time !== '12:00' ? ` à ${time}` : ''
-  const rdv = rdvType || 'Google Meet'
+  const d = date ? new Date(date + 'T12:00:00') : null
+  const dateStr = d ? d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : ''
+  const heure = time && time !== '12:00' ? time : ''
   const meetLine = meetLink ? `\n🔗 Lien de connexion : ${meetLink}` : ''
   const sig = `\n\nBien cordialement,\n\nBaptiste PATERAC\nAssocié & Co-fondateur | Responsable de réseau régions\nEvolve Investissement\n📧 bpaterac@evolveinvestissement.com\n📱 06 38 37 59 60\n🌐 groupe-evolve.fr`
 
   const TEMPLATES = {
     'R0': {
-      subject: `Premier contact — Evolve Investissement`,
-      body: `Bonjour ${prenom},\n\nJ'espère que vous allez bien. Je me permets de vous contacter car votre profil a retenu notre attention.\n\nEvolve Investissement accompagne des conseillers en gestion de patrimoine dans leur transition vers l'indépendance. Je pense que votre expérience pourrait parfaitement correspondre à ce que nous proposons.\n\nSeriez-vous disponible pour un bref échange ?${sig}`,
+      subject: `Premier échange téléphonique Evolve – ${dateStr}${heure ? ' à ' + heure : ''}`,
+      body: `Bonjour ${prenom},\n\nComme convenu, je vous confirme notre premier échange téléphonique de 15 minutes le ${dateStr}${heure ? ' à ' + heure : ''}.\n\nExcellente journée à vous,${sig}`,
     },
     'R1': {
-      subject: `Confirmation de notre rendez-vous — ${prenomNom}`,
-      body: `Bonjour ${prenom},\n\nJe vous confirme notre rendez-vous R1 :\n\n📅 ${dateStr}${timeStr}\n📞 Format : ${rdv}${meetLine}\n\nN'hésitez pas à me recontacter si vous avez des questions d'ici là.${sig}`,
+      subject: `Suite premier échange téléphonique – Présentation visio du ${dateStr}${heure ? ' à ' + heure : ''}`,
+      body: `${prenom},\n\nJe vous remercie pour notre premier échange. Comme convenu, je vous confirme notre présentation visio du ${dateStr}${heure ? ' à ' + heure : ''}${meetLink ? ' via ce lien : ' + meetLink : ''}.\n\nVous pouvez retrouver ci-dessous différents liens qui vous donneront plus d'informations sur Evolve et ses conseillers :\nSite : https://www.groupe-evolve.fr/\nLinkedIn : https://www.linkedin.com/company/evolvefr/\nYoutube : https://www.youtube.com/@Amaury_Dufresnoy\n\nBonne fin de journée à vous et à très vite,${sig}`,
     },
     'Point Business Plan': {
-      subject: `Point Business Plan — ${prenomNom}`,
-      body: `Bonjour ${prenom},\n\nJe vous confirme notre Point Business Plan :\n\n📅 ${dateStr}${timeStr}\n📞 Format : ${rdv}${meetLine}\n\nNous passerons en revue ensemble les éléments clés de votre projet d'indépendance.${sig}`,
+      subject: `Suite présentation Evolve`,
+      body: `${prenom},\n\nJe vous remercie pour notre échange du jour. Comme convenu, je vous confirme notre point Business Plan du ${dateStr}${heure ? ' à ' + heure : ''}${meetLink ? ' via ce lien : ' + meetLink : ''}.\n\nVous retrouverez le lien de la présentation téléchargeable sous 3 jours ici : ${transferLink || '[ lien Transfer ]'}\n\nJe reste à votre disposition pour tout complément d'information d'ici là,\n\nBonne journée à vous,${sig}`,
     },
     "Point d'étape": {
-      subject: `Point d'étape — ${prenomNom}`,
-      body: `Bonjour ${prenom},\n\nJe vous confirme notre point d'étape :\n\n📅 ${dateStr}${timeStr}\n📞 Format : ${rdv}${meetLine}${sig}`,
+      subject: `Suite point Business Plan`,
+      body: `${prenom},\n\nJe vous remercie pour notre point Business Plan du jour.\n\nComme convenu, vous pouvez retrouver via ce lien le Business Plan modifiable : ${bpLink || '[ lien Google Drive ]'}\n\nJ'ai transmis vos coordonnées à ${cgpContact || '[ Prénom NOM ]'} qui va vous contacter pour fixer un créneau afin d'échanger avec vous.\n\nJe vous reconfirme notre point d'étape le ${dateStr}${heure ? ' à ' + heure : ''}, d'ici là je reste disponible en cas de besoin.\n\nBonne journée à vous et à très vite !${sig}`,
     },
     'Démission reconversion': {
       subject: `Félicitations pour votre décision — ${prenomNom}`,
-      body: `Bonjour ${prenom},\n\nFélicitations pour votre décision de vous lancer dans l'indépendance !\n\nNous sommes ravis de vous accompagner dans cette nouvelle étape. Toute l'équipe Evolve est à vos côtés pour rendre cette transition la plus sereine possible.${sig}`,
+      body: `${prenom},\n\nFélicitations pour votre décision de vous lancer dans l'indépendance !\n\nNous sommes ravis de vous accompagner dans cette nouvelle étape. Toute l'équipe Evolve est à vos côtés pour rendre cette transition la plus sereine possible.${sig}`,
     },
     'R2 Amaury': {
       subject: `Confirmation de votre rendez-vous avec Amaury Leroux`,
-      body: `Bonjour ${prenom},\n\nJe vous confirme votre rendez-vous R2 avec Amaury Leroux, co-fondateur d'Evolve Investissement :\n\n📅 ${dateStr}${timeStr}\n📞 Format : ${rdv}${meetLine}${sig}`,
+      body: `${prenom},\n\nJe vous confirme votre rendez-vous avec Amaury Leroux, co-fondateur d'Evolve Investissement :\n\n📅 ${dateStr}${heure ? ' à ' + heure : ''}${meetLine}${sig}`,
     },
     'Point juridique': {
       subject: `Point juridique — ${prenomNom}`,
-      body: `Bonjour ${prenom},\n\nJe vous confirme notre point juridique :\n\n📅 ${dateStr}${timeStr}\n📞 Format : ${rdv}${meetLine}${sig}`,
+      body: `${prenom},\n\nJe vous confirme notre point juridique :\n\n📅 ${dateStr}${heure ? ' à ' + heure : ''}${meetLine}${sig}`,
     },
     'Recruté': {
       subject: `Bienvenue chez Evolve Investissement ! 🎉`,
-      body: `Bonjour ${prenom},\n\nC'est avec un immense plaisir que nous vous accueillons officiellement au sein d'Evolve Investissement !\n\nVotre parcours commence ici — nous sommes impatients de construire quelque chose de grand avec vous.${sig}`,
+      body: `${prenom},\n\nC'est avec un immense plaisir que nous vous accueillons officiellement au sein d'Evolve Investissement !\n\nVotre parcours commence ici — nous sommes impatients de construire quelque chose de grand avec vous.${sig}`,
     },
   }
   return TEMPLATES[newStage] || {
     subject: `Mise à jour de votre parcours — Evolve Investissement`,
-    body: `Bonjour ${prenom},\n\nJe vous contacte concernant votre parcours au sein d'Evolve Investissement.${sig}`,
+    body: `${prenom},\n\nJe vous contacte concernant votre parcours au sein d'Evolve Investissement.${sig}`,
   }
 }
 
@@ -621,6 +621,9 @@ export default function Pipeline() {
     notes: '',
   })
   const [stageChangeMeetLink, setStageChangeMeetLink] = useState('')
+  const [stageChangeTransferLink, setStageChangeTransferLink] = useState('')
+  const [stageChangeCGPContact, setStageChangeCGPContact] = useState('')
+  const [stageChangeBPLink, setStageChangeBPLink] = useState('')
   const [emailPreviewModal, setEmailPreviewModal] = useState(null) // { profile, newStage, calendarUrl }
   const [emailSubject, setEmailSubject] = useState('')
   const [emailBody, setEmailBody] = useState('')
@@ -1260,7 +1263,7 @@ export default function Pipeline() {
       time: _heureChoisie,
       description: calDesc,
     }) : null
-    const emailData = buildEmailForStage(profile, newStage, _dateChoisie, _heureChoisie, _rdvType, _meetLink)
+    const emailData = buildEmailForStage(profile, newStage, _dateChoisie, _heureChoisie, _rdvType, _meetLink, stageChangeTransferLink?.trim(), stageChangeCGPContact?.trim(), stageChangeBPLink?.trim())
     setEmailSubject(emailData.subject)
     setEmailBody(emailData.body)
     setEmailSent(false)
@@ -1370,7 +1373,7 @@ export default function Pipeline() {
       fetchProfiles()
     }
     // ── Email preview (pas de date dans ce cas) ──────────────────────────────
-    const emailData = buildEmailForStage(profile, newStage, '', '', '')
+    const emailData = buildEmailForStage(profile, newStage, '', '', '', '', stageChangeTransferLink?.trim(), stageChangeCGPContact?.trim(), stageChangeBPLink?.trim())
     setEmailSubject(emailData.subject)
     setEmailBody(emailData.body)
     setEmailSent(false)
@@ -1381,6 +1384,9 @@ export default function Pipeline() {
     setStageChangeRdType('Google Meet')
     setStageChangeNotes('')
     setStageChangeMeetLink('')
+    setStageChangeTransferLink('')
+    setStageChangeCGPContact('')
+    setStageChangeBPLink('')
     setStageChangeSkipStep(false)
     setPendingSessionId('')
     setPendingSessions([])
@@ -2371,6 +2377,26 @@ export default function Pipeline() {
                       style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, boxSizing: 'border-box' }}
                     />
                   </div>
+                )}
+                {/* Lien Transfer — Point Business Plan */}
+                {newStage === 'Point Business Plan' && (
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 4 }}>📎 Lien Transfer (présentation)</label>
+                    <input type="url" value={stageChangeTransferLink} onChange={(e) => setStageChangeTransferLink(e.target.value)} placeholder="https://we.tl/..." style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, boxSizing: 'border-box' }} />
+                  </div>
+                )}
+                {/* Point d'étape — contact CGP + lien BP */}
+                {newStage === "Point d'étape" && (
+                  <>
+                    <div style={{ marginBottom: 12 }}>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 4 }}>👤 Contact CGP à transmettre</label>
+                      <input type="text" value={stageChangeCGPContact} onChange={(e) => setStageChangeCGPContact(e.target.value)} placeholder="Prénom NOM" style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, boxSizing: 'border-box' }} />
+                    </div>
+                    <div style={{ marginBottom: 16 }}>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 4 }}>📄 Lien Google Drive — Business Plan</label>
+                      <input type="url" value={stageChangeBPLink} onChange={(e) => setStageChangeBPLink(e.target.value)} placeholder="https://docs.google.com/..." style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, boxSizing: 'border-box' }} />
+                    </div>
+                  </>
                 )}
                 <div style={{ marginBottom: 16 }}>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 4 }}>Notes (optionnel)</label>
