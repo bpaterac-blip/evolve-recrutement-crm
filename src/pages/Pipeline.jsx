@@ -179,7 +179,7 @@ function buildEmailForStage(profile, newStage, date, time, rdvType) {
   const dateStr = date ? new Date(date + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : ''
   const timeStr = time && time !== '12:00' ? ` à ${time}` : ''
   const rdv = rdvType || 'Google Meet'
-  const sig = `\n\nCordialement,\nBaptiste Paterac\nCo-fondateur — Evolve Investissement`
+  const sig = `\n\nBien cordialement,\n\nBaptiste PATERAC\nAssocié & Co-fondateur | Responsable de réseau régions\nEvolve Investissement\n📧 bpaterac@evolveinvestissement.com\n📱 06 38 37 59 60\n🌐 groupe-evolve.fr`
 
   const TEMPLATES = {
     'R0': {
