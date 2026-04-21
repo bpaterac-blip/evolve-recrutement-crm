@@ -1083,8 +1083,23 @@ export default function Pipeline() {
     }
 
     window.dispatchEvent(new CustomEvent('evolve:event-added'))
+
+    // ── Email preview après confirmation de date ──────────────────────────
+    const _stage = profile.next_event_label || stage
+    const _heure = heure
+    const emailData = buildEmailForStage(profile, _stage, dateEditValue, _heure, dateEditRdvType, '', '', '', '', profile.skip_business_plan)
+    setEmailSubject(emailData.subject)
+    setEmailBody(emailData.body)
+    setEmailSent(false)
+    setEmailPreviewModal({ profile, newStage: _stage, calendarUrl: null })
+    // ─────────────────────────────────────────────────────────────────────
+
     setDateEditSaving(false)
     setDateEditProfile(null)
+    setDateEditValue('')
+    setDateEditTime('')
+    setDateEditRdvType('Google Meet')
+    setDateEditNotes('')
     fetchProfiles()
   }
 

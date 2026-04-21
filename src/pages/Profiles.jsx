@@ -107,6 +107,59 @@ function formatAddedDate(p) {
   return p?.dt || '—'
 }
 
+// ── Templates email ───────────────────────────────────────────────────────────
+function buildEmailForStage(profile, newStage, date, time, rdvType, meetLink, transferLink, cgpContact, bpLink, skipBP) {
+  const prenom = profile.fn || ''
+  const prenomNom = `${profile.fn || ''} ${profile.ln || ''}`.trim()
+  const d = date ? new Date(date + 'T12:00:00') : null
+  const dateStr = d ? d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : ''
+  const heure = time && time !== '12:00' ? time : ''
+  const meetLine = meetLink ? `\n🔗 Lien de connexion : ${meetLink}` : ''
+  const sig = `\n\nBien cordialement,\n\nBaptiste PATERAC\nAssocié & Co-fondateur | Responsable de réseau régions\nEvolve Investissement\nbpaterac@evolveinvestissement.com | 06 38 37 59 60 | groupe-evolve.fr`
+
+  const TEMPLATES = {
+    'R0': {
+      subject: `Premier échange téléphonique Evolve – ${dateStr}${heure ? ' à ' + heure : ''}`,
+      body: `Bonjour ${prenom},\n\nComme convenu, je vous confirme notre premier échange téléphonique de 15 minutes le ${dateStr}${heure ? ' à ' + heure : ''}.\n\nExcellente journée à vous,${sig}`,
+    },
+    'R1': {
+      subject: `Suite premier échange téléphonique – Présentation visio du ${dateStr}${heure ? ' à ' + heure : ''}`,
+      body: `${prenom},\n\nJe vous remercie pour notre premier échange. Comme convenu, je vous confirme notre présentation visio du ${dateStr}${heure ? ' à ' + heure : ''}${meetLink ? ' via ce lien : ' + meetLink : ''}.\n\nVous pouvez retrouver ci-dessous différents liens qui vous donneront plus d'informations sur Evolve et ses conseillers :\nSite : https://www.groupe-evolve.fr/\nLinkedIn : https://www.linkedin.com/company/evolvefr/\nYoutube : https://www.youtube.com/@Amaury_Dufresnoy\n\nBonne fin de journée à vous et à très vite,${sig}`,
+    },
+    'Point Business Plan': {
+      subject: `Suite présentation Evolve`,
+      body: `${prenom},\n\nJe vous remercie pour notre échange du jour. Comme convenu, je vous confirme notre point Business Plan du ${dateStr}${heure ? ' à ' + heure : ''}${meetLink ? ' via ce lien : ' + meetLink : ''}.\n\nVous retrouverez le lien de la présentation téléchargeable sous 3 jours ici : ${transferLink || '[ lien Transfer ]'}\n\nJe reste à votre disposition pour tout complément d'information d'ici là,\n\nBonne journée à vous,${sig}`,
+    },
+    "Point d'étape": skipBP ? {
+      subject: `Suite présentation Evolve`,
+      body: `${prenom},\n\nJe vous remercie pour notre échange du jour.\n\nVous pouvez retrouver le lien de la présentation téléchargeable sous 3 jours ici : ${transferLink || '[ lien Transfer ]'}\n\nComme convenu, je vous reconfirme notre point d'étape téléphonique du ${dateStr}${heure ? ' à ' + heure : ''}.\n\nJ'ai transmis vos coordonnées à ${cgpContact || '[ Prénom NOM ]'} qui va vous contacter pour fixer un créneau d'échange avec vous.\n\nJe reste à votre disposition pour tout complément d'information d'ici là,\n\nBonne journée à vous !${sig}`,
+    } : {
+      subject: `Suite point Business Plan`,
+      body: `${prenom},\n\nJe vous remercie pour notre point Business Plan du jour.\n\nComme convenu, vous pouvez retrouver via ce lien le Business Plan modifiable : ${bpLink || '[ lien Google Drive ]'}\n\nJ'ai transmis vos coordonnées à ${cgpContact || '[ Prénom NOM ]'} qui va vous contacter pour fixer un créneau afin d'échanger avec vous.\n\nJe vous reconfirme notre point d'étape le ${dateStr}${heure ? ' à ' + heure : ''}, d'ici là je reste disponible en cas de besoin.\n\nBonne journée à vous et à très vite !${sig}`,
+    },
+    'Démission reconversion': {
+      subject: `Félicitations pour votre décision — ${prenomNom}`,
+      body: `${prenom},\n\nFélicitations pour votre décision de vous lancer dans l'indépendance !\n\nNous sommes ravis de vous accompagner dans cette nouvelle étape. Toute l'équipe Evolve est à vos côtés pour rendre cette transition la plus sereine possible.${sig}`,
+    },
+    'R2 Amaury': {
+      subject: `Confirmation de votre rendez-vous avec Amaury Leroux`,
+      body: `${prenom},\n\nJe vous confirme votre rendez-vous avec Amaury Leroux, co-fondateur d'Evolve Investissement :\n\n📅 ${dateStr}${heure ? ' à ' + heure : ''}${meetLine}${sig}`,
+    },
+    'Point juridique': {
+      subject: `Point juridique — ${prenomNom}`,
+      body: `${prenom},\n\nJe vous confirme notre point juridique :\n\n📅 ${dateStr}${heure ? ' à ' + heure : ''}${meetLine}${sig}`,
+    },
+    'Recruté': {
+      subject: `Bienvenue chez Evolve Investissement ! 🎉`,
+      body: `${prenom},\n\nC'est avec un immense plaisir que nous vous accueillons officiellement au sein d'Evolve Investissement !\n\nVotre parcours commence ici — nous sommes impatients de construire quelque chose de grand avec vous.${sig}`,
+    },
+  }
+  return TEMPLATES[newStage] || {
+    subject: `Mise à jour de votre parcours — Evolve Investissement`,
+    body: `${prenom},\n\nJe vous contacte concernant votre parcours au sein d'Evolve Investissement.${sig}`,
+  }
+}
+
 export default function Profiles({ contactedOnly = false }) {
   const navigate = useNavigate()
   const { role, user } = useAuth()
@@ -122,6 +175,11 @@ export default function Profiles({ contactedOnly = false }) {
   const [pasInteresseModalProfile, setPasInteresseModalProfile] = useState(null)
   const [chuteModalProfile, setChuteModalProfile] = useState(null)
   const [r0ConfirmProfile, setR0ConfirmProfile] = useState(null)
+  const [emailPreviewModal, setEmailPreviewModal] = useState(null)
+  const [emailSubject, setEmailSubject] = useState('')
+  const [emailBody, setEmailBody] = useState('')
+  const [emailSending, setEmailSending] = useState(false)
+  const [emailSent, setEmailSent] = useState(false)
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -228,6 +286,46 @@ export default function Profiles({ contactedOnly = false }) {
     await fetchProfiles()
     setR0ConfirmProfile(null)
     showNotif(`${profile.fn} ${profile.ln} → R0 le ${new Date(r0Date).toLocaleDateString('fr-FR')}`)
+    // Ouvrir la modale email
+    const emailData = buildEmailForStage(profile, 'R0', r0Date, '', 'Téléphone', '', '', '', '', false)
+    setEmailSubject(emailData.subject)
+    setEmailBody(emailData.body)
+    setEmailSent(false)
+    setEmailPreviewModal({ profile, newStage: 'R0' })
+  }
+
+  // ── Envoi email via Edge Function Resend ─────────────────────────────────
+  const handleSendEmail = async () => {
+    const toEmail = (emailPreviewModal?.profile?.mail || '').trim()
+    if (!toEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(toEmail)) {
+      alert(`Adresse email invalide : "${toEmail}". Corrigez-la sur la fiche du profil.`)
+      return
+    }
+    setEmailSending(true)
+    try {
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-profile-email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({
+          to: toEmail,
+          subject: emailSubject,
+          body: emailBody,
+        }),
+      })
+      const result = await res.json()
+      if (result.success) {
+        setEmailSent(true)
+      } else {
+        alert(`Erreur envoi : ${JSON.stringify(result.error || result)}`)
+      }
+    } catch (e) {
+      alert(`Erreur : ${e.message}`)
+    } finally {
+      setEmailSending(false)
+    }
   }
 
   const handleExportCsv = () => {
@@ -506,6 +604,72 @@ export default function Profiles({ contactedOnly = false }) {
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button type="button" onClick={() => setDeleteModalOpen(false)} style={{ padding: '8px 16px', fontSize: 13, fontWeight: 500, borderRadius: 8, border: `1px solid ${ACCENT}`, background: 'transparent', color: ACCENT, cursor: 'pointer' }}>Annuler</button>
               <button type="button" onClick={confirmDelete} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 13, fontWeight: 500, borderRadius: 8, background: '#dc2626', color: 'white', border: 'none', cursor: 'pointer' }}><IconTrash /> Confirmer la suppression</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODALE EMAIL PREVIEW ────────────────────────────────────────────── */}
+      {emailPreviewModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div style={{ background: 'white', borderRadius: 16, width: '100%', maxWidth: 560, boxShadow: '0 20px 60px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+            {/* Header */}
+            <div style={{ padding: '18px 24px', borderBottom: '1px solid #E5E0D8', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+              <div>
+                <div style={{ fontFamily: 'Palatino, serif', fontSize: 16, fontWeight: 600, color: '#173731' }}>
+                  ✉️ Email au profil
+                </div>
+                <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>
+                  {emailPreviewModal.profile.fn} {emailPreviewModal.profile.ln} · Passage en {emailPreviewModal.newStage}
+                </div>
+              </div>
+              <button type="button" onClick={() => setEmailPreviewModal(null)} style={{ background: 'none', border: 'none', fontSize: 18, color: '#999', cursor: 'pointer', lineHeight: 1 }}>✕</button>
+            </div>
+            {/* Body */}
+            <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1 }}>
+              {!emailPreviewModal.profile.mail && (
+                <div style={{ background: '#FFF3CD', border: '1px solid #FFC107', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: '#856404' }}>
+                  ⚠️ Ce profil n'a pas d'adresse email renseignée. Ajoutez-en une sur sa fiche avant d'envoyer.
+                </div>
+              )}
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#666', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Objet</label>
+                <input
+                  type="text"
+                  value={emailSubject}
+                  onChange={(e) => setEmailSubject(e.target.value)}
+                  style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, outline: 'none', boxSizing: 'border-box' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#666', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Message</label>
+                <textarea
+                  value={emailBody}
+                  onChange={(e) => setEmailBody(e.target.value)}
+                  rows={12}
+                  style={{ width: '100%', padding: '10px 12px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, resize: 'vertical', outline: 'none', lineHeight: 1.6, fontFamily: 'inherit', boxSizing: 'border-box' }}
+                />
+              </div>
+              {emailSent && (
+                <div style={{ marginTop: 12, padding: '10px 14px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 8, fontSize: 13, color: '#15803D', fontWeight: 500 }}>
+                  ✅ Email envoyé avec succès à {emailPreviewModal.profile.mail}
+                </div>
+              )}
+            </div>
+            {/* Footer */}
+            <div style={{ padding: '14px 24px', borderTop: '1px solid #E5E0D8', display: 'flex', gap: 10, justifyContent: 'flex-end', flexShrink: 0 }}>
+              <button type="button" onClick={() => setEmailPreviewModal(null)}
+                style={{ padding: '9px 18px', borderRadius: 8, border: '1px solid #E5E0D8', background: 'white', color: '#666', cursor: 'pointer', fontSize: 13 }}>
+                {emailSent ? 'Fermer' : 'Passer'}
+              </button>
+              {!emailSent && (
+                <button type="button"
+                  onClick={handleSendEmail}
+                  disabled={emailSending || !emailPreviewModal.profile.mail}
+                  style={{ padding: '9px 20px', borderRadius: 8, border: 'none', background: emailPreviewModal.profile.mail ? '#173731' : '#ccc', color: 'white', cursor: emailPreviewModal.profile.mail ? 'pointer' : 'not-allowed', fontSize: 13, fontWeight: 500, minWidth: 120 }}>
+                  {emailSending ? 'Envoi…' : '✉️ Envoyer'}
+                </button>
+              )}
             </div>
           </div>
         </div>
