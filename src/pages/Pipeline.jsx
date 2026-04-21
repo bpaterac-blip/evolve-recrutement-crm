@@ -198,7 +198,7 @@ function buildEmailForStage(profile, newStage, date, time, rdvType, meetLink, tr
   const dateStr = d ? d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : ''
   const heure = time && time !== '12:00' ? time : ''
   const meetLine = meetLink ? `\n🔗 Lien de connexion : ${meetLink}` : ''
-  const sig = `\n\nBien cordialement,\n\nBaptiste PATERAC\nAssocié & Co-fondateur | Responsable de réseau régions\nEvolve Investissement\nbpaterac@evolveinvestissement.com | 06 38 37 59 60 | groupe-evolve.fr`
+  const sig = `\n\nBien cordialement,\n\nBaptiste PATERAC\nAssocié & Co-fondateur | Responsable de réseau régions\nGroupe Evolve\nbpaterac@evolveinvestissement.com | 06 38 37 59 60 | https://groupe-evolve.fr`
 
   const TEMPLATES = {
     'R0': {
@@ -1104,7 +1104,8 @@ export default function Pipeline() {
     // ── Email preview après confirmation de date ──────────────────────────
     const _stage = profile.next_event_label || stage
     const _heure = heure
-    const emailData = buildEmailForStage(profile, _stage, dateEditValue, _heure, dateEditRdvType, '', '', '', '', profile.skip_business_plan)
+    const _skipBP = _stage === "Point d'étape" ? (profile.skip_business_plan || profile.stg !== 'Point Business Plan') : false
+    const emailData = buildEmailForStage(profile, _stage, dateEditValue, _heure, dateEditRdvType, '', '', '', '', _skipBP)
     setEmailSubject(emailData.subject)
     setEmailBody(emailData.body)
     setEmailSent(false)
@@ -1294,7 +1295,8 @@ export default function Pipeline() {
       : '12:00'
     const _rdvType = stageChangeRdType || 'Google Meet'
     const _meetLink = stageChangeMeetLink?.trim() || ''
-    const emailData = buildEmailForStage(profile, newStage, _dateChoisie, _heureChoisie, _rdvType, _meetLink, stageChangeTransferLink?.trim(), stageChangeCGPContact?.trim(), stageChangeBPLink?.trim(), profile.skip_business_plan)
+    const _skipBP2 = newStage === "Point d'étape" ? (profile.skip_business_plan || profile.stg !== 'Point Business Plan') : false
+    const emailData = buildEmailForStage(profile, newStage, _dateChoisie, _heureChoisie, _rdvType, _meetLink, stageChangeTransferLink?.trim(), stageChangeCGPContact?.trim(), stageChangeBPLink?.trim(), _skipBP2)
     const calUrl = _dateChoisie ? buildGoogleCalendarUrl({
       title: getCalendarTitle(newStage, profile),
       date: _dateChoisie,
@@ -1411,7 +1413,8 @@ export default function Pipeline() {
       fetchProfiles()
     }
     // ── Email preview (pas de date dans ce cas) ──────────────────────────────
-    const emailData = buildEmailForStage(profile, newStage, '', '', '', '', stageChangeTransferLink?.trim(), stageChangeCGPContact?.trim(), stageChangeBPLink?.trim(), profile.skip_business_plan)
+    const _skipBP3 = newStage === "Point d'étape" ? (profile.skip_business_plan || profile.stg !== 'Point Business Plan') : false
+    const emailData = buildEmailForStage(profile, newStage, '', '', '', '', stageChangeTransferLink?.trim(), stageChangeCGPContact?.trim(), stageChangeBPLink?.trim(), _skipBP3)
     setEmailSubject(emailData.subject)
     setEmailBody(emailData.body)
     setEmailSent(false)
@@ -2397,7 +2400,7 @@ export default function Pipeline() {
                         stageChangeTransferLink?.trim() || '',
                         stageChangeCGPContact?.trim() || '',
                         stageChangeBPLink?.trim() || '',
-                        pendingStageChange?.profile?.skip_business_plan
+                        newStage === "Point d'étape" ? (pendingStageChange?.profile?.skip_business_plan || pendingStageChange?.profile?.stg !== 'Point Business Plan') : false
                       )
                       const calUrl = buildGoogleCalendarUrl({
                         title: getCalendarTitle(newStage, pendingStageChange?.profile || {}),
