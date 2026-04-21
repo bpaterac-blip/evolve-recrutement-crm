@@ -10,9 +10,16 @@ function getDefaultDate() {
   return d.toISOString().split('T')[0]
 }
 
+const TIME_SLOTS = Array.from({ length: 25 }, (_, i) => {
+  const h = 8 + Math.floor(i / 2)
+  const m = (i % 2) * 30
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+})
+
 export default function R0ConfirmModal({ profile, onClose, onConfirm }) {
   const [source, setSource] = useState(profile?.src || '')
   const [r0Date, setR0Date] = useState(getDefaultDate())
+  const [r0Time, setR0Time] = useState('09:00')
   const [saving, setSaving] = useState(false)
   const profileName = [profile?.fn || profile?.first_name, profile?.ln || profile?.last_name].filter(Boolean).join(' ') || '—'
   const company = profile?.co || profile?.company || '—'
@@ -20,7 +27,7 @@ export default function R0ConfirmModal({ profile, onClose, onConfirm }) {
   const handleConfirm = async () => {
     if (!source || !r0Date) return
     setSaving(true)
-    await onConfirm(source, r0Date)
+    await onConfirm(source, r0Date, r0Time)
     setSaving(false)
   }
 
@@ -49,15 +56,27 @@ export default function R0ConfirmModal({ profile, onClose, onConfirm }) {
               ))}
             </select>
           </div>
-          <div style={{ marginBottom: 20 }}>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 6 }}>Date du R0</label>
-            <input
-              type="date"
-              value={r0Date}
-              onChange={(e) => setR0Date(e.target.value)}
-              required
-              style={{ width: '100%', padding: '10px 12px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, background: 'white' }}
-            />
+          <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 6 }}>Date du R0</label>
+              <input
+                type="date"
+                value={r0Date}
+                onChange={(e) => setR0Date(e.target.value)}
+                required
+                style={{ width: '100%', padding: '10px 12px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, background: 'white', boxSizing: 'border-box' }}
+              />
+            </div>
+            <div style={{ width: 110 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 6 }}>Heure</label>
+              <select
+                value={r0Time}
+                onChange={(e) => setR0Time(e.target.value)}
+                style={{ width: '100%', padding: '10px 8px', fontSize: 13, border: '1px solid #E5E0D8', borderRadius: 6, background: 'white' }}
+              >
+                {TIME_SLOTS.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
           </div>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
             <button type="button" onClick={onClose} style={{ padding: '10px 16px', fontSize: 13, border: `1px solid ${ACCENT}`, borderRadius: 6, background: 'transparent', color: ACCENT, cursor: 'pointer' }}>

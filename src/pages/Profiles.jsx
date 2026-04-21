@@ -107,6 +107,21 @@ function formatAddedDate(p) {
   return p?.dt || '—'
 }
 
+// ── Google Calendar URL ───────────────────────────────────────────────────────
+function buildGoogleCalendarUrl({ title, date, time, description, guest }) {
+  if (!date) return null
+  const pad = (n) => String(n).padStart(2, '0')
+  const [y, m, d] = date.split('-')
+  const [h, min] = (time || '09:00').split(':')
+  const startStr = `${y}${m}${d}T${pad(h)}${pad(min)}00`
+  const endDate = new Date(`${date}T${time || '09:00'}:00`)
+  endDate.setHours(endDate.getHours() + 1)
+  const endStr = `${endDate.getFullYear()}${pad(endDate.getMonth() + 1)}${pad(endDate.getDate())}T${pad(endDate.getHours())}${pad(endDate.getMinutes())}00`
+  const params = new URLSearchParams({ action: 'TEMPLATE', text: title, dates: `${startStr}/${endStr}`, details: description || '' })
+  if (guest) params.append('add', guest)
+  return `https://calendar.google.com/calendar/render?${params}`
+}
+
 // ── Templates email ───────────────────────────────────────────────────────────
 function buildEmailForStage(profile, newStage, date, time, rdvType, meetLink, transferLink, cgpContact, bpLink, skipBP) {
   const prenom = profile.fn || ''
@@ -115,7 +130,7 @@ function buildEmailForStage(profile, newStage, date, time, rdvType, meetLink, tr
   const dateStr = d ? d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : ''
   const heure = time && time !== '12:00' ? time : ''
   const meetLine = meetLink ? `\n🔗 Lien de connexion : ${meetLink}` : ''
-  const sig = `\n\nBien cordialement,\n\nBaptiste PATERAC\nAssocié & Co-fondateur | Responsable de réseau régions\nEvolve Investissement\nbpaterac@evolveinvestissement.com | 06 38 37 59 60 | groupe-evolve.fr`
+  const sig = `\n\nBien cordialement,\n\nBaptiste PATERAC\nAssocié & Co-fondateur | Responsable de réseau régions\nGroupe Evolve\nbpaterac@evolveinvestissement.com | 06 38 37 59 60 | https://groupe-evolve.fr`
 
   const TEMPLATES = {
     'R0': {
@@ -252,24 +267,26 @@ export default function Profiles({ contactedOnly = false }) {
     setR0ConfirmProfile(profile)
   }
 
-  const confirmSendToR0 = async (source, r0Date) => {
+  const confirmSendToR0 = async (source, r0Date, r0Time) => {
     const profile = r0ConfirmProfile
     if (!profile || !useSupabase) return
     // Update source if changed
     if (source && source !== profile.src) {
       changeSource(profile.id, source)
     }
+    // Stocker la date+heure complète si heure renseignée
+    const eventDateTime = r0Time ? `${r0Date}T${r0Time}:00` : r0Date
     // Update profile: stage R0 + next_event_date/label with the R0 date
     await supabase.from('profiles').update({
       stage: 'R0',
-      next_event_date: r0Date,
+      next_event_date: eventDateTime,
       next_event_label: 'R0',
     }).eq('id', profile.id)
     // Create event for the R0 meeting
     const r0EventRow = {
       profile_id: profile.id,
       event_type: 'R0',
-      event_date: r0Date,
+      event_date: eventDateTime,
       description: `R0 planifié (source: ${source})`,
     }
     if (user?.id) r0EventRow.owner_id = user.id
@@ -285,13 +302,20 @@ export default function Profiles({ contactedOnly = false }) {
     changeStage(profile.id, 'R0')
     await fetchProfiles()
     setR0ConfirmProfile(null)
-    showNotif(`${profile.fn} ${profile.ln} → R0 le ${new Date(r0Date).toLocaleDateString('fr-FR')}`)
-    // Ouvrir la modale email
-    const emailData = buildEmailForStage(profile, 'R0', r0Date, '', 'Téléphone', '', '', '', '', false)
+    showNotif(`${profile.fn} ${profile.ln} → R0 le ${new Date(r0Date).toLocaleDateString('fr-FR')}${r0Time ? ' à ' + r0Time : ''}`)
+    // Construire l'URL Google Calendar
+    const emailData = buildEmailForStage(profile, 'R0', r0Date, r0Time || '', 'Téléphone', '', '', '', '', false)
+    const calUrl = buildGoogleCalendarUrl({
+      title: `${profile.fn || ''} ${profile.ln || ''} & Evolve — Échange téléphonique`.trim(),
+      date: r0Date,
+      time: r0Time || '09:00',
+      description: emailData.body,
+      guest: profile.mail?.trim() || '',
+    })
     setEmailSubject(emailData.subject)
     setEmailBody(emailData.body)
     setEmailSent(false)
-    setEmailPreviewModal({ profile, newStage: 'R0' })
+    setEmailPreviewModal({ profile, newStage: 'R0', calendarUrl: calUrl })
   }
 
   // ── Envoi email via Edge Function Resend ─────────────────────────────────
@@ -631,6 +655,17 @@ export default function Profiles({ contactedOnly = false }) {
                 <div style={{ background: '#FFF3CD', border: '1px solid #FFC107', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: '#856404' }}>
                   ⚠️ Ce profil n'a pas d'adresse email renseignée. Ajoutez-en une sur sa fiche avant d'envoyer.
                 </div>
+              )}
+              {emailPreviewModal.calendarUrl && (
+                <a
+                  href={emailPreviewModal.calendarUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 8, marginBottom: 16, textDecoration: 'none', color: '#15803D', fontSize: 12, fontWeight: 500 }}
+                >
+                  📅 <span>Ajouter au Google Calendar</span>
+                  <span style={{ marginLeft: 'auto', fontSize: 11, opacity: 0.7 }}>↗</span>
+                </a>
               )}
               <div style={{ marginBottom: 12 }}>
                 <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#666', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Objet</label>
