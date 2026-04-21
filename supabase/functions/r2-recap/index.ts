@@ -144,14 +144,13 @@ function buildProfileBlock(p: any, notes: any[], activities: any[]): string {
     ? (p.linkedin_url.startsWith('http') ? p.linkedin_url : `https://${p.linkedin_url}`)
     : null
 
-  // Dernières notes (max 3)
-  const lastNotes = notes.slice(0, 3)
-  const notesHtml = lastNotes.length > 0
-    ? lastNotes.map(n => {
+  // Toutes les notes (sans limite)
+  const notesHtml = notes.length > 0
+    ? notes.map(n => {
         const date = n.created_at ? new Date(n.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : ''
         return `<div style="padding:10px 14px;border-left:3px solid ${GOLD};background:#FAFAF8;border-radius:0 6px 6px 0;margin-bottom:8px">
           <div style="font-size:10px;color:#888;margin-bottom:4px">${date}</div>
-          <div style="font-size:13px;color:#333;white-space:pre-line;line-height:1.5">${(n.content || '').substring(0, 400)}${(n.content || '').length > 400 ? '…' : ''}</div>
+          <div style="font-size:13px;color:#333;white-space:pre-line;line-height:1.5">${(n.content || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
         </div>`
       }).join('')
     : '<p style="color:#999;font-size:13px">Aucune note</p>'
@@ -159,7 +158,6 @@ function buildProfileBlock(p: any, notes: any[], activities: any[]): string {
   // Historique des stades (dernières activités stage_change)
   const stageActs = activities
     .filter(a => a.activity_type === 'stage_change')
-    .slice(-6)
     .reverse()
   const histoHtml = stageActs.length > 0
     ? `<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:12px">
@@ -239,7 +237,7 @@ function buildProfileBlock(p: any, notes: any[], activities: any[]): string {
 
       <!-- Dernières notes -->
       <div style="margin-bottom:20px">
-        <div style="font-size:14px;font-weight:700;color:${ACCENT};border-bottom:2px solid ${GOLD};padding-bottom:6px;margin-bottom:14px">Dernières notes</div>
+        <div style="font-size:14px;font-weight:700;color:${ACCENT};border-bottom:2px solid ${GOLD};padding-bottom:6px;margin-bottom:14px">Notes (${notes.length})</div>
         ${notesHtml}
       </div>
 
@@ -297,8 +295,7 @@ Deno.serve(async (req) => {
           .from('notes')
           .select('content, created_at')
           .eq('profile_id', p.id)
-          .order('created_at', { ascending: false })
-          .limit(3),
+          .order('created_at', { ascending: false }),
         supabase
           .from('activities')
           .select('activity_type, old_value, new_value, note, created_at')
