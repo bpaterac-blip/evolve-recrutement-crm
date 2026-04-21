@@ -158,6 +158,23 @@ function formatDateWithYear(dateStr) {
   return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
+// ── Titre Google Calendar par étape ──────────────────────────────────────────
+function getCalendarTitle(stage, profile) {
+  const prenomNom = `${profile?.fn || ''} ${profile?.ln || ''}`.trim()
+  const LABELS = {
+    'R0': `${prenomNom} & Evolve — Échange téléphonique`,
+    'R1': `${prenomNom} & Evolve — Présentation visio`,
+    'Point Business Plan': `${prenomNom} & Evolve — Point Business Plan`,
+    "Point d'étape": `${prenomNom} & Evolve — Point d'étape`,
+    "Point d'étape téléphonique": `${prenomNom} & Evolve — Point d'étape`,
+    'R2 Amaury': `${prenomNom} & Evolve — R2 Amaury`,
+    'Point juridique': `${prenomNom} & Evolve — Point juridique`,
+    'Démission reconversion': `${prenomNom} & Evolve — Démission reconversion`,
+    'Recruté': `${prenomNom} & Evolve — Intégration`,
+  }
+  return LABELS[stage] || `${prenomNom} & Evolve — ${stage}`
+}
+
 // ── Google Calendar URL ───────────────────────────────────────────────────────
 function buildGoogleCalendarUrl({ title, date, time, description, guest }) {
   if (!date) return null
@@ -1277,15 +1294,14 @@ export default function Pipeline() {
       : '12:00'
     const _rdvType = stageChangeRdType || 'Google Meet'
     const _meetLink = stageChangeMeetLink?.trim() || ''
-    const calDesc = [`${profile.fn || ''} ${profile.ln || ''} — ${profile.co || ''}`.trim(), _meetLink].filter(Boolean).join('\n')
+    const emailData = buildEmailForStage(profile, newStage, _dateChoisie, _heureChoisie, _rdvType, _meetLink, stageChangeTransferLink?.trim(), stageChangeCGPContact?.trim(), stageChangeBPLink?.trim(), profile.skip_business_plan)
     const calUrl = _dateChoisie ? buildGoogleCalendarUrl({
-      title: `${newStage} — ${profile.fn || ''} ${profile.ln || ''}`.trim(),
+      title: getCalendarTitle(newStage, profile),
       date: _dateChoisie,
       time: _heureChoisie,
-      description: calDesc,
+      description: emailData.body,
       guest: profile.mail?.trim() || '',
     }) : null
-    const emailData = buildEmailForStage(profile, newStage, _dateChoisie, _heureChoisie, _rdvType, _meetLink, stageChangeTransferLink?.trim(), stageChangeCGPContact?.trim(), stageChangeBPLink?.trim(), profile.skip_business_plan)
     setEmailSubject(emailData.subject)
     setEmailBody(emailData.body)
     setEmailSent(false)
@@ -2369,11 +2385,25 @@ export default function Pipeline() {
                       const heureParts = (stageChangeTime || '09:00').split(':')
                       const h = String(parseInt(heureParts[0]) || 9).padStart(2, '0')
                       const min = String(parseInt(heureParts[1]) || 0).padStart(2, '0')
+                      const _dateStr = String(stageChangeDate).split('T')[0]
+                      const _timeStr = `${h}:${min}`
+                      const previewEmail = buildEmailForStage(
+                        pendingStageChange?.profile || {},
+                        newStage,
+                        _dateStr,
+                        _timeStr,
+                        stageChangeRdType || 'Google Meet',
+                        stageChangeMeetLink?.trim() || '',
+                        stageChangeTransferLink?.trim() || '',
+                        stageChangeCGPContact?.trim() || '',
+                        stageChangeBPLink?.trim() || '',
+                        pendingStageChange?.profile?.skip_business_plan
+                      )
                       const calUrl = buildGoogleCalendarUrl({
-                        title: `${newStage} — ${pendingStageChange?.profile?.fn || ''} ${pendingStageChange?.profile?.ln || ''}`.trim(),
-                        date: String(stageChangeDate).split('T')[0],
-                        time: `${h}:${min}`,
-                        description: `${pendingStageChange?.profile?.fn || ''} ${pendingStageChange?.profile?.ln || ''} — ${pendingStageChange?.profile?.co || ''}`.trim(),
+                        title: getCalendarTitle(newStage, pendingStageChange?.profile || {}),
+                        date: _dateStr,
+                        time: _timeStr,
+                        description: previewEmail.body,
                         guest: pendingStageChange?.profile?.mail?.trim() || '',
                       })
                       return (
