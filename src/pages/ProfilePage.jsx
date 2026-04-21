@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { jsPDF } from 'jspdf'
 import { supabase } from '../lib/supabase'
 import { useCRM } from '../context/CRMContext'
+import { useAuth } from '../context/AuthContext'
 import { getExperienceBadge } from '../lib/scoring'
 import {
   STAGES,
@@ -140,6 +141,8 @@ export default function ProfilePage() {
     useSupabase,
     showNotif,
   } = useCRM()
+
+  const { user, userProfile } = useAuth()
 
   const profileIndex = profiles.findIndex((p) => String(p.id) === String(id))
   const profile = profileIndex >= 0 ? profiles[profileIndex] : null
@@ -663,15 +666,46 @@ export default function ProfilePage() {
             <FieldRow field="phone" value={profile.phone} label="Téléphone" icon={<span style={{ fontSize: 14 }}>📞</span>} placeholder="+33 6 …" />
             <FieldRow field="li" value={profile.li} label="LinkedIn" icon={<IconLink />} placeholder="linkedin.com/in/…" isLink />
             <FieldRow field="city" value={profile.city} label="Ville" icon={<IconMapPin />} />
-            {(profile.owner_full_name?.trim() || profile.owner_email?.trim()) && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: `1px solid ${PAGE_STYLE.border}` }}>
-                <span style={iconStyle}><IconUser /></span>
-                <span style={{ color: PAGE_STYLE.textSecondary, fontSize: 13, width: 100, flexShrink: 0 }}>Ajouté par</span>
-                <span style={{ flex: 1, fontSize: 12, color: PAGE_STYLE.textSecondary }}>
-                  {(profile.owner_full_name?.trim() || profile.owner_email || '').trim()} · {profile.created_at ? `le ${new Date(profile.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}` : '—'}
-                </span>
-              </div>
-            )}
+            {/* ── Paternité ── */}
+            {(() => {
+              const knownUsers = [...new Map(
+                profiles
+                  .filter(p => p.owner_id)
+                  .map(p => [p.owner_id, { id: p.owner_id, email: p.owner_email || '', name: p.owner_full_name?.trim() || (p.owner_email || '').split('@')[0] || 'Inconnu' }])
+              ).values()]
+              if (user?.id && !knownUsers.find(u => u.id === user.id)) {
+                knownUsers.push({ id: user.id, email: user.email || '', name: userProfile?.full_name?.trim() || (user.email || '').split('@')[0] || 'Moi' })
+              }
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: `1px solid ${PAGE_STYLE.border}` }}>
+                  <span style={iconStyle}><IconUser /></span>
+                  <span style={{ color: PAGE_STYLE.textSecondary, fontSize: 13, width: 100, flexShrink: 0 }}>Paternité</span>
+                  <select
+                    value={profile.owner_id || ''}
+                    onChange={async (e) => {
+                      const selectedId = e.target.value
+                      const selectedUser = knownUsers.find(u => u.id === selectedId)
+                      if (!selectedUser) return
+                      await supabase.from('profiles').update({
+                        owner_id: selectedUser.id,
+                        owner_email: selectedUser.email,
+                        owner_full_name: selectedUser.name,
+                      }).eq('id', profile.id)
+                      await fetchProfiles()
+                      showNotif(`Paternité → ${selectedUser.name}`)
+                    }}
+                    style={{ flex: 1, padding: '6px 10px', fontSize: 13, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6, background: 'white', cursor: 'pointer', outline: 'none', color: PAGE_STYLE.text }}
+                  >
+                    {!profile.owner_id && <option value="">— Non assigné —</option>}
+                    {knownUsers.map(u => (
+                      <option key={u.id} value={u.id}>
+                        {u.id === user?.id ? `${u.name} (vous)` : u.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )
+            })()}
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: `1px solid ${PAGE_STYLE.border}` }}>
               <span style={{ ...iconStyle, width: 24, display: 'flex', alignItems: 'center' }}><IconMap /></span>
               <span style={{ color: PAGE_STYLE.textSecondary, fontSize: 13, width: 100 }}>Région</span>
