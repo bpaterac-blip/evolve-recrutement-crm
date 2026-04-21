@@ -206,8 +206,10 @@ Deno.serve(async (req) => {
     }
 
     // — Funnel cumulatif —
+    // Pour 'Recruté' on utilise totalRecrutes directement (cohérence avec objectifs, inclut les archivés)
     const forFunnel = profiles.filter((p: any) => p.stage && p.stage !== '')
     const funnelCounts = ANALYTICS_STAGES.map((stage) => {
+      if (stage === 'Recruté') return { stage, reached: totalRecrutes }
       const targetIdx = stageIndex(stage)
       const reached = forFunnel.filter((p: any) => reachedStage(p, targetIdx)).length
       return { stage, reached }
