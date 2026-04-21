@@ -339,6 +339,7 @@ export default function Profiles({ contactedOnly = false }) {
           to: toEmail,
           subject: emailSubject,
           body: emailBody,
+          userEmail: user?.email || '',
         }),
       })
       const result = await res.json()

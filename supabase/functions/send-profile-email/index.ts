@@ -3,20 +3,51 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const PHOTO_URL = 'https://fcwzzrjhmjodterwjbbl.supabase.co/storage/v1/object/public/email-assets/unnamed%20(1).png'
-const LOGO_URL  = 'https://fcwzzrjhmjodterwjbbl.supabase.co/storage/v1/object/public/email-assets/unnamed%20(2).png'
+const LOGO_URL = 'https://fcwzzrjhmjodterwjbbl.supabase.co/storage/v1/object/public/email-assets/unnamed%20(2).png'
 
-const SIGNATURE_HTML = `
+const SENDERS: Record<string, {
+  displayName: string
+  title: string
+  from: string
+  photoUrl: string
+  email: string
+  phone: string
+}> = {
+  // Clés = email de connexion Supabase Auth
+  'b.paterac@gmail.com': {
+    displayName: 'Baptiste PATERAC',
+    title: 'Associé &amp; Co-fondateur &nbsp;|&nbsp; Responsable de réseau régions',
+    from: 'Baptiste Paterac <bpaterac@evolveinvestissement.com>',
+    photoUrl: 'https://fcwzzrjhmjodterwjbbl.supabase.co/storage/v1/object/public/email-assets/unnamed%20(1).png',
+    email: 'bpaterac@evolveinvestissement.com',
+    phone: '06 38 37 59 60',
+  },
+  'agoutard@evolveinvestissement.com': {
+    displayName: 'Aurélien GOUTARD',
+    title: 'Associé &amp; Co-fondateur &nbsp;|&nbsp; Responsable de réseau IDF',
+    from: 'Aurélien Goutard <agoutard@evolveinvestissement.com>',
+    photoUrl: 'https://fcwzzrjhmjodterwjbbl.supabase.co/storage/v1/object/public/email-assets/unnamed%20(3).png',
+    email: 'agoutard@evolveinvestissement.com',
+    phone: '06 44 17 51 29',
+  },
+}
+
+// Fallback = Baptiste
+const DEFAULT_SENDER = SENDERS['b.paterac@gmail.com']
+
+function buildSignatureHtml(sender: typeof DEFAULT_SENDER) {
+  return `
   <table cellpadding="0" cellspacing="0" border="0" style="margin-top:24px;border-top:2px solid #D2AB76;padding-top:18px">
     <tr>
       <td style="padding-right:16px;vertical-align:top">
-        <img src="${PHOTO_URL}" width="64" height="64"
+        <img src="${sender.photoUrl}" width="64" height="64"
           style="border-radius:50%;object-fit:cover;display:block"
-          alt="Baptiste PATERAC" />
+          alt="${sender.displayName}" />
       </td>
       <td style="vertical-align:top;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#1A1A1A;line-height:1.7">
-        <div style="font-weight:700;font-size:14px;color:#173731;letter-spacing:0.3px">Baptiste PATERAC</div>
-        <div style="color:#666;font-size:12px;margin-bottom:8px">Associé &amp; Co-fondateur &nbsp;|&nbsp; Responsable de réseau régions</div>
+        <div style="font-weight:700;font-size:14px;color:#173731;letter-spacing:0.3px">${sender.displayName}</div>
+        <div style="color:#666;font-size:12px;margin-bottom:2px">${sender.title}</div>
+        <div style="color:#666;font-size:12px;margin-bottom:8px">Groupe Evolve</div>
         <img src="${LOGO_URL}" height="26" alt="Evolve" style="display:block;margin-bottom:10px" />
         <table cellpadding="0" cellspacing="0" border="0">
           <tr>
@@ -25,7 +56,7 @@ const SIGNATURE_HTML = `
                 <span style="color:#D2AB76;font-size:10px;font-family:Arial">@</span>
               </div>
             </td>
-            <td><a href="mailto:bpaterac@evolveinvestissement.com" style="color:#173731;text-decoration:none;font-size:12px">bpaterac@evolveinvestissement.com</a></td>
+            <td><a href="mailto:${sender.email}" style="color:#173731;text-decoration:none;font-size:12px">${sender.email}</a></td>
           </tr>
           <tr><td colspan="2" style="height:4px"></td></tr>
           <tr>
@@ -34,7 +65,7 @@ const SIGNATURE_HTML = `
                 <span style="color:#D2AB76;font-size:9px;font-family:Arial;font-weight:bold">T</span>
               </div>
             </td>
-            <td><span style="color:#444;font-size:12px">06 38 37 59 60</span></td>
+            <td><span style="color:#444;font-size:12px">${sender.phone}</span></td>
           </tr>
           <tr><td colspan="2" style="height:4px"></td></tr>
           <tr>
@@ -43,13 +74,14 @@ const SIGNATURE_HTML = `
                 <span style="color:#D2AB76;font-size:9px;font-family:Arial;font-weight:bold">W</span>
               </div>
             </td>
-            <td><a href="https://groupe-evolve.fr" style="color:#173731;text-decoration:none;font-size:12px">groupe-evolve.fr</a></td>
+            <td><a href="https://groupe-evolve.fr" style="color:#173731;text-decoration:none;font-size:12px">https://groupe-evolve.fr</a></td>
           </tr>
         </table>
       </td>
     </tr>
   </table>
 `
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -57,7 +89,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { to, subject, body } = await req.json()
+    const { to, subject, body, userEmail } = await req.json()
 
     if (!to || !subject || !body) {
       return new Response(
@@ -74,9 +106,14 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Corps du message (texte → HTML propre, sans la signature texte en bas)
-    // On retire la signature texte brute si elle est présente
-    const bodyWithoutSig = body.replace(/\nBien cordialement[\s\S]*$/, '').trim()
+    // Sélectionner la signature selon l'utilisateur connecté
+    const sender = (userEmail && SENDERS[userEmail]) ? SENDERS[userEmail] : DEFAULT_SENDER
+    const SIGNATURE_HTML = buildSignatureHtml(sender)
+
+    // Retirer la partie signature texte avant de construire le HTML
+    const bodyWithoutSig = body.replace(/\n\nBaptiste PATERAC[\s\S]*$/, '')
+                               .replace(/\n\nAurélien GOUTARD[\s\S]*$/, '')
+                               .trim()
 
     const htmlBody = `<!DOCTYPE html>
 <html><head><meta charset="utf-8"></head>
@@ -103,7 +140,7 @@ Deno.serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: 'Baptiste Paterac <baptiste@evolveinvestissement.com>',
+        from: sender.from,
         to: [to],
         subject,
         html: htmlBody,

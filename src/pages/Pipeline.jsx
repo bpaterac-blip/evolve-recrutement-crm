@@ -1511,6 +1511,7 @@ export default function Pipeline() {
           to: toEmail,
           subject: emailSubject,
           body: emailBody,
+          userEmail: user?.email || '',
         }),
       })
       const result = await res.json()
