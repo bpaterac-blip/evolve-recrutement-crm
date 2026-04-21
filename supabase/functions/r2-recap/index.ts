@@ -127,8 +127,18 @@ function buildGrilleSection(grille: Record<string, number> | null, commentaires:
 
 function buildProfileBlock(p: any, notes: any[], activities: any[]): string {
   const name = `${p.first_name || ''} ${p.last_name || ''}`.trim()
-  const grille = typeof p.grille_notation === 'string' ? JSON.parse(p.grille_notation || 'null') : (p.grille_notation || null)
-  const commentaires = typeof p.grille_commentaires === 'string' ? JSON.parse(p.grille_commentaires || 'null') : (p.grille_commentaires || null)
+  let grille: Record<string, number> | null = null
+  let commentaires: Record<string, string> | null = null
+  try {
+    grille = typeof p.grille_notation === 'string'
+      ? (p.grille_notation ? JSON.parse(p.grille_notation) : null)
+      : (p.grille_notation || null)
+  } catch (_) { grille = null }
+  try {
+    commentaires = typeof p.grille_commentaires === 'string'
+      ? (p.grille_commentaires ? JSON.parse(p.grille_commentaires) : null)
+      : (p.grille_commentaires || null)
+  } catch (_) { commentaires = null }
 
   const liUrl = p.linkedin_url
     ? (p.linkedin_url.startsWith('http') ? p.linkedin_url : `https://${p.linkedin_url}`)
