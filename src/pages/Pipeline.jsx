@@ -159,7 +159,7 @@ function formatDateWithYear(dateStr) {
 }
 
 // ── Google Calendar URL ───────────────────────────────────────────────────────
-function buildGoogleCalendarUrl({ title, date, time, description }) {
+function buildGoogleCalendarUrl({ title, date, time, description, guest }) {
   if (!date) return null
   const pad = (n) => String(n).padStart(2, '0')
   const [y, m, d] = date.split('-')
@@ -169,6 +169,7 @@ function buildGoogleCalendarUrl({ title, date, time, description }) {
   endDate.setHours(endDate.getHours() + 1)
   const endStr = `${endDate.getFullYear()}${pad(endDate.getMonth() + 1)}${pad(endDate.getDate())}T${pad(endDate.getHours())}${pad(endDate.getMinutes())}00`
   const params = new URLSearchParams({ action: 'TEMPLATE', text: title, dates: `${startStr}/${endStr}`, details: description || '' })
+  if (guest) params.append('add', guest)
   return `https://calendar.google.com/calendar/render?${params}`
 }
 
@@ -1262,6 +1263,7 @@ export default function Pipeline() {
       date: _dateChoisie,
       time: _heureChoisie,
       description: calDesc,
+      guest: profile.mail?.trim() || '',
     }) : null
     const emailData = buildEmailForStage(profile, newStage, _dateChoisie, _heureChoisie, _rdvType, _meetLink, stageChangeTransferLink?.trim(), stageChangeCGPContact?.trim(), stageChangeBPLink?.trim())
     setEmailSubject(emailData.subject)
@@ -2352,6 +2354,7 @@ export default function Pipeline() {
                         date: String(stageChangeDate).split('T')[0],
                         time: `${h}:${min}`,
                         description: `${pendingStageChange?.profile?.fn || ''} ${pendingStageChange?.profile?.ln || ''} — ${pendingStageChange?.profile?.co || ''}`.trim(),
+                        guest: pendingStageChange?.profile?.mail?.trim() || '',
                       })
                       return (
                         <a
