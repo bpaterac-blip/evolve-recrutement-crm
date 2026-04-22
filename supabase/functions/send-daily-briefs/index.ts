@@ -98,7 +98,18 @@ Génère un brief de préparation pour le ${stage}. Réponds avec ce JSON exact,
   })
 
   const data = await res.json()
+
+  // Vérifier que l'API Claude a répondu correctement
+  if (!res.ok) {
+    throw new Error(`Claude API error ${res.status}: ${JSON.stringify(data)}`)
+  }
+
   const text: string = data.content?.[0]?.text ?? ''
+  console.log('[generateBrief] Claude raw response:', text.slice(0, 300))
+
+  if (!text) {
+    throw new Error(`Claude returned empty response. Stop reason: ${data.stop_reason}. Full data: ${JSON.stringify(data)}`)
+  }
 
   try {
     const jsonMatch = text.match(/\{[\s\S]*\}/)
@@ -109,6 +120,7 @@ Génère un brief de préparation pour le ${stage}. Réponds avec ce JSON exact,
     }
   } catch {
     // Fallback : tout dans le résumé
+    console.log('[generateBrief] JSON parse failed, using raw text as fallback')
     return { resume: text.trim(), pointsAppui: '' }
   }
 }
