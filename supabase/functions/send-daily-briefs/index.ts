@@ -115,14 +115,26 @@ Synthèse factuelle de 3 à 5 points clés tirés des notes : situation actuelle
   const data = await res.json()
   const text: string = data.content?.[0]?.text ?? ''
 
-  // Séparer les deux sections
-  const resumeMatch   = text.match(/\*\*RÉSUMÉ DES ÉCHANGES\*\*([\s\S]*?)(?=\*\*POINTS D'APPUI|$)/i)
-  const pointsMatch   = text.match(/\*\*POINTS D'APPUI POUR CE RDV\*\*([\s\S]*?)$/i)
+  // Découper sur n'importe quelle variante de titre de section (** ou ##)
+  const parts = text.split(/(?:\*\*|##\s*)(?:RÉSUMÉ|POINTS\s+D['']APPUI|RÉSUMÉ\s+DES\s+ÉCHANGES|POINTS\s+D['']APPUI\s+POUR\s+CE\s+RDV)[^\n]*\n?/i)
 
-  return {
-    resume:      (resumeMatch?.[1]  ?? text).trim(),
-    pointsAppui: (pointsMatch?.[1]  ?? '').trim(),
+  // parts[0] = texte avant la 1ère section (souvent vide)
+  // parts[1] = contenu du résumé
+  // parts[2] = contenu des points d'appui
+  const resume      = (parts[1] ?? '').trim()
+  const pointsAppui = (parts[2] ?? '').trim()
+
+  // Fallback : si le split n'a pas fonctionné, on coupe au milieu du texte brut
+  if (!resume && !pointsAppui) {
+    const half = Math.floor(text.length / 2)
+    const cut = text.indexOf('\n\n', half)
+    return {
+      resume:      text.slice(0, cut > 0 ? cut : half).trim(),
+      pointsAppui: text.slice(cut > 0 ? cut : half).trim(),
+    }
   }
+
+  return { resume, pointsAppui }
 }
 
 // ── Construction du HTML de l'email ──────────────────────────────────────────
@@ -264,7 +276,7 @@ Deno.serve(async (req) => {
     const profiles = profilesRaw ?? []
     if (profiles.length === 0) {
       return new Response(
-        JSON.stringify({ success: true, message: 'Aucun RDV prévu aujourd'hui', date: today }),
+        JSON.stringify({ success: true, message: "Aucun RDV prévu aujourd'hui", date: today }),
         { headers: { 'Content-Type': 'application/json' } },
       )
     }
