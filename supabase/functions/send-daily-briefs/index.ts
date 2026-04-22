@@ -112,20 +112,28 @@ function buildNoteBlock(note: { content: string; created_at: string }, index: nu
   </div>`
 }
 
+const POINT_ETAPE_STAGES = ['Point Business Plan', "Point d'étape", "Point d'étape téléphonique"]
+
 // ── Construire l'email complet ─────────────────────────────────────────────────
 function buildEmailHtml(
   profile: Record<string, any>,
   notes: Array<{ content: string; created_at: string }>,
   senderDisplayName: string,
 ): string {
-  const fullName  = `${profile.first_name ?? ''} ${profile.last_name ?? ''}`.trim()
-  const stage     = profile.stage ?? '—'
-  const time      = fmtTime(profile.next_event_date)
-  const dateLabel = fmtDateLong(todayUTC())
+  const fullName    = `${profile.first_name ?? ''} ${profile.last_name ?? ''}`.trim()
+  const stage       = profile.stage ?? '—'
+  const time        = fmtTime(profile.next_event_date)
+  const dateLabel   = fmtDateLong(todayUTC())
+  const isPointEtape = POINT_ETAPE_STAGES.includes(stage)
 
   const sc = profile.score
   const scorePct = sc != null ? Math.min(100, Math.round((sc / 110) * 100)) : 0
   const scColor  = sc == null ? '#888' : sc >= 75 ? '#16a34a' : sc >= 50 ? '#f59e0b' : '#ef4444'
+
+  // Session d'intégration potentielle (Point d'étape uniquement)
+  const integSession = (profile.integration_periode && profile.integration_annee)
+    ? `${profile.integration_periode} ${profile.integration_annee}`
+    : profile.integration_periode || profile.integration_annee || null
 
   // Trier les notes : plus récentes en premier, max 5
   const sortedNotes = [...notes]
@@ -135,6 +143,32 @@ function buildEmailHtml(
   const notesHtml = sortedNotes.length > 0
     ? sortedNotes.map((n, i) => buildNoteBlock(n, i)).join('')
     : `<div style="padding:20px;text-align:center;color:#aaa;font-size:13px;background:white;border:1px solid #E8E4DD;border-radius:10px">Aucune note disponible pour ce profil.</div>`
+
+  // Bloc droite : Notation (Point d'étape) ou Score IA (R1)
+  const rightColHtml = isPointEtape ? `
+    <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:#aaa;margin-bottom:8px">Notation</div>
+    <div style="font-size:38px;font-weight:700;color:${scColor};line-height:1">${sc ?? '—'}</div>
+    <div style="font-size:10px;color:#ccc;margin-bottom:10px">/ 110 pts</div>
+    <div style="height:6px;background:#F0EDE8;border-radius:3px;overflow:hidden">
+      <div style="height:100%;width:${scorePct}%;background:${scColor};border-radius:3px"></div>
+    </div>
+    ${integSession ? `
+    <div style="margin-top:14px;padding:10px 12px;background:#F5F0E8;border-radius:8px;border:1px solid #E8E4DD">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:#aaa;margin-bottom:4px">Session d'intégration</div>
+      <div style="font-size:13px;font-weight:700;color:${ACCENT}">${integSession}</div>
+    </div>` : `
+    <div style="margin-top:14px;padding:10px 12px;background:#F5F0E8;border-radius:8px;border:1px solid #E8E4DD">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:#aaa;margin-bottom:4px">Session d'intégration</div>
+      <div style="font-size:13px;color:#bbb">Non assignée</div>
+    </div>`}
+  ` : `
+    <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:#aaa;margin-bottom:8px">Score IA</div>
+    <div style="font-size:38px;font-weight:700;color:${scColor};line-height:1">${sc ?? '—'}</div>
+    <div style="font-size:10px;color:#ccc;margin-bottom:10px">/ 110 pts</div>
+    <div style="height:6px;background:#F0EDE8;border-radius:3px;overflow:hidden">
+      <div style="height:100%;width:${scorePct}%;background:${scColor};border-radius:3px"></div>
+    </div>
+  `
 
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -161,17 +195,13 @@ function buildEmailHtml(
           <table cellpadding="0" cellspacing="0">
             <tr><td style="padding:3px 0;font-size:11px;color:#999;width:75px">Employeur</td><td style="padding:3px 0;font-size:12px;color:#1A1A1A;font-weight:600">${profile.company ?? '—'}</td></tr>
             <tr><td style="padding:3px 0;font-size:11px;color:#999">Poste</td><td style="padding:3px 0;font-size:12px;color:#333">${profile.title ?? '—'}</td></tr>
+            <tr><td style="padding:3px 0;font-size:11px;color:#999">Ville</td><td style="padding:3px 0;font-size:12px;color:#333">${profile.city ?? '—'}</td></tr>
             <tr><td style="padding:3px 0;font-size:11px;color:#999">Région</td><td style="padding:3px 0;font-size:12px;color:#333">${profile.region ?? '—'}</td></tr>
             <tr><td style="padding:3px 0;font-size:11px;color:#999">Maturité</td><td style="padding:3px 0;font-size:12px;color:#333">${profile.maturity ?? '—'}</td></tr>
           </table>
         </td>
         <td style="padding:16px 20px;width:45%;vertical-align:middle;text-align:center">
-          <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:#aaa;margin-bottom:8px">Score IA</div>
-          <div style="font-size:38px;font-weight:700;color:${scColor};line-height:1">${sc ?? '—'}</div>
-          <div style="font-size:10px;color:#ccc;margin-bottom:10px">/ 110 pts</div>
-          <div style="height:6px;background:#F0EDE8;border-radius:3px;overflow:hidden">
-            <div style="height:100%;width:${scorePct}%;background:${scColor};border-radius:3px"></div>
-          </div>
+          ${rightColHtml}
         </td>
       </tr>
     </table>
@@ -215,7 +245,7 @@ Deno.serve(async (req) => {
     // ── 1. Chercher les profils avec un RDV aujourd'hui ──────────────────────
     const { data: profilesRaw, error: profilesErr } = await supabase
       .from('profiles')
-      .select('id, first_name, last_name, company, title, region, stage, maturity, score, next_event_date, owner_email, owner_full_name')
+      .select('id, first_name, last_name, company, title, city, region, stage, maturity, score, next_event_date, owner_email, owner_full_name, integration_periode, integration_annee')
       .in('stage', [...BRIEF_STAGES, 'R2 Amaury'])
       .gte('next_event_date', `${today}T00:00:00`)
       .lt('next_event_date', `${tomorrow}T00:00:00`)
