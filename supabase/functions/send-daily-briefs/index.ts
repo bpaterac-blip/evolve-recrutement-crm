@@ -134,7 +134,7 @@ Synthèse factuelle de 3 à 5 points clés tirés des notes : situation actuelle
     }
   }
 
-  return { resume, pointsAppui }
+  return { resume, pointsAppui, _rawText: text }
 }
 
 // ── Construction du HTML de l'email ──────────────────────────────────────────
@@ -310,7 +310,7 @@ Deno.serve(async (req) => {
         }
 
         // ── 4. Générer le brief via Claude ────────────────────────────────
-        const { resume, pointsAppui } = await generateBrief(
+        const { resume, pointsAppui, _rawText } = await generateBrief(
           profile,
           notes ?? [],
           ANTHROPIC_API_KEY,
@@ -341,7 +341,7 @@ Deno.serve(async (req) => {
         const resendData = await resend.json()
         if (!resend.ok) throw new Error(JSON.stringify(resendData))
 
-        results.push({ profile: fullName, stage, sent_to: toList.join(', '), ok: true })
+        results.push({ profile: fullName, stage, sent_to: toList.join(', '), ok: true, notesCount: (notes ?? []).length, rawBrief: _rawText })
 
       } catch (err: any) {
         const fullName = `${profile.first_name ?? ''} ${profile.last_name ?? ''}`.trim()
