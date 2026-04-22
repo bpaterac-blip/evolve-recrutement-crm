@@ -23,6 +23,7 @@ import ScoreCorrectionModal from '../components/ScoreCorrectionModal'
 import ChuteModal from '../components/ChuteModal'
 import PasInteresseModal from '../components/PasInteresseModal'
 import GrilleNotationTab from '../components/GrilleNotationTab'
+import AISummaryModal from '../components/AISummaryModal'
 import { ActivityIcon, IconMap, IconCalendar, IconUpload, IconTrash, IconPencil, IconClose, IconDocument } from '../components/Icons'
 
 const ICON_S = 14
@@ -177,6 +178,7 @@ export default function ProfilePage() {
   const [scoreCorrectionOpen, setScoreCorrectionOpen] = useState(false)
   const [chuteModalProfile, setChuteModalProfile] = useState(null)
   const [pasInteresseModalProfile, setPasInteresseModalProfile] = useState(null)
+  const [showAIModal, setShowAIModal] = useState(false)
 
   const mapActivityRow = (a) => {
     const tsSource = a.created_at || a.date
@@ -900,7 +902,8 @@ export default function ProfilePage() {
 
           {activeTab === 'notes' && (
             <>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 16 }}>
+                <button type="button" onClick={() => setShowAIModal(true)} style={{ padding: '8px 16px', background: 'white', color: '#173731', border: '1px solid #D2AB76', borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>✨ Récap IA</button>
                 <button type="button" onClick={() => setShowNoteForm(!showNoteForm)} style={{ padding: '8px 16px', background: '#173731', color: '#E7E0D0', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>+ Nouvelle note</button>
               </div>
               {showNoteForm && (
@@ -1147,6 +1150,19 @@ export default function ProfilePage() {
             }}
           />
         </div>
+      )}
+
+      {showAIModal && (
+        <AISummaryModal
+          profile={profile}
+          onClose={() => setShowAIModal(false)}
+          onSave={async (noteContent) => {
+            await saveNote(profile.id, noteContent)
+            const list = await fetchNotes(profile.id)
+            setNotesList(list || [])
+            showNotif('✨ Récap IA sauvegardé')
+          }}
+        />
       )}
 
       <style>{`

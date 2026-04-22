@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { supabase } from '../lib/supabase'
 
 const ACCENT = '#173731'
 const GOLD = '#D2AB76'
 const BG = '#F5F0E8'
+
+const ANTHROPIC_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY
 
 export default function AISummaryModal({ profile, onClose, onSave }) {
   const [rawNote, setRawNote] = useState('')
@@ -17,31 +18,49 @@ export default function AISummaryModal({ profile, onClose, onSave }) {
 
   const handleGenerate = async () => {
     if (!rawNote.trim()) return
+    if (!ANTHROPIC_KEY) {
+      setError('Clé VITE_ANTHROPIC_API_KEY manquante dans les variables Vercel')
+      return
+    }
     setLoading(true)
     setError('')
     try {
-      const { data, error: fnError } = await supabase.functions.invoke('ai-note-summary', {
-        body: {
-          rawNote,
-          profile: {
-            fn: profile?.fn,
-            ln: profile?.ln,
-            co: profile?.co,
-            ti: profile?.ti,
-            stg: profile?.stg,
-            mat: profile?.mat,
-            region: profile?.region,
-          },
+      const profileContext = [
+        profile?.fn && profile?.ln ? `Prénom Nom : ${profile.fn} ${profile.ln}` : null,
+        profile?.co ? `Employeur : ${profile.co}` : null,
+        profile?.ti ? `Poste : ${profile.ti}` : null,
+        profile?.stg ? `Étape pipeline : ${profile.stg}` : null,
+        profile?.mat ? `Maturité : ${profile.mat}` : null,
+        profile?.region ? `Région : ${profile.region}` : null,
+      ].filter(Boolean).join('\n')
+
+      const userPrompt = `${profileContext ? `## Contexte du profil\n${profileContext}\n\n` : ''}## Note brute de l'échange\n${rawNote.trim()}\n\n---\n\nGénère un récapitulatif structuré :\n\n**📋 Résumé de l'échange**\n- [points clés]\n\n**💡 Éléments clés à retenir**\n- [infos importantes sur le profil, motivations, objections]\n\n**🎯 Points d'appui pour le prochain RDV**\n- [angles, questions à approfondir]\n\nSois factuel et direct. Pas d'introduction ni de conclusion.`
+
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': ANTHROPIC_KEY,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+          'anthropic-dangerous-direct-browser-access': 'true',
         },
+        body: JSON.stringify({
+          model: 'claude-opus-4-6',
+          max_tokens: 1024,
+          system: 'Tu es un assistant expert en recrutement CGP pour Evolve Investissement. Tu synthétises les échanges avec des prospects CGP. Tu réponds toujours en français, de manière concise et professionnelle.',
+          messages: [{ role: 'user', content: userPrompt }],
+        }),
       })
-      if (fnError || !data?.success) {
-        setError(fnError?.message || data?.error || 'Erreur lors de la génération')
+
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data?.error?.message || `Erreur API Anthropic (${res.status})`)
         return
       }
-      setSummary(data.summary)
+      setSummary(data.content?.[0]?.text || '')
       setStep('preview')
     } catch (e) {
-      setError(e.message || 'Erreur inattendue')
+      setError(e.message || 'Erreur réseau inattendue')
     } finally {
       setLoading(false)
     }
