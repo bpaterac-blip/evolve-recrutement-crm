@@ -2302,6 +2302,23 @@ export default function Pipeline() {
         </div>
       )}
 
+      {/* Modal Récap IA */}
+      {showAIModal && modalProfile && (
+        <AISummaryModal
+          profile={modalProfile}
+          onClose={() => setShowAIModal(false)}
+          onSave={async (content) => {
+            await supabase.from('notes').insert({
+              profile_id: modalProfile.id,
+              content,
+              template: 'Récap IA',
+              author: userProfile?.full_name?.trim() || user?.email || null,
+            })
+            await loadNotes()
+          }}
+        />
+      )}
+
       {/* Modales de confirmation suppression */}
       {scoreCorrectionOpen && displayProfile && (
         <ScoreCorrectionModal
