@@ -70,32 +70,17 @@ async function generateBrief(
     : 'Aucune note disponible.'
 
   const stage = profile.stage ?? '—'
-  const systemPrompt = `Tu es un assistant expert en recrutement de Conseillers en Gestion de Patrimoine (CGP) pour Evolve Investissement.
-Tu aides Baptiste et Aurélien à préparer leurs rendez-vous de recrutement avec des prospects CGP en reconversion vers l'indépendance.
-Tu réponds toujours en français, de manière concise, factuelle et professionnelle.
-Ton rôle est de préparer un brief opérationnel avant un entretien. Sois direct et utile.`
+  const systemPrompt = `Tu es un assistant expert en recrutement de CGP pour Evolve Investissement.
+Tu aides Baptiste et Aurélien à préparer leurs rendez-vous de recrutement.
+Tu réponds UNIQUEMENT en JSON valide, sans markdown, sans texte avant ou après le JSON.`
 
-  const userPrompt = `## Profil
-Prénom Nom : ${profile.first_name ?? ''} ${profile.last_name ?? ''}
-Employeur actuel : ${profile.company ?? '—'}
-Intitulé de poste : ${profile.title ?? '—'}
-Région : ${profile.region ?? '—'}
-Étape pipeline : ${stage}
-Score IA : ${profile.score ?? '—'} / 110
-Maturité : ${profile.maturity ?? '—'}
+  const userPrompt = `Profil : ${profile.first_name ?? ''} ${profile.last_name ?? ''} | ${profile.company ?? ''} | ${profile.title ?? ''} | ${profile.region ?? ''} | Stage : ${stage} | Score : ${profile.score ?? '—'}/110 | Maturité : ${profile.maturity ?? '—'}
 
-## Historique des échanges (notes chronologiques)
+Notes chronologiques :
 ${notesContext}
 
----
-
-Génère un brief de préparation pour le prochain rendez-vous (${stage}), en deux parties distinctes. Réponds uniquement avec ces deux sections, sans introduction ni conclusion.
-
-**RÉSUMÉ DES ÉCHANGES**
-Synthèse factuelle de 3 à 5 points clés tirés des notes : situation actuelle du prospect, motivations exprimées, freins ou objections identifiés, éléments de vie personnelle/pro pertinents.
-
-**POINTS D'APPUI POUR CE RDV**
-3 à 5 angles concrets et actionnables pour cet entretien ${stage}, adaptés au profil et à ce stade du process. Formule chaque point comme une action ou une question précise à aborder.`
+Génère un brief de préparation pour le ${stage}. Réponds avec ce JSON exact, sans rien d'autre :
+{"resume":"3 à 5 points clés des échanges passés, chaque point sur une ligne commençant par - ","pointsAppui":"3 à 5 angles actionnables pour le ${stage}, chaque point sur une ligne commençant par - "}`
 
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -106,7 +91,7 @@ Synthèse factuelle de 3 à 5 points clés tirés des notes : situation actuelle
     },
     body: JSON.stringify({
       model: 'claude-haiku-4-5',
-      max_tokens: 1024,
+      max_tokens: 1500,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
     }),
@@ -115,26 +100,17 @@ Synthèse factuelle de 3 à 5 points clés tirés des notes : situation actuelle
   const data = await res.json()
   const text: string = data.content?.[0]?.text ?? ''
 
-  // Découper sur n'importe quelle variante de titre de section (** ou ##)
-  const parts = text.split(/(?:\*\*|##\s*)(?:RÉSUMÉ|POINTS\s+D['']APPUI|RÉSUMÉ\s+DES\s+ÉCHANGES|POINTS\s+D['']APPUI\s+POUR\s+CE\s+RDV)[^\n]*\n?/i)
-
-  // parts[0] = texte avant la 1ère section (souvent vide)
-  // parts[1] = contenu du résumé
-  // parts[2] = contenu des points d'appui
-  const resume      = (parts[1] ?? '').trim()
-  const pointsAppui = (parts[2] ?? '').trim()
-
-  // Fallback : si le split n'a pas fonctionné, on coupe au milieu du texte brut
-  if (!resume && !pointsAppui) {
-    const half = Math.floor(text.length / 2)
-    const cut = text.indexOf('\n\n', half)
+  try {
+    const jsonMatch = text.match(/\{[\s\S]*\}/)
+    const parsed = JSON.parse(jsonMatch?.[0] ?? text)
     return {
-      resume:      text.slice(0, cut > 0 ? cut : half).trim(),
-      pointsAppui: text.slice(cut > 0 ? cut : half).trim(),
+      resume:      (parsed.resume      ?? '').trim(),
+      pointsAppui: (parsed.pointsAppui ?? '').trim(),
     }
+  } catch {
+    // Fallback : tout dans le résumé
+    return { resume: text.trim(), pointsAppui: '' }
   }
-
-  return { resume, pointsAppui, _rawText: text }
 }
 
 // ── Construction du HTML de l'email ──────────────────────────────────────────
