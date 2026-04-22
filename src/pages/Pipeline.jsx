@@ -347,14 +347,24 @@ function RichTextEditor({ value, onChange, placeholder = 'Saisir le contenu…',
   )
 }
 
-// Helper: affiche le contenu d'une note (HTML ou plain text)
+// Helper: affiche le contenu d'une note (HTML ou plain text, avec markdown basique)
 function renderNote(content) {
   if (!content) return '—'
   if (/<[a-z][\s\S]*>/i.test(content)) return content // HTML riche
-  // Plain text → convertit les sauts de ligne en <br>
-  return content
+  // Plain text → escape HTML, puis convertir markdown basique
+  let html = content
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/\n/g, '<br>')
+  // **gras** → <strong>
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+  // Lignes qui commencent par un emoji suivi d'un titre → header visuel
+  html = html.replace(/^((?:📋|💡|🎯|✨|📌|🔑|⚡|📊|🏢|👤|📞|📅|🚀|⭐|💼|🔍|📝|💰|🎓|🏠|❓|✅|⚠|❌|🔄)\s*.+)$/gm,
+    '<div style="font-weight:700;font-size:14px;margin:14px 0 6px;color:#173731;border-bottom:1px solid #E5E0D8;padding-bottom:4px">$1</div>')
+  // Lignes commençant par - ou • → liste à puces stylée
+  html = html.replace(/^[\-•]\s+(.+)$/gm,
+    '<div style="padding-left:16px;position:relative;margin:3px 0"><span style="position:absolute;left:4px;color:#D2AB76">•</span>$1</div>')
+  // Sauts de ligne restants
+  html = html.replace(/\n/g, '<br>')
+  return html
 }
 
 function KanbanCard({ profile, stage, onClick, isSelected, ownerBadge, nextEvent, onEditDate }) {
@@ -2036,6 +2046,12 @@ export default function Pipeline() {
                           {expandedNoteId === n.id && (
                             <div className="pipeline-note-actions" style={{ display: 'flex', gap: 6, marginTop: 12 }} onClick={(e) => e.stopPropagation()}>
                               <button type="button" onClick={() => { setEditingNoteId(n.id); setEditingNoteContent(n.content || ''); }} style={{ padding: '3px 10px', fontSize: 12, color: '#173731', background: 'transparent', border: '1px solid #E5E0D8', borderRadius: 6, cursor: 'pointer' }}>Éditer</button>
+                              <button type="button" onClick={() => {
+                                const plain = (n.content || '').replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+                                navigator.clipboard.writeText(plain)
+                                const btn = document.getElementById(`copy-note-${n.id}`)
+                                if (btn) { btn.textContent = '✅'; setTimeout(() => { btn.textContent = '📋' }, 1500) }
+                              }} id={`copy-note-${n.id}`} style={{ padding: '3px 10px', fontSize: 14, background: 'transparent', border: '1px solid #E5E0D8', borderRadius: 6, cursor: 'pointer', lineHeight: 1 }} title="Copier la note">📋</button>
                               <button type="button" onClick={() => setConfirmDeleteNote({ id: n.id, content: n.content })} style={{ padding: 3, background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626', display: 'inline-flex' }} title="Supprimer"><IconTrash /></button>
                             </div>
                           )}

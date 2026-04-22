@@ -45,8 +45,8 @@ export default function AISummaryModal({ profile, onClose, onSave }) {
           'anthropic-dangerous-direct-browser-access': 'true',
         },
         body: JSON.stringify({
-          model: 'claude-opus-4-6',
-          max_tokens: 1024,
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 2048,
           system: 'Tu es un assistant expert en recrutement CGP pour Evolve Investissement. Tu synthétises les échanges avec des prospects CGP. Tu réponds toujours en français, de manière concise et professionnelle.',
           messages: [{ role: 'user', content: userPrompt }],
         }),
