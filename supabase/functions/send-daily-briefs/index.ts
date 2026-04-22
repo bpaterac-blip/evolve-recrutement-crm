@@ -44,9 +44,30 @@ function fmtNoteDate(iso: string) {
   return new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
+// ── Nettoyer le HTML Google Docs → texte brut lisible ─────────────────────────
+function stripHtmlToPlain(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<\/h[1-6]>/gi, '\n')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
 // ── Convertir markdown basique en HTML email-safe ─────────────────────────────
 function noteToHtml(text: string): string {
-  const lines = text.split('\n')
+  // Si le contenu est du HTML (Google Docs, RichTextEditor…), le convertir en texte propre
+  const isHtml = /<[a-z][\s\S]*?>/i.test(text)
+  const plain = isHtml ? stripHtmlToPlain(text) : text
+
+  const lines = plain.split('\n')
   let html = ''
   let inList = false
 
@@ -65,7 +86,7 @@ function noteToHtml(text: string): string {
       } else if (/^#{1,3}\s/.test(raw) || (raw.startsWith('**') && raw.endsWith('**'))) {
         html += `<div style="font-weight:700;color:${ACCENT};font-size:13px;margin:12px 0 4px">${line.replace(/^#+\s/, '')}</div>`
       } else {
-        html += `<div style="font-size:13px;color:#333;line-height:1.6;margin:2px 0">${line}</div>`
+        html += `<p style="font-size:13px;color:#333;line-height:1.6;margin:2px 0">${line}</p>`
       }
     }
   }
