@@ -46,6 +46,7 @@ import ScoreCorrectionModal from '../components/ScoreCorrectionModal'
 import ChuteModal from '../components/ChuteModal'
 import PasInteresseModal from '../components/PasInteresseModal'
 import GrilleNotationTab from '../components/GrilleNotationTab'
+import AISummaryModal from '../components/AISummaryModal'
 import {
   IconEnvelope,
   IconLink,
@@ -606,6 +607,7 @@ export default function Pipeline() {
   const [showNoteForm, setShowNoteForm] = useState(false)
   const [noteTemplate, setNoteTemplate] = useState('Note libre')
   const [noteContent, setNoteContent] = useState('')
+  const [showAIModal, setShowAIModal] = useState(false)
   const [showEventForm, setShowEventForm] = useState(false)
   const [evType, setEvType] = useState('R0')
   const [evDate, setEvDate] = useState('')
@@ -1838,27 +1840,43 @@ export default function Pipeline() {
               </div>
               {/* ── Paternité ── */}
               {(() => {
-                const ownerName = displayProfile.owner_full_name?.trim() || (displayProfile.owner_email || '').split('@')[0] || null
-                const isOwner = !displayProfile.owner_id || displayProfile.owner_id === user?.id
+                // Construire la liste des utilisateurs connus depuis tous les profils chargés
+                const knownUsers = [...new Map(
+                  filteredProfiles
+                    .filter(p => p.owner_id)
+                    .map(p => [p.owner_id, { id: p.owner_id, email: p.owner_email || '', name: p.owner_full_name?.trim() || (p.owner_email || '').split('@')[0] || 'Inconnu' }])
+                ).values()]
+                // Ajouter l'utilisateur courant s'il n'est pas encore dans la liste
+                if (user?.id && !knownUsers.find(u => u.id === user.id)) {
+                  knownUsers.push({ id: user.id, email: user.email || '', name: userProfile?.full_name?.trim() || (user.email || '').split('@')[0] || 'Moi' })
+                }
+                const currentOwner = knownUsers.find(u => u.id === displayProfile.owner_id) || null
                 return (
-                  <div style={{ marginTop: 14, padding: '10px 12px', borderRadius: 8, background: isOwner ? '#F0FDF4' : '#FFF7ED', border: `1px solid ${isOwner ? '#BBF7D0' : '#FED7AA'}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                    <div style={{ fontSize: 11, color: isOwner ? '#15803D' : '#92400E' }}>
-                      <span style={{ fontWeight: 600 }}>Paternité :</span>{' '}
-                      {isOwner ? 'Vous' : (ownerName || 'Autre')}
-                    </div>
-                    {!isOwner && (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          await supabase.from('profiles').update({ owner_id: user.id }).eq('id', displayProfile.id)
-                          await fetchProfiles()
-                          showNotif('Paternité transférée')
-                        }}
-                        style={{ padding: '4px 10px', fontSize: 11, fontWeight: 600, borderRadius: 6, border: 'none', background: '#173731', color: '#D2AB76', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                      >
-                        Prendre la paternité
-                      </button>
-                    )}
+                  <div style={{ marginTop: 14 }}>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#666', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Paternité</label>
+                    <select
+                      value={displayProfile.owner_id || ''}
+                      onChange={async (e) => {
+                        const selectedId = e.target.value
+                        const selectedUser = knownUsers.find(u => u.id === selectedId)
+                        if (!selectedUser) return
+                        await supabase.from('profiles').update({
+                          owner_id: selectedUser.id,
+                          owner_email: selectedUser.email,
+                          owner_full_name: selectedUser.name,
+                        }).eq('id', displayProfile.id)
+                        await fetchProfiles()
+                        showNotif(`Paternité → ${selectedUser.name}`)
+                      }}
+                      style={{ width: '100%', padding: '8px 10px', fontSize: 12, border: '1px solid #E5E0D8', borderRadius: 8, background: 'white', cursor: 'pointer', outline: 'none', color: '#1A1A1A' }}
+                    >
+                      {!displayProfile.owner_id && <option value="">— Non assigné —</option>}
+                      {knownUsers.map(u => (
+                        <option key={u.id} value={u.id}>
+                          {u.id === user?.id ? `${u.name} (vous)` : u.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 )
               })()}
@@ -1918,27 +1936,27 @@ export default function Pipeline() {
               {loadingDetail ? (
                 <div style={{ padding: 40, textAlign: 'center', color: '#6B6B6B' }}>Chargement...</div>
               ) : modalTab === 'notes' ? (
-                <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+                <>
+                  {/* Barre d'actions — fixe, hors scroll */}
+                  <div style={{ padding: '10px 24px', borderBottom: '1px solid #F0EDE8', display: 'flex', justifyContent: 'flex-end', gap: 8, flexShrink: 0 }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowAIModal(true)}
+                      style={{ padding: '7px 14px', borderRadius: 8, background: 'white', color: '#173731', border: '1px solid #D2AB76', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+                    >
+                      ✨ Récap IA
+                    </button>
                     {!showNoteForm && (
                       <button
                         type="button"
                         onClick={() => setShowNoteForm(true)}
-                        style={{
-                          padding: '8px 16px',
-                          borderRadius: 8,
-                          background: '#173731',
-                          color: '#E7E0D0',
-                          border: 'none',
-                          cursor: 'pointer',
-                          fontSize: 13,
-                          fontWeight: 500,
-                        }}
+                        style={{ padding: '7px 14px', borderRadius: 8, background: '#173731', color: '#E7E0D0', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
                       >
                         + Nouvelle note
                       </button>
                     )}
                   </div>
+                <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
                   {!showNoteForm && notes.length === 0 && (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 48, gap: 12 }}>
                       <span style={{ width: 48, height: 48, display: 'flex', color: '#bbb' }}><IconDocument /></span>
@@ -2026,6 +2044,7 @@ export default function Pipeline() {
                     </div>
                   ))}
                 </div>
+                </>
               ) : modalTab === 'activity' ? (
                 <div style={{ flex: 1, overflowY: 'auto', padding: 24, position: 'relative', paddingLeft: 28 }}>
                   <div style={{ position: 'absolute', left: 6, top: 0, bottom: 0, width: 1, background: '#E5E0D8' }} />
