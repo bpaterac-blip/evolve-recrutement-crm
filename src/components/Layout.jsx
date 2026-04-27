@@ -44,23 +44,32 @@ export default function Layout() {
   const title = TITLES[location.pathname] || 'Evolve Recruiter'
   const [passwordModalOpen, setPasswordModalOpen] = useState(false)
   const [unreadTicketResolu, setUnreadTicketResolu] = useState(0)
-  const [unreadNouveauTicket, setUnreadNouveauTicket] = useState(0)
+  const [unresolvedCount, setUnresolvedCount] = useState(0)
 
+  // Charger les notifs "ticket résolu" pour l'utilisateur
   useEffect(() => {
     if (!user?.id) return
-    Promise.all([
-      getUnreadTicketResoluCount(),
-      getUnreadNouveauTicketCount(),
-    ]).then(([a, b]) => {
-      setUnreadTicketResolu(a)
-      setUnreadNouveauTicket(b)
-    })
+    getUnreadTicketResoluCount().then(setUnreadTicketResolu)
   }, [user?.id])
 
+  // Charger le nombre de tickets non résolus (admin uniquement)
+  const fetchUnresolved = async () => {
+    const { count } = await supabase
+      .from('tickets')
+      .select('*', { count: 'exact', head: true })
+      .neq('statut', 'Résolu')
+    setUnresolvedCount(count || 0)
+  }
+  useEffect(() => {
+    if (role !== 'admin') return
+    fetchUnresolved()
+  }, [role])
+
+  // Temps réel : notifications user + changements tickets admin
   useEffect(() => {
     if (!user?.id) return
-    const channel = supabase
-      .channel('notifications')
+    const notifChannel = supabase
+      .channel('notifications-layout')
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
@@ -69,17 +78,29 @@ export default function Layout() {
       }, (payload) => {
         const t = payload?.new?.type
         if (t === 'ticket_resolu' || t === 'ticket_reponse') setUnreadTicketResolu((prev) => prev + 1)
-        else if (t === 'nouveau_ticket' || t === 'ticket_reponse_user') setUnreadNouveauTicket((prev) => prev + 1)
       })
       .subscribe()
-    return () => { supabase.removeChannel(channel) }
-  }, [user?.id])
 
+    let ticketChannel
+    if (role === 'admin') {
+      ticketChannel = supabase
+        .channel('tickets-unresolved')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'tickets' }, () => {
+          fetchUnresolved()
+        })
+        .subscribe()
+    }
+
+    return () => {
+      supabase.removeChannel(notifChannel)
+      if (ticketChannel) supabase.removeChannel(ticketChannel)
+    }
+  }, [user?.id, role])
+
+  // Marquer comme lu quand l'user visite /tickets
   useEffect(() => {
     if (location.pathname === '/tickets') {
       markTicketResoluAsRead().then(() => setUnreadTicketResolu(0))
-    } else if (location.pathname === '/admin/tickets') {
-      markNouveauTicketAsRead().then(() => setUnreadNouveauTicket(0))
     }
   }, [location.pathname])
 
@@ -122,14 +143,17 @@ export default function Layout() {
         <div className="nav-sec pt-3.5 px-3 pb-1.5">
           <div className="nav-lbl text-[10px] uppercase tracking-widest text-white/35 px-2 mb-1.5">Outils</div>
           <NavLink to="/import" className={({ isActive }) => `nitem flex items-center gap-2.5 py-2 px-2.5 rounded-lg cursor-pointer text-[13.5px] transition-all duration-[0.13s] mb-0.5 select-none ${isActive ? 'active bg-white/15 text-white font-medium' : 'text-white/60 hover:bg-white/[0.08] hover:text-white'}`}><span className="nico text-sm w-[18px] text-center shrink-0">⇪</span>Import & Scoring</NavLink>
-          <NavLink to="/tickets" className={({ isActive }) => `nitem flex items-center gap-2.5 py-2 px-2.5 rounded-lg cursor-pointer text-[13.5px] transition-all duration-[0.13s] mb-0.5 select-none relative ${isActive ? 'active bg-white/15 text-white font-medium' : 'text-white/60 hover:bg-white/[0.08] hover:text-white'}`}><span className="nico text-sm w-[18px] text-center shrink-0 inline-flex items-center justify-center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 9a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V9Z"/><path d="M7 9v6"/><path d="M12 9v6"/><path d="M17 9v6"/></svg></span>Tickets{unreadTicketResolu > 0 && <span className="absolute top-1.5 right-2 min-w-[18px] h-[18px] rounded-full bg-[#dc2626] text-white text-[10px] font-semibold flex items-center justify-center px-1">{unreadTicketResolu > 99 ? '99+' : unreadTicketResolu}</span>}</NavLink>
+          <NavLink to="/tickets" className={({ isActive }) => `nitem flex items-center gap-2.5 py-2 px-2.5 rounded-lg cursor-pointer text-[13.5px] transition-all duration-[0.13s] mb-0.5 select-none relative ${isActive ? 'active bg-white/15 text-white font-medium' : 'text-white/60 hover:bg-white/[0.08] hover:text-white'}`}><span className="nico text-sm w-[18px] text-center shrink-0 inline-flex items-center justify-center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 9a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V9Z"/><path d="M7 9v6"/><path d="M12 9v6"/><path d="M17 9v6"/></svg></span>Tickets{unreadTicketResolu > 0 && <span className="absolute top-1.5 right-2 min-w-[18px] h-[18px] rounded-full bg-[#16a34a] text-white text-[10px] font-bold flex items-center justify-center px-1">✓</span>}</NavLink>
           <NavLink to="/admin/scoring-learning" className={({ isActive }) => `nitem flex items-center gap-2.5 py-2 px-2.5 rounded-lg cursor-pointer text-[13.5px] transition-all duration-[0.13s] mb-0.5 select-none ${isActive ? 'active bg-white/15 text-white font-medium' : 'text-white/60 hover:bg-white/[0.08] hover:text-white'}`}><span className="nico text-sm w-[18px] text-center shrink-0 inline-flex items-center justify-center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1 .34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0-.34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z"/></svg></span>Apprentissage</NavLink>
         </div>
         {role === 'admin' && (
           <div className="nav-sec pt-3.5 px-3 pb-1.5">
-            <div className="nav-lbl text-[10px] uppercase tracking-widest text-white/35 px-2 mb-1.5">Administrateur</div>
+            <div className="nav-lbl text-[10px] uppercase tracking-widest text-white/35 px-2 mb-1.5 flex items-center gap-2">
+              Administrateur
+              {unresolvedCount > 0 && <span className="min-w-[18px] h-[18px] rounded-full bg-[#dc2626] text-white text-[10px] font-semibold flex items-center justify-center px-1">{unresolvedCount > 99 ? '99+' : unresolvedCount}</span>}
+            </div>
             <NavLink to="/admin/console" className={({ isActive }) => `nitem flex items-center gap-2.5 py-2 px-2.5 rounded-lg cursor-pointer text-[13.5px] transition-all duration-[0.13s] mb-0.5 select-none ${isActive ? 'active bg-white/15 text-white font-medium' : 'text-white/60 hover:bg-white/[0.08] hover:text-white'}`}><span className="nico text-sm w-[18px] text-center shrink-0 inline-flex items-center justify-center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>Console</NavLink>
-            <NavLink to="/admin/tickets" className={({ isActive }) => `nitem flex items-center gap-2.5 py-2 px-2.5 rounded-lg cursor-pointer text-[13.5px] transition-all duration-[0.13s] mb-0.5 select-none relative ${isActive ? 'active bg-white/15 text-white font-medium' : 'text-white/60 hover:bg-white/[0.08] hover:text-white'}`}><span className="nico text-sm w-[18px] text-center shrink-0 inline-flex items-center justify-center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 9a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V9Z"/><path d="M7 9v6"/><path d="M12 9v6"/><path d="M17 9v6"/></svg></span>Tickets{unreadNouveauTicket > 0 && <span className="absolute top-1.5 right-2 rounded-full bg-[#dc2626] text-white text-[10px] font-semibold flex items-center justify-center" style={{ minWidth: 16, height: 16, padding: '0 4px' }}>{unreadNouveauTicket > 99 ? '99+' : unreadNouveauTicket}</span>}</NavLink>
+            <NavLink to="/admin/tickets" className={({ isActive }) => `nitem flex items-center gap-2.5 py-2 px-2.5 rounded-lg cursor-pointer text-[13.5px] transition-all duration-[0.13s] mb-0.5 select-none relative ${isActive ? 'active bg-white/15 text-white font-medium' : 'text-white/60 hover:bg-white/[0.08] hover:text-white'}`}><span className="nico text-sm w-[18px] text-center shrink-0 inline-flex items-center justify-center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 9a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V9Z"/><path d="M7 9v6"/><path d="M12 9v6"/><path d="M17 9v6"/></svg></span>Tickets{unresolvedCount > 0 && <span className="absolute top-1.5 right-2 min-w-[18px] h-[18px] rounded-full bg-[#dc2626] text-white text-[10px] font-semibold flex items-center justify-center px-1">{unresolvedCount > 99 ? '99+' : unresolvedCount}</span>}</NavLink>
           </div>
         )}
         <div className="mt-auto pt-3 px-3 border-t border-white/10 pb-3 space-y-2">
