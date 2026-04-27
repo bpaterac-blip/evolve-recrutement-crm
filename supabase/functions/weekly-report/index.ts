@@ -118,11 +118,11 @@ Deno.serve(async (req) => {
       .lte('next_event_date', fmt(friday))
       .order('next_event_date')
 
-    // Sessions à venir
+    // Sessions à venir — les 2 prochaines à partir d'aujourd'hui (basé sur date_debut, pas le statut)
     const { data: sessions } = await supabase
       .from('sessions_formation')
       .select('*')
-      .neq('statut', 'passée')
+      .gte('date_debut', fmt(today))
       .order('date_debut', { ascending: true, nullsFirst: false })
       .limit(2)
 
