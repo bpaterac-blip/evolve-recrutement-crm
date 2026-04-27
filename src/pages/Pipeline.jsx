@@ -1097,10 +1097,10 @@ export default function Pipeline() {
 
     // 1. Update profile
     await supabase.from('profiles').update({
-      next_event_date: dateEditValue,
+      next_event_date: newDatetime,
       next_event_label: profile.next_event_label || stage,
     }).eq('id', profile.id)
-    updateProfile(profile.id, { next_event_date: dateEditValue, next_event_label: profile.next_event_label || stage })
+    updateProfile(profile.id, { next_event_date: newDatetime, next_event_label: profile.next_event_label || stage })
 
     // 2. Upsert event in events table
     const { data: existingEvent } = await supabase
@@ -1255,7 +1255,7 @@ export default function Pipeline() {
       if (stageChangeSkipStep && newStage === 'Point Business Plan') updates.skip_business_plan = true
       if (stageChangeSkipStep && newStage === 'Démission reconversion') updates.skip_demission = true
       if (dateChoisie) {
-        updates.next_event_date = dateChoisie
+        updates.next_event_date = heureChoisie ? `${dateChoisie}T${heureChoisie}:00` : dateChoisie
         updates.next_event_label = newStage
         const targetStage = newStage
         const selectedDate = dateChoisie
