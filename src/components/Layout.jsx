@@ -52,22 +52,11 @@ export default function Layout() {
     getUnreadTicketResoluCount().then(setUnreadTicketResolu)
   }, [user?.id])
 
-  // Charger le nombre de tickets non résolus (admin uniquement)
-  const fetchUnresolved = async () => {
-    const { count } = await supabase
-      .from('tickets')
-      .select('*', { count: 'exact', head: true })
-      .neq('statut', 'Résolu')
-    setUnresolvedCount(count || 0)
-  }
-  useEffect(() => {
-    if (role !== 'admin') return
-    fetchUnresolved()
-  }, [role])
-
-  // Temps réel : notifications user + changements tickets admin
+  // Charger + temps réel tickets non résolus (admin) et notifs user
   useEffect(() => {
     if (!user?.id) return
+
+    // Notifs user
     const notifChannel = supabase
       .channel('notifications-layout')
       .on('postgres_changes', {
@@ -81,13 +70,20 @@ export default function Layout() {
       })
       .subscribe()
 
+    // Tickets non résolus admin
     let ticketChannel
     if (role === 'admin') {
+      const loadCount = () => {
+        supabase
+          .from('tickets')
+          .select('*', { count: 'exact', head: true })
+          .neq('statut', 'Résolu')
+          .then(({ count }) => setUnresolvedCount(count || 0))
+      }
+      loadCount()
       ticketChannel = supabase
         .channel('tickets-unresolved')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'tickets' }, () => {
-          fetchUnresolved()
-        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'tickets' }, loadCount)
         .subscribe()
     }
 
