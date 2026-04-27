@@ -818,7 +818,9 @@ function SessionFormationCard({ session, goal, sessionProfilsRefresh, onAssign, 
   const sessionProfiles = (profils || []).filter((p) => viewMode === 'global' || String(p.owner_id || '') === String(currentUserId || ''))
   const confirmes = sessionProfiles.filter((p) => p.stage === 'Recruté' || p.integration_confirmed === true)
   const potentiels = sessionProfiles.filter(
-    (p) => p.stage !== 'Recruté' && p.integration_confirmed !== true && p.maturity !== 'Chute' && p.maturity !== 'Pas intéressé',
+    (p) => p.stage !== 'Recruté' && p.integration_confirmed !== true
+      && p.maturity !== 'Chute' && p.maturity !== 'Archivé' && p.maturity !== 'Pas intéressé'
+      && p.stage !== 'Chute' && p.stage !== 'Pas intéressé',
   )
   const total = confirmes.length + potentiels.length
   const pctConfirmes = Math.min(100, goal > 0 ? (confirmes.length / goal) * 100 : 0)
