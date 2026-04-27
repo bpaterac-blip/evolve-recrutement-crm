@@ -192,6 +192,25 @@ function getCalendarTitle(stage, profile) {
   return LABELS[stage] || `${prenomNom} & Evolve — ${stage}`
 }
 
+// ── Config expéditeurs ────────────────────────────────────────────────────────
+const SENDERS_CONFIG = {
+  'b.paterac@gmail.com': {
+    name: 'Baptiste PATERAC',
+    title: 'Associé & Co-fondateur | Responsable de réseau régions',
+    email: 'bpaterac@evolveinvestissement.com',
+    phone: '06 38 37 59 60',
+    photoUrl: 'https://fcwzzrjhmjodterwjbbl.supabase.co/storage/v1/object/public/email-assets/unnamed%20(1).png',
+  },
+  'agoutard@evolveinvestissement.com': {
+    name: 'Aurélien GOUTARD',
+    title: 'Associé & Co-fondateur | Responsable de réseau IDF',
+    email: 'agoutard@evolveinvestissement.com',
+    phone: '06 44 17 51 29',
+    photoUrl: 'https://fcwzzrjhmjodterwjbbl.supabase.co/storage/v1/object/public/email-assets/unnamed%20(3).png',
+  },
+}
+const DEFAULT_SENDER_PIPELINE = SENDERS_CONFIG['b.paterac@gmail.com']
+
 // ── Google Calendar URL ───────────────────────────────────────────────────────
 function buildGoogleCalendarUrl({ title, date, time, description, guest, durationMin = 60 }) {
   if (!date) return null
@@ -208,7 +227,7 @@ function buildGoogleCalendarUrl({ title, date, time, description, guest, duratio
 }
 
 // ── Templates email par étape ─────────────────────────────────────────────────
-function buildEmailForStage(profile, newStage, date, time, rdvType, meetLink, transferLink, cgpContact, bpLink, skipBP) {
+function buildEmailForStage(profile, newStage, date, time, rdvType, meetLink, transferLink, cgpContact, bpLink, skipBP, sender = DEFAULT_SENDER_PIPELINE) {
   const prenom = profile.fn || ''
   const prenomNom = `${profile.fn || ''} ${profile.ln || ''}`.trim()
   const d = date ? new Date(date + 'T12:00:00') : null
@@ -216,7 +235,7 @@ function buildEmailForStage(profile, newStage, date, time, rdvType, meetLink, tr
   const heure = time && time !== '12:00' ? time : ''
   const meetLine = meetLink ? `\n🔗 Lien de connexion : ${meetLink}` : ''
   const closing = `\n\nBonne journée à vous,\nBien cordialement,`
-  const sig = `\n\nBaptiste PATERAC\nAssocié & Co-fondateur | Responsable de réseau régions\nGroupe Evolve\nbpaterac@evolveinvestissement.com | 06 38 37 59 60 | https://groupe-evolve.fr`
+  const sig = `\n\n${sender.name}\n${sender.title}\nGroupe Evolve\n${sender.email} | ${sender.phone} | https://groupe-evolve.fr`
 
   const TEMPLATES = {
     'R0': {
@@ -605,6 +624,7 @@ export default function Pipeline() {
   const { viewMode } = useViewMode()
   const { filteredProfiles, changeStage, changeMaturity, changeSource, changeRegion, updateProfileField, updateProfile, showNotif, useSupabase, fetchProfiles } = useCRM()
   const isGlobalView = role === 'admin' && viewMode === 'global'
+  const currentSender = SENDERS_CONFIG[user?.email] ?? DEFAULT_SENDER_PIPELINE
   const pipeline = filteredProfiles.filter((p) => p.stg && p.stg !== '' && p.stg !== 'Recruté' && p.mat !== 'Archivé' && p.mat !== 'Chute' && p.mat !== 'Pas intéressé')
   const all = filteredProfiles.filter((p) => p.stg && p.stg !== '' && p.mat !== 'Archivé' && p.mat !== 'Chute' && p.mat !== 'Pas intéressé')
   const [modalProfile, setModalProfile] = useState(null)
@@ -1136,7 +1156,7 @@ export default function Pipeline() {
     const _stage = profile.next_event_label || stage
     const _heure = heure
     const _skipBP = _stage === "Point d'étape" ? (profile.skip_business_plan || profile.stg !== 'Point Business Plan') : false
-    const emailData = buildEmailForStage(profile, _stage, dateEditValue, _heure, dateEditRdvType, '', '', '', '', _skipBP)
+    const emailData = buildEmailForStage(profile, _stage, dateEditValue, _heure, dateEditRdvType, '', '', '', '', _skipBP, currentSender)
     setEmailSubject(emailData.subject)
     setEmailBody(emailData.body)
     setEmailTo(profile.mail || '')
@@ -1329,7 +1349,7 @@ export default function Pipeline() {
     const _rdvType = stageChangeRdType || 'Google Meet'
     const _meetLink = stageChangeMeetLink?.trim() || ''
     const _skipBP2 = newStage === "Point d'étape" ? (profile.skip_business_plan || profile.stg !== 'Point Business Plan') : false
-    const emailData = buildEmailForStage(profile, newStage, _dateChoisie, _heureChoisie, _rdvType, _meetLink, stageChangeTransferLink?.trim(), stageChangeCGPContact?.trim(), stageChangeBPLink?.trim(), _skipBP2)
+    const emailData = buildEmailForStage(profile, newStage, _dateChoisie, _heureChoisie, _rdvType, _meetLink, stageChangeTransferLink?.trim(), stageChangeCGPContact?.trim(), stageChangeBPLink?.trim(), _skipBP2, currentSender)
     const calUrl = _dateChoisie ? buildGoogleCalendarUrl({
       title: getCalendarTitle(newStage, profile),
       date: _dateChoisie,
@@ -1450,7 +1470,7 @@ export default function Pipeline() {
     }
     // ── Email preview (pas de date dans ce cas) ──────────────────────────────
     const _skipBP3 = newStage === "Point d'étape" ? (profile.skip_business_plan || profile.stg !== 'Point Business Plan') : false
-    const emailData = buildEmailForStage(profile, newStage, '', '', '', '', stageChangeTransferLink?.trim(), stageChangeCGPContact?.trim(), stageChangeBPLink?.trim(), _skipBP3)
+    const emailData = buildEmailForStage(profile, newStage, '', '', '', '', stageChangeTransferLink?.trim(), stageChangeCGPContact?.trim(), stageChangeBPLink?.trim(), _skipBP3, currentSender)
     setEmailSubject(emailData.subject)
     setEmailBody(emailData.body)
     setEmailTo(profile.mail || '')
@@ -2519,7 +2539,8 @@ export default function Pipeline() {
                         stageChangeTransferLink?.trim() || '',
                         stageChangeCGPContact?.trim() || '',
                         stageChangeBPLink?.trim() || '',
-                        newStage === "Point d'étape" ? (pendingStageChange?.profile?.skip_business_plan || pendingStageChange?.profile?.stg !== 'Point Business Plan') : false
+                        newStage === "Point d'étape" ? (pendingStageChange?.profile?.skip_business_plan || pendingStageChange?.profile?.stg !== 'Point Business Plan') : false,
+                        currentSender
                       )
                       const calUrl = buildGoogleCalendarUrl({
                         title: getCalendarTitle(newStage, pendingStageChange?.profile || {}),

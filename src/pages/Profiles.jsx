@@ -107,6 +107,25 @@ function formatAddedDate(p) {
   return p?.dt || '—'
 }
 
+// ── Config expéditeurs ────────────────────────────────────────────────────────
+const SENDERS_CONFIG_PROFILES = {
+  'b.paterac@gmail.com': {
+    name: 'Baptiste PATERAC',
+    title: 'Associé & Co-fondateur | Responsable de réseau régions',
+    email: 'bpaterac@evolveinvestissement.com',
+    phone: '06 38 37 59 60',
+    photoUrl: 'https://fcwzzrjhmjodterwjbbl.supabase.co/storage/v1/object/public/email-assets/unnamed%20(1).png',
+  },
+  'agoutard@evolveinvestissement.com': {
+    name: 'Aurélien GOUTARD',
+    title: 'Associé & Co-fondateur | Responsable de réseau IDF',
+    email: 'agoutard@evolveinvestissement.com',
+    phone: '06 44 17 51 29',
+    photoUrl: 'https://fcwzzrjhmjodterwjbbl.supabase.co/storage/v1/object/public/email-assets/unnamed%20(3).png',
+  },
+}
+const DEFAULT_SENDER_PROFILES = SENDERS_CONFIG_PROFILES['b.paterac@gmail.com']
+
 // ── Google Calendar URL ───────────────────────────────────────────────────────
 function buildGoogleCalendarUrl({ title, date, time, description, guest, durationMin = 60 }) {
   if (!date) return null
@@ -123,7 +142,7 @@ function buildGoogleCalendarUrl({ title, date, time, description, guest, duratio
 }
 
 // ── Templates email ───────────────────────────────────────────────────────────
-function buildEmailForStage(profile, newStage, date, time, rdvType, meetLink, transferLink, cgpContact, bpLink, skipBP) {
+function buildEmailForStage(profile, newStage, date, time, rdvType, meetLink, transferLink, cgpContact, bpLink, skipBP, sender = DEFAULT_SENDER_PROFILES) {
   const prenom = profile.fn || ''
   const prenomNom = `${profile.fn || ''} ${profile.ln || ''}`.trim()
   const d = date ? new Date(date + 'T12:00:00') : null
@@ -131,7 +150,7 @@ function buildEmailForStage(profile, newStage, date, time, rdvType, meetLink, tr
   const heure = time && time !== '12:00' ? time : ''
   const meetLine = meetLink ? `\n🔗 Lien de connexion : ${meetLink}` : ''
   const closing = `\n\nBonne journée à vous,\nBien cordialement,`
-  const sig = `\n\nBaptiste PATERAC\nAssocié & Co-fondateur | Responsable de réseau régions\nGroupe Evolve\nbpaterac@evolveinvestissement.com | 06 38 37 59 60 | https://groupe-evolve.fr`
+  const sig = `\n\n${sender.name}\n${sender.title}\nGroupe Evolve\n${sender.email} | ${sender.phone} | https://groupe-evolve.fr`
 
   const TEMPLATES = {
     'R0': {
@@ -182,6 +201,7 @@ export default function Profiles({ contactedOnly = false }) {
   const { viewMode } = useViewMode()
   const { profiles, filteredProfiles, changeStage, changeMaturity, changeSource, loading, fetchProfiles, showNotif, useSupabase } = useCRM()
   const isGlobalView = role === 'admin' && viewMode === 'global'
+  const currentSender = SENDERS_CONFIG_PROFILES[user?.email] ?? DEFAULT_SENDER_PROFILES
   const [srcFilter, setSrcFilter] = useState('')
   const [stgFilter, setStgFilter] = useState('')
   const [matFilter, setMatFilter] = useState('')
@@ -307,7 +327,7 @@ export default function Profiles({ contactedOnly = false }) {
     setR0ConfirmProfile(null)
     showNotif(`${profile.fn} ${profile.ln} → R0 le ${new Date(r0Date).toLocaleDateString('fr-FR')}${r0Time ? ' à ' + r0Time : ''}`)
     // Construire l'URL Google Calendar
-    const emailData = buildEmailForStage(profile, 'R0', r0Date, r0Time || '', 'Téléphone', '', '', '', '', false)
+    const emailData = buildEmailForStage(profile, 'R0', r0Date, r0Time || '', 'Téléphone', '', '', '', '', false, currentSender)
     const calUrl = buildGoogleCalendarUrl({
       title: `${profile.fn || ''} ${profile.ln || ''} & Evolve — Échange téléphonique`.trim(),
       date: r0Date,
@@ -722,11 +742,11 @@ export default function Profiles({ contactedOnly = false }) {
                         <table cellPadding="0" cellSpacing="0" style={{ marginTop: 24, borderTop: '2px solid #D2AB76', paddingTop: 18, width: '100%' }}>
                           <tbody><tr>
                             <td style={{ paddingRight: 14, verticalAlign: 'top' }}>
-                              <img src="https://fcwzzrjhmjodterwjbbl.supabase.co/storage/v1/object/public/email-assets/unnamed%20(1).png" width="56" height="56" style={{ borderRadius: '50%' }} alt="" />
+                              <img src={currentSender.photoUrl} width="56" height="56" style={{ borderRadius: '50%' }} alt="" />
                             </td>
                             <td style={{ fontFamily: 'Arial,sans-serif', fontSize: 12, color: '#1A1A1A', lineHeight: 1.6 }}>
-                              <div style={{ fontWeight: 700, fontSize: 13, color: '#173731' }}>Baptiste PATERAC</div>
-                              <div style={{ color: '#666', fontSize: 11 }}>Associé & Co-fondateur | Responsable de réseau régions</div>
+                              <div style={{ fontWeight: 700, fontSize: 13, color: '#173731' }}>{currentSender.name}</div>
+                              <div style={{ color: '#666', fontSize: 11 }}>{currentSender.title}</div>
                               <div style={{ color: '#666', fontSize: 11, marginBottom: 6 }}>Groupe Evolve</div>
                               <img src="https://fcwzzrjhmjodterwjbbl.supabase.co/storage/v1/object/public/email-assets/unnamed%20(2).png" height="20" alt="Evolve" />
                             </td>
