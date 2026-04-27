@@ -2943,20 +2943,30 @@ export default function Pipeline() {
                     <div style={{ padding: '20px 24px', background: '#f9f7f4' }}>
                       <div style={{ maxWidth: 540, background: 'white', padding: '24px 28px', fontFamily: 'Arial,sans-serif', fontSize: 14, color: '#1A1A1A', lineHeight: 1.7, borderRadius: 4 }}>
                         <p style={{ margin: '0 0 14px' }} dangerouslySetInnerHTML={{ __html: previewHtml }} />
-                        {/* Signature simplifiée */}
-                        <table cellPadding="0" cellSpacing="0" style={{ marginTop: 24, borderTop: '2px solid #D2AB76', paddingTop: 18, width: '100%' }}>
-                          <tbody><tr>
-                            <td style={{ paddingRight: 14, verticalAlign: 'top' }}>
-                              <img src={p.mail?.includes('aurelien') || p.mail?.includes('agoutard') ? 'https://fcwzzrjhmjodterwjbbl.supabase.co/storage/v1/object/public/email-assets/unnamed%20(3).png' : 'https://fcwzzrjhmjodterwjbbl.supabase.co/storage/v1/object/public/email-assets/unnamed%20(1).png'} width="56" height="56" style={{ borderRadius: '50%' }} alt="" />
-                            </td>
-                            <td style={{ fontFamily: 'Arial,sans-serif', fontSize: 12, color: '#1A1A1A', lineHeight: 1.6 }}>
-                              <div style={{ fontWeight: 700, fontSize: 13, color: '#173731' }}>Baptiste PATERAC</div>
-                              <div style={{ color: '#666', fontSize: 11 }}>Associé & Co-fondateur | Responsable de réseau régions</div>
-                              <div style={{ color: '#666', fontSize: 11, marginBottom: 6 }}>Groupe Evolve</div>
-                              <img src="https://fcwzzrjhmjodterwjbbl.supabase.co/storage/v1/object/public/email-assets/unnamed%20(2).png" height="20" alt="Evolve" />
-                            </td>
-                          </tr></tbody>
-                        </table>
+                        {/* Signature selon l'utilisateur connecté */}
+                        {(() => {
+                          const isAurelien = user?.email === 'agoutard@evolveinvestissement.com'
+                          const senderName = isAurelien ? 'Aurélien GOUTARD' : 'Baptiste PATERAC'
+                          const senderTitle = isAurelien ? 'Associé & Co-fondateur | Responsable de réseau IDF' : 'Associé & Co-fondateur | Responsable de réseau régions'
+                          const senderPhoto = isAurelien
+                            ? 'https://fcwzzrjhmjodterwjbbl.supabase.co/storage/v1/object/public/email-assets/unnamed%20(3).png'
+                            : 'https://fcwzzrjhmjodterwjbbl.supabase.co/storage/v1/object/public/email-assets/unnamed%20(1).png'
+                          return (
+                            <table cellPadding="0" cellSpacing="0" style={{ marginTop: 24, borderTop: '2px solid #D2AB76', paddingTop: 18, width: '100%' }}>
+                              <tbody><tr>
+                                <td style={{ paddingRight: 14, verticalAlign: 'top' }}>
+                                  <img src={senderPhoto} width="56" height="56" style={{ borderRadius: '50%' }} alt="" />
+                                </td>
+                                <td style={{ fontFamily: 'Arial,sans-serif', fontSize: 12, color: '#1A1A1A', lineHeight: 1.6 }}>
+                                  <div style={{ fontWeight: 700, fontSize: 13, color: '#173731' }}>{senderName}</div>
+                                  <div style={{ color: '#666', fontSize: 11 }}>{senderTitle}</div>
+                                  <div style={{ color: '#666', fontSize: 11, marginBottom: 6 }}>Groupe Evolve</div>
+                                  <img src="https://fcwzzrjhmjodterwjbbl.supabase.co/storage/v1/object/public/email-assets/unnamed%20(2).png" height="20" alt="Evolve" />
+                                </td>
+                              </tr></tbody>
+                            </table>
+                          )
+                        })()}
                       </div>
                     </div>
                   </div>
