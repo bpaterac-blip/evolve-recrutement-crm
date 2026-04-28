@@ -21,7 +21,6 @@ const SESSION_CIBLE_STAGES = ['Point Business Plan', "Point d'étape téléphoni
 import InlineDropdown from '../components/InlineDropdown'
 import ScoreCorrectionModal from '../components/ScoreCorrectionModal'
 import ChuteModal from '../components/ChuteModal'
-import PasInteresseModal from '../components/PasInteresseModal'
 import GrilleNotationTab from '../components/GrilleNotationTab'
 import AISummaryModal from '../components/AISummaryModal'
 import { ActivityIcon, IconMap, IconCalendar, IconUpload, IconTrash, IconPencil, IconClose, IconDocument } from '../components/Icons'
@@ -177,7 +176,6 @@ export default function ProfilePage() {
   const [expandedEventId, setExpandedEventId] = useState(null)
   const [scoreCorrectionOpen, setScoreCorrectionOpen] = useState(false)
   const [chuteModalProfile, setChuteModalProfile] = useState(null)
-  const [pasInteresseModalProfile, setPasInteresseModalProfile] = useState(null)
   const [showAIModal, setShowAIModal] = useState(false)
 
   const mapActivityRow = (a) => {
@@ -516,7 +514,24 @@ export default function ProfilePage() {
       return
     }
     if (newMat === 'Pas intéressé') {
-      setPasInteresseModalProfile(profile)
+      const oldMatPI = profile?.mat ?? '—'
+      const profileId = profile?.id || id
+      await supabase.from('profiles').update({
+        maturity: 'Pas intéressé',
+        chute_stade: profile?.stg || 'Avant pipeline',
+        chute_date: new Date().toISOString(),
+      }).eq('id', profileId)
+      changeMaturity(profileId, 'Pas intéressé')
+      await supabase.from('activities').insert({
+        profile_id: profileId,
+        type: 'maturity_change',
+        note: `${oldMatPI} → Pas intéressé`,
+        date: new Date().toISOString().split('T')[0],
+        icon: 'refresh',
+        source: 'manual',
+      })
+      fetchProfiles?.()
+      await loadActivitiesAndEvents()
       return
     }
     const profileId = profile?.id || id
@@ -1115,36 +1130,6 @@ export default function ProfilePage() {
                 source: 'manual',
               })
               setChuteModalProfile(null)
-              fetchProfiles?.()
-              await loadActivitiesAndEvents()
-            }}
-          />
-        </div>
-      )}
-      {pasInteresseModalProfile && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setPasInteresseModalProfile(null)}>
-          <PasInteresseModal
-            profile={pasInteresseModalProfile}
-            onClose={() => setPasInteresseModalProfile(null)}
-            onSaved={async (raison, detail) => {
-              const oldMat = pasInteresseModalProfile.mat ?? '—'
-              await supabase.from('profiles').update({
-                maturity: 'Pas intéressé',
-                chute_stade: pasInteresseModalProfile.stg || 'Avant pipeline',
-                chute_type: raison,
-                chute_detail: detail || null,
-                chute_date: new Date().toISOString(),
-              }).eq('id', pasInteresseModalProfile.id)
-              changeMaturity(pasInteresseModalProfile.id, 'Pas intéressé')
-              await supabase.from('activities').insert({
-                profile_id: pasInteresseModalProfile.id,
-                type: 'maturity_change',
-                note: `${oldMat} → Pas intéressé`,
-                date: new Date().toISOString().split('T')[0],
-                icon: 'refresh',
-                source: 'manual',
-              })
-              setPasInteresseModalProfile(null)
               fetchProfiles?.()
               await loadActivitiesAndEvents()
             }}

@@ -6,7 +6,6 @@ import { useViewMode } from '../context/ViewModeContext'
 import { supabase } from '../lib/supabase'
 import { STAGES, MATURITIES, SOURCES } from '../lib/data'
 import InlineDropdown from '../components/InlineDropdown'
-import PasInteresseModal from '../components/PasInteresseModal'
 import ChuteRaisonModal from '../components/ChuteRaisonModal'
 import R0ConfirmModal from '../components/R0ConfirmModal'
 
@@ -208,7 +207,6 @@ export default function Profiles({ contactedOnly = false }) {
   const [openDropdownId, setOpenDropdownId] = useState(null)
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
-  const [pasInteresseModalProfile, setPasInteresseModalProfile] = useState(null)
   const [chuteModalProfile, setChuteModalProfile] = useState(null)
   const [r0ConfirmProfile, setR0ConfirmProfile] = useState(null)
   const [emailPreviewModal, setEmailPreviewModal] = useState(null)
@@ -550,7 +548,13 @@ export default function Profiles({ contactedOnly = false }) {
                           value={p.mat}
                           onChange={(v) => {
                             if (v === 'Pas intéressé') {
-                              setPasInteresseModalProfile(p)
+                              const oldMatPI = p.mat ?? '—'
+                              supabase.from('profiles').update({
+                                maturity: 'Pas intéressé',
+                                chute_stade: p.stg || 'Avant pipeline',
+                                chute_date: new Date().toISOString(),
+                              }).eq('id', p.id).then(() => fetchProfiles())
+                              changeMaturity(p.id, 'Pas intéressé')
                               setOpenDropdownId(null)
                               return
                             }
@@ -596,27 +600,6 @@ export default function Profiles({ contactedOnly = false }) {
           onClose={() => setR0ConfirmProfile(null)}
           onConfirm={confirmSendToR0}
         />
-      )}
-      {pasInteresseModalProfile && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setPasInteresseModalProfile(null)}>
-          <PasInteresseModal
-            profile={pasInteresseModalProfile}
-            onClose={() => setPasInteresseModalProfile(null)}
-            onSaved={async (raison, detail) => {
-              const oldMat = pasInteresseModalProfile.mat ?? '—'
-              await supabase.from('profiles').update({
-                maturity: 'Pas intéressé',
-                chute_stade: pasInteresseModalProfile.stg || 'Avant pipeline',
-                chute_type: raison,
-                chute_detail: detail || null,
-                chute_date: new Date().toISOString(),
-              }).eq('id', pasInteresseModalProfile.id)
-              changeMaturity(pasInteresseModalProfile.id, 'Pas intéressé')
-              setPasInteresseModalProfile(null)
-              await fetchProfiles()
-            }}
-          />
-        </div>
       )}
       {chuteModalProfile && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setChuteModalProfile(null)}>
