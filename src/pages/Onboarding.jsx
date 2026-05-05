@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useLocation } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
 
 // ── Couleurs ──────────────────────────────────────────────────────────────────
 const ACCENT = '#173731'
@@ -248,83 +249,195 @@ const OWNER_STYLE = {
   'Aurélien': { bg: '#F0FDF4', color: '#16a34a' },
 }
 
+// ── Helpers DB ────────────────────────────────────────────────────────────────
+function rowToProfile(row) {
+  return {
+    id:      row.profile_id,
+    fn:      row.fn,
+    ln:      row.ln,
+    co:      row.co || '',
+    email:   row.email || '',
+    phone:   row.phone || '',
+    siren:   row.siren || '',
+    owner:   row.owner || '',
+    step:    row.current_step,
+    start:   row.start_date,
+    session: row.session || '',
+    done:    row.done || {},
+    step_notes: row.step_notes || {},
+    task_notes: row.task_notes || {},
+  }
+}
+
 // ── Composant principal ────────────────────────────────────────────────────────
 export default function Onboarding() {
   const location = useLocation()
-  const [showOptional, setShowOptional] = useState(false)
-  const [selectedId,   setSelectedId]   = useState(null)
-  const [profiles,     setProfiles]     = useState([])
-  const [completed,    setCompleted]    = useState([])
-  const [stepNotes,    setStepNotes]    = useState({})  // key: `${profileId}-s${stepId}`
-  const [taskNotes,    setTaskNotes]    = useState({})  // key: `${profileId}-${taskId}`
-  const [newProfileBanner, setNewProfileBanner] = useState(null) // banner de confirmation
+  const [showOptional, setShowOptional]   = useState(false)
+  const [selectedId,   setSelectedId]     = useState(null)
+  const [profiles,     setProfiles]       = useState([])
+  const [completed,    setCompleted]      = useState([])
+  const [loading,      setLoading]        = useState(true)
+  const [newProfileBanner, setNewProfileBanner] = useState(null)
+  const noteTimers = useRef({})  // debounce timers pour les notes
 
-  // Injection d'un profil depuis la Pipeline (navigation state)
+  // ── Chargement initial depuis Supabase ────────────────────────────────────
+  useEffect(() => {
+    async function load() {
+      setLoading(true)
+      const { data, error } = await supabase
+        .from('onboarding_profiles')
+        .select('*')
+        .order('created_at', { ascending: false })
+      if (error) { console.error('Onboarding load error:', error); setLoading(false); return }
+      const active    = (data || []).filter((r) => !r.is_completed).map(rowToProfile)
+      const done      = (data || []).filter((r) =>  r.is_completed).map(rowToProfile)
+      setProfiles(active)
+      setCompleted(done)
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  // ── Injection d'un profil depuis la Pipeline ──────────────────────────────
   useEffect(() => {
     const incoming = location.state?.onboardingProfile
     if (!incoming) return
-    // Éviter les doublons si rechargement
-    setProfiles((prev) => {
-      const alreadyIn = prev.some((p) => p.id === incoming.id)
-      if (alreadyIn) return prev
-      const today = new Date().toISOString().split('T')[0]
-      const newP = {
-        id: incoming.id,
-        fn: incoming.fn,
-        ln: incoming.ln,
-        co: incoming.co || '',
-        email: incoming.email || '',
-        phone: incoming.phone || '',
-        siren: incoming.siren || '',
-        owner: incoming.owner || 'Baptiste',
-        step: 1,
-        start: today,
-        session: '',
-        done: {},
-      }
-      setNewProfileBanner(newP)
-      return [newP, ...prev]
-    })
-    // Auto-sélectionner le profil ajouté
-    setSelectedId(incoming.id)
-    // Effacer le state de navigation pour éviter les réinjections
     window.history.replaceState({}, document.title)
+
+    async function addProfile() {
+      const today = new Date().toISOString().split('T')[0]
+      const row = {
+        profile_id:   incoming.id,
+        fn:           incoming.fn,
+        ln:           incoming.ln,
+        co:           incoming.co || '',
+        email:        incoming.email || '',
+        phone:        incoming.phone || '',
+        siren:        incoming.siren || '',
+        owner:        incoming.owner || 'Baptiste',
+        current_step: 1,
+        start_date:   today,
+        session:      '',
+        done:         {},
+        step_notes:   {},
+        task_notes:   {},
+      }
+      // upsert : si déjà présent, on met juste à jour les infos de base
+      const { data, error } = await supabase
+        .from('onboarding_profiles')
+        .upsert(row, { onConflict: 'profile_id', ignoreDuplicates: false })
+        .select()
+        .single()
+      if (error) { console.error('Onboarding insert error:', error); return }
+      const newP = rowToProfile(data)
+      setProfiles((prev) => {
+        const alreadyIn = prev.some((p) => p.id === newP.id)
+        if (alreadyIn) return prev
+        setNewProfileBanner(newP)
+        return [newP, ...prev]
+      })
+      setSelectedId(newP.id)
+    }
+    addProfile()
   }, [])  // eslint-disable-line
 
   const visibleSteps = ONBOARDING_STEPS.filter((s) => showOptional || !s.optional)
 
-  const toggleTask = (profileId, taskId) => {
-    setProfiles((prev) => prev.map((p) =>
-      p.id !== profileId ? p : { ...p, done: { ...p.done, [taskId]: !p.done[taskId] } }
-    ))
-  }
-
-  const setTaskNote = (profileId, taskId, value) => {
-    setTaskNotes((prev) => ({ ...prev, [`${profileId}-${taskId}`]: value }))
-  }
-
-  const setStepNote = (profileId, stepId, value) => {
-    setStepNotes((prev) => ({ ...prev, [`${profileId}-s${stepId}`]: value }))
-  }
-
-  const advanceStep = (profileId) => {
+  // ── toggleTask ─────────────────────────────────────────────────────────────
+  const toggleTask = useCallback((profileId, taskId) => {
     setProfiles((prev) => {
-      const updated = prev.map((p) => {
-        if (p.id !== profileId) return p
-        let next = p.step + 1
-        if (!showOptional && next === 3) next = 4
-        if (next > 8) {
-          setCompleted((c) => [...c, { ...p, step: 9 }])
-          return null
-        }
-        return { ...p, step: next, done: {} }
-      })
-      return updated.filter(Boolean)
+      const p = prev.find((x) => x.id === profileId)
+      if (!p) return prev
+      const newDone = { ...p.done, [taskId]: !p.done[taskId] }
+      // Persist
+      supabase.from('onboarding_profiles')
+        .update({ done: newDone })
+        .eq('profile_id', profileId)
+        .then(({ error }) => { if (error) console.error('toggleTask error:', error) })
+      return prev.map((x) => x.id === profileId ? { ...x, done: newDone } : x)
+    })
+  }, [])
+
+  // ── notes avec debounce 800ms ──────────────────────────────────────────────
+  const setTaskNote = useCallback((profileId, taskId, value) => {
+    setProfiles((prev) => {
+      const p = prev.find((x) => x.id === profileId)
+      if (!p) return prev
+      const newNotes = { ...p.task_notes, [taskId]: value }
+      const key = `${profileId}-task-${taskId}`
+      clearTimeout(noteTimers.current[key])
+      noteTimers.current[key] = setTimeout(() => {
+        supabase.from('onboarding_profiles')
+          .update({ task_notes: newNotes })
+          .eq('profile_id', profileId)
+          .then(({ error }) => { if (error) console.error('taskNote error:', error) })
+      }, 800)
+      return prev.map((x) => x.id === profileId ? { ...x, task_notes: newNotes } : x)
+    })
+  }, [])
+
+  const setStepNote = useCallback((profileId, stepId, value) => {
+    setProfiles((prev) => {
+      const p = prev.find((x) => x.id === profileId)
+      if (!p) return prev
+      const newNotes = { ...p.step_notes, [`s${stepId}`]: value }
+      const key = `${profileId}-step-${stepId}`
+      clearTimeout(noteTimers.current[key])
+      noteTimers.current[key] = setTimeout(() => {
+        supabase.from('onboarding_profiles')
+          .update({ step_notes: newNotes })
+          .eq('profile_id', profileId)
+          .then(({ error }) => { if (error) console.error('stepNote error:', error) })
+      }, 800)
+      return prev.map((x) => x.id === profileId ? { ...x, step_notes: newNotes } : x)
+    })
+  }, [])
+
+  // ── avancer d'étape ────────────────────────────────────────────────────────
+  const advanceStep = useCallback((profileId) => {
+    setProfiles((prev) => {
+      const p = prev.find((x) => x.id === profileId)
+      if (!p) return prev
+      let next = p.step + 1
+      if (!showOptional && next === 3) next = 4
+      if (next > 8) {
+        // Marquer comme complété en DB
+        supabase.from('onboarding_profiles')
+          .update({ is_completed: true, completed_at: new Date().toISOString(), current_step: 9 })
+          .eq('profile_id', profileId)
+          .then(({ error }) => { if (error) console.error('complete error:', error) })
+        setCompleted((c) => [...c, { ...p, step: 9 }])
+        return prev.filter((x) => x.id !== profileId)
+      }
+      // Avancer l'étape + reset done
+      supabase.from('onboarding_profiles')
+        .update({ current_step: next, done: {} })
+        .eq('profile_id', profileId)
+        .then(({ error }) => { if (error) console.error('advanceStep error:', error) })
+      return prev.map((x) => x.id === profileId ? { ...x, step: next, done: {} } : x)
     })
     setSelectedId(null)
-  }
+  }, [showOptional])
 
   const selectedProfile = profiles.find((p) => p.id === selectedId)
+
+  // Adapter les clés de notes pour le SidePanel (qui attend stepNotes/taskNotes comme maps globales)
+  const stepNotes = Object.fromEntries(
+    profiles.flatMap((p) =>
+      Object.entries(p.step_notes || {}).map(([k, v]) => [`${p.id}-${k}`, v])
+    )
+  )
+  const taskNotes = Object.fromEntries(
+    profiles.flatMap((p) =>
+      Object.entries(p.task_notes || {}).map(([k, v]) => [`${p.id}-${k}`, v])
+    )
+  )
+
+  if (loading) return (
+    <div style={{ display: 'flex', height: '100%', background: BG, alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ fontSize: 13, color: '#aaa' }}>Chargement…</div>
+    </div>
+  )
 
   return (
     <div style={{ display: 'flex', height: '100%', background: BG, overflow: 'hidden' }}>
