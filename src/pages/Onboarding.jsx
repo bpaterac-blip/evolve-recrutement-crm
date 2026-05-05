@@ -253,7 +253,7 @@ export default function Onboarding() {
   const location = useLocation()
   const [showOptional, setShowOptional] = useState(false)
   const [selectedId,   setSelectedId]   = useState(null)
-  const [profiles,     setProfiles]     = useState(MOCK_PROFILES)
+  const [profiles,     setProfiles]     = useState([])
   const [completed,    setCompleted]    = useState([])
   const [stepNotes,    setStepNotes]    = useState({})  // key: `${profileId}-s${stepId}`
   const [taskNotes,    setTaskNotes]    = useState({})  // key: `${profileId}-${taskId}`
