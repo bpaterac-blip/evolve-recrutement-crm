@@ -107,7 +107,7 @@ export default function Dashboard() {
   const [pointsEtapeCetteSemaine, setPointsEtapeCetteSemaine] = useState([])
   const [pointsEtapeLoading, setPointsEtapeLoading] = useState(true)
 
-  const allProfiles = [...filteredProfiles].filter((p) => p.mat !== 'Archivé')
+  const allProfiles = [...filteredProfiles].filter((p) => p.mat !== 'Archivé' && p.mat !== 'En pause')
   const P = ownerFilter === 'all' ? allProfiles : allProfiles.filter((p) => (p.owner_email || '') === ownerFilter)
   const ownerEmails = [...new Set(allProfiles.map((p) => p.owner_email || '').filter(Boolean))].sort()
   const isGlobalView = role === 'admin' && viewMode === 'global'
@@ -402,7 +402,7 @@ export default function Dashboard() {
     const counts = {}
     STAGES.forEach((s) => { counts[s] = 0 })
     stageProfilesBase
-      .filter((p) => p.mat !== 'Archivé' && p.stg != null && p.stg !== '')
+      .filter((p) => p.mat !== 'Archivé' && p.mat !== 'En pause' && p.stg != null && p.stg !== '')
       .forEach((p) => {
         const s = p.stg || 'R0'
         if (counts[s] !== undefined) counts[s]++
@@ -819,7 +819,7 @@ function SessionFormationCard({ session, goal, sessionProfilsRefresh, onAssign, 
   const confirmes = sessionProfiles.filter((p) => p.stage === 'Recruté' || p.integration_confirmed === true)
   const potentiels = sessionProfiles.filter(
     (p) => p.stage !== 'Recruté' && p.integration_confirmed !== true
-      && p.maturity !== 'Chute' && p.maturity !== 'Archivé' && p.maturity !== 'Pas intéressé'
+      && p.maturity !== 'Chute' && p.maturity !== 'Archivé' && p.maturity !== 'Pas intéressé' && p.maturity !== 'En pause'
       && p.stage !== 'Chute' && p.stage !== 'Pas intéressé',
   )
   const total = confirmes.length + potentiels.length

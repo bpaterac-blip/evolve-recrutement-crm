@@ -15,6 +15,7 @@ import {
   EVENT_TYPES,
   SOURCES,
   REGIONS,
+  PAUSE_REASONS,
 } from '../lib/data'
 
 const SESSION_CIBLE_STAGES = ['Point Business Plan', "Point d'étape téléphonique", "Point d'étape", 'Démission reconversion', 'R2 Amaury', 'Point juridique', 'Intégration', 'Recruté']
@@ -624,8 +625,9 @@ export default function Pipeline() {
   const { filteredProfiles, changeStage, changeMaturity, changeSource, changeRegion, updateProfileField, updateProfile, showNotif, useSupabase, fetchProfiles } = useCRM()
   const isGlobalView = role === 'admin' && viewMode === 'global'
   const currentSender = SENDERS_CONFIG[user?.email] ?? DEFAULT_SENDER_PIPELINE
-  const pipeline = filteredProfiles.filter((p) => p.stg && p.stg !== '' && p.stg !== 'Recruté' && p.mat !== 'Archivé' && p.mat !== 'Chute' && p.mat !== 'Pas intéressé')
-  const all = filteredProfiles.filter((p) => p.stg && p.stg !== '' && p.mat !== 'Archivé' && p.mat !== 'Chute' && p.mat !== 'Pas intéressé')
+  const pipeline = filteredProfiles.filter((p) => p.stg && p.stg !== '' && p.stg !== 'Recruté' && p.mat !== 'Archivé' && p.mat !== 'Chute' && p.mat !== 'Pas intéressé' && p.mat !== 'En pause')
+  const pausedProfiles = filteredProfiles.filter((p) => p.mat === 'En pause')
+  const all = filteredProfiles.filter((p) => p.stg && p.stg !== '' && p.mat !== 'Archivé' && p.mat !== 'Chute' && p.mat !== 'Pas intéressé' && p.mat !== 'En pause')
   const [modalProfile, setModalProfile] = useState(null)
   const [selectedCardId, setSelectedCardId] = useState(null)
   const [modalTab, setModalTab] = useState('notes')
@@ -707,6 +709,12 @@ export default function Pipeline() {
   const [showMaturiteDropdown, setShowMaturiteDropdown] = useState(false)
   const [showSourceDropdown, setShowSourceDropdown] = useState(false)
   const [nextEventsByProfileId, setNextEventsByProfileId] = useState({})
+  // Pause modal
+  const [pauseModalProfile, setPauseModalProfile] = useState(null)
+  const [pauseReason, setPauseReason] = useState('')
+  const [pauseWeeks, setPauseWeeks] = useState(8)
+  const [pauseNote, setPauseNote] = useState('')
+  const [pauseSaving, setPauseSaving] = useState(false)
 
   const displayProfile = modalProfile ? (filteredProfiles.find((p) => p.id === modalProfile.id) || modalProfile) : null
 
@@ -1056,6 +1064,13 @@ export default function Pipeline() {
       setChuteModalProfile(displayProfile)
       return
     }
+    if (v === 'En pause') {
+      setPauseReason('')
+      setPauseWeeks(8)
+      setPauseNote('')
+      setPauseModalProfile(displayProfile)
+      return
+    }
     if (v === 'Pas intéressé') {
       const oldMatPI = displayProfile?.mat ?? '—'
       await supabase.from('profiles').update({
@@ -1088,6 +1103,61 @@ export default function Pipeline() {
     const { data } = await supabase.from('activities').select('*').eq('profile_id', profileId).order('created_at', { ascending: false }).limit(10)
     setActivities(data || [])
     if (useSupabase) await fetchProfiles()
+  }
+
+  const handleConfirmPause = async () => {
+    const profileId = pauseModalProfile?.id
+    if (!profileId) return
+    setPauseSaving(true)
+    const pauseUntil = new Date()
+    pauseUntil.setDate(pauseUntil.getDate() + pauseWeeks * 7)
+    const pauseUntilStr = pauseUntil.toISOString().split('T')[0]
+    try {
+      await supabase.from('profiles').update({
+        maturity: 'En pause',
+        pause_reason: pauseReason || null,
+        pause_until: pauseUntilStr,
+        pause_stade: pauseModalProfile.stg || null,
+      }).eq('id', profileId)
+      changeMaturity(profileId, 'En pause')
+      await supabase.from('activities').insert({
+        profile_id: profileId,
+        type: 'maturity_change',
+        note: `${pauseModalProfile.mat || '—'} → En pause${pauseReason ? ` (${pauseReason})` : ''} — relance le ${new Date(pauseUntilStr).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}${pauseNote ? `\n${pauseNote}` : ''}`,
+        date: new Date().toISOString().split('T')[0],
+        icon: 'refresh',
+        source: 'manual',
+      })
+      if (modalProfile?.id === profileId) { setModalProfile(null); setSelectedCardId(null) }
+      fetchProfiles()
+      showNotif('✓ Profil mis en pause')
+    } catch (err) {
+      showNotif(`Erreur : ${err?.message}`)
+    } finally {
+      setPauseSaving(false)
+      setPauseModalProfile(null)
+    }
+  }
+
+  const handleResumeFromPause = async (profileId, originalStade) => {
+    if (!profileId) return
+    await supabase.from('profiles').update({
+      maturity: 'Froid',
+      pause_reason: null,
+      pause_until: null,
+      pause_stade: null,
+    }).eq('id', profileId)
+    changeMaturity(profileId, 'Froid')
+    await supabase.from('activities').insert({
+      profile_id: profileId,
+      type: 'maturity_change',
+      note: `En pause → Froid (reprise du suivi)`,
+      date: new Date().toISOString().split('T')[0],
+      icon: 'refresh',
+      source: 'manual',
+    })
+    fetchProfiles()
+    showNotif('✓ Profil remis en suivi actif')
   }
 
   const handleChangeSource = async (v) => {
@@ -1594,6 +1664,11 @@ export default function Pipeline() {
       <div className="pipbar py-4 px-5 pt-4 flex items-center gap-3 shrink-0">
         <div className="font-semibold text-sm">Pipeline recrutement — vue Kanban</div>
         <span className="bdg bg-[var(--s2)] text-[var(--t2)] text-xs py-0.5 px-2 rounded-full font-medium">{pipeline.length} profils actifs</span>
+        {pausedProfiles.length > 0 && (
+          <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: '#FAEEDA', color: '#633806', fontWeight: 500, border: '0.5px solid #FAC775' }}>
+            ⏸ {pausedProfiles.length} en pause
+          </span>
+        )}
         <button type="button" className="btn bp bsm py-1.5 px-2.5 text-xs ml-auto" onClick={() => window.dispatchEvent(new CustomEvent('open-new-profile'))}>+ Nouveau profil</button>
       </div>
       <div className="kb flex gap-3 py-3.5 px-5 pb-5 overflow-x-auto flex-1 items-start">
@@ -1632,6 +1707,61 @@ export default function Pipeline() {
               />
             )
           })}
+
+          {/* Colonne En pause — séparée, non droppable */}
+          {pausedProfiles.length > 0 && !stageFilter && (
+            <div style={{ width: 220, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', marginBottom: 8, borderRadius: 10, border: '1.5px dashed #FAC775', background: '#FAEEDA22' }}>
+                <span style={{ fontSize: 11, fontWeight: 600, color: '#633806', textTransform: 'uppercase', letterSpacing: '0.07em' }}>⏸ En pause</span>
+                <span style={{ fontSize: 11, fontWeight: 600, color: '#854F0B', background: '#FAC775', borderRadius: 999, padding: '1px 7px' }}>{pausedProfiles.length}</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                {pausedProfiles.map((p) => {
+                  const today = new Date()
+                  const until = p.pause_until ? new Date(p.pause_until) : null
+                  const isOverdue = until && until <= today
+                  const daysLeft = until ? Math.round((until - today) / (1000 * 60 * 60 * 24)) : null
+                  return (
+                    <div
+                      key={p.id}
+                      onClick={() => { setModalProfile(p); setSelectedCardId(p.id) }}
+                      style={{ background: isOverdue ? '#FFF1F2' : '#FAEEDA', border: `0.5px solid ${isOverdue ? '#FCA5A5' : '#FAC775'}`, borderRadius: 10, padding: '10px 12px', cursor: 'pointer', opacity: 0.9 }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                        <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#FAC775', color: '#412402', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, flexShrink: 0 }}>
+                          {(p.fn?.[0] || '') + (p.ln?.[0] || '')}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: '#412402', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.fn} {p.ln}</div>
+                          <div style={{ fontSize: 11, color: '#854F0B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.co || '—'}</div>
+                        </div>
+                      </div>
+                      {p.pause_reason && (
+                        <div style={{ fontSize: 10, color: '#854F0B', marginBottom: 4 }}>{p.pause_reason}</div>
+                      )}
+                      {until && (
+                        <div style={{ fontSize: 10, color: isOverdue ? '#be123c' : '#633806', fontWeight: isOverdue ? 600 : 400 }}>
+                          {isOverdue ? `⚠ Relance dépassée (${Math.abs(daysLeft)}j)` : `Relance dans ${daysLeft}j — ${until.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}`}
+                        </div>
+                      )}
+                      {p.pause_stade && (
+                        <div style={{ marginTop: 5, fontSize: 10, padding: '2px 7px', borderRadius: 999, background: 'rgba(255,255,255,0.5)', color: '#633806', display: 'inline-block', border: '0.5px solid #FAC775' }}>
+                          Était en {p.pause_stade}
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); handleResumeFromPause(p.id, p.pause_stade) }}
+                        style={{ marginTop: 7, width: '100%', padding: '4px 0', borderRadius: 6, background: '#173731', color: '#D2AB76', fontSize: 11, fontWeight: 500, border: 'none', cursor: 'pointer' }}
+                      >
+                        Reprendre le suivi
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
       {modalProfile && displayProfile && (
@@ -1675,83 +1805,169 @@ export default function Pipeline() {
               style={{
                 width: 280,
                 flexShrink: 0,
-                background: '#f9f7f4',
+                background: '#F5F0E8',
                 padding: '24px 20px',
-                borderRight: '1px solid rgba(0,0,0,0.06)',
+                borderRight: '1px solid rgba(180,150,100,0.18)',
                 display: 'flex',
                 flexDirection: 'column',
                 overflowY: 'auto',
               }}
             >
-              <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#173731', color: '#E7E0D0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700 }}>
-                {(displayProfile.fn?.[0] || '') + (displayProfile.ln?.[0] || '')}
+              {/* Avatar + nom */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14 }}>
+                <div style={{ width: 52, height: 52, borderRadius: '50%', background: '#173731', color: '#E7E0D0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 700, flexShrink: 0, boxShadow: '0 2px 8px rgba(23,55,49,0.18)' }}>
+                  {(displayProfile.fn?.[0] || '') + (displayProfile.ln?.[0] || '')}
+                </div>
+                <div>
+                  <h2 style={{ fontSize: 15, fontWeight: 700, margin: 0, color: '#173731', lineHeight: 1.3 }}>
+                    {capFirst(displayProfile.fn)} {capFirst(displayProfile.ln)}
+                  </h2>
+                  <p style={{ fontSize: 11, color: '#8B7355', margin: '3px 0 0', lineHeight: 1.4 }}>
+                    {displayProfile.co || '—'}
+                  </p>
+                  <p style={{ fontSize: 11, color: '#A0866A', margin: '1px 0 0' }}>
+                    {displayProfile.ti || '—'} · {displayProfile.city || '—'}
+                  </p>
+                </div>
               </div>
-              <h2 style={{ fontSize: 16, fontWeight: 700, margin: '12px 0 4px', color: '#173731' }}>
-                {capFirst(displayProfile.fn)} {capFirst(displayProfile.ln)}
-              </h2>
-              <p style={{ fontSize: 12, color: '#aaa', margin: '0 0 12px' }}>
-                {displayProfile.co || '—'} · {displayProfile.ti || '—'} · {displayProfile.city || '—'}
-              </p>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                <select
-                  value={displayProfile.mat || ''}
-                  onChange={(e) => handleChangeMaturity(e.target.value)}
-                  style={{
-                    padding: '4px 8px', fontSize: 13, borderRadius: 6,
-                    border: '1px solid #ccc', cursor: 'pointer',
-                    background: '#173731', color: '#E7E0D0',
-                  }}
-                >
-                  {MATURITIES.map((m) => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                </select>
-                <select
-                  value={displayProfile.stg || ''}
-                  onChange={(e) => handleChangeStage(e.target.value)}
-                  style={{
-                    padding: '4px 8px', fontSize: 13, borderRadius: 6,
-                    border: '1px solid #ccc', cursor: 'pointer',
-                    background: '#D2AB76', color: '#173731',
-                  }}
-                >
-                  {STAGES.map((s) => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
-                <select
-                  value={displayProfile.src || ''}
-                  onChange={(e) => handleChangeSource(e.target.value)}
-                  style={{
-                    padding: '4px 8px', fontSize: 13, borderRadius: 6,
-                    border: '1px solid #ccc', cursor: 'pointer',
-                  }}
-                >
-                  {SOURCES.map((s) => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
-              </div>
-              <div style={{ background: '#ffffff', borderRadius: 10, border: '1px solid rgba(0,0,0,0.08)', padding: '10px 14px', marginTop: 8 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <div>
-                    <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#aaa', marginBottom: 2 }}>Score IA</div>
-                    <div style={{ fontSize: 22, fontWeight: 700, color: '#173731' }}>{displayProfile.sc ?? '—'}</div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#aaa', marginBottom: 2 }}>Priorité</div>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: (displayProfile.sc ?? 0) >= 70 ? '#15803d' : (displayProfile.sc ?? 0) >= 50 ? '#a16207' : '#94a3b8' }}>
-                      {(displayProfile.sc ?? 0) >= 70 ? 'Prioritaire' : (displayProfile.sc ?? 0) >= 50 ? 'À travailler' : 'À écarter'}
+
+              {/* Score ring */}
+              {(() => {
+                const sc = displayProfile.sc ?? 0
+                const r = 28
+                const circumference = 2 * Math.PI * r
+                const dash = (sc / 100) * circumference
+                const scoreColor = sc >= 70 ? '#15803d' : sc >= 50 ? '#d97706' : '#94a3b8'
+                const priorityLabel = sc >= 70 ? 'Prioritaire' : sc >= 50 ? 'À travailler' : 'À écarter'
+                return (
+                  <div style={{ background: 'rgba(255,255,255,0.65)', borderRadius: 12, padding: '14px 16px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 16, border: '0.5px solid rgba(180,150,100,0.2)' }}>
+                    <svg width={72} height={72} viewBox="0 0 72 72" style={{ flexShrink: 0 }}>
+                      <circle cx={36} cy={36} r={r} fill="none" stroke="rgba(0,0,0,0.07)" strokeWidth={6} />
+                      <circle
+                        cx={36} cy={36} r={r}
+                        fill="none"
+                        stroke={scoreColor}
+                        strokeWidth={6}
+                        strokeDasharray={`${dash} ${circumference}`}
+                        strokeLinecap="round"
+                        transform="rotate(-90 36 36)"
+                        style={{ transition: 'stroke-dasharray 0.4s ease' }}
+                      />
+                      <text x={36} y={40} textAnchor="middle" fontSize={15} fontWeight={700} fill="#173731" fontFamily="inherit">{sc}</text>
+                    </svg>
+                    <div>
+                      <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#A0866A', marginBottom: 4 }}>Score IA</div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: scoreColor, marginBottom: 6 }}>{priorityLabel}</div>
+                      <button type="button" onClick={() => setScoreCorrectionOpen(true)} style={{ fontSize: 10, color: '#ea580c', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>
+                        Corriger
+                      </button>
                     </div>
                   </div>
-                </div>
-                <div style={{ height: 4, background: 'rgba(0,0,0,0.08)', borderRadius: 2, marginTop: 8, overflow: 'hidden' }}>
-                  <div style={{ height: '100%', background: '#173731', width: `${Math.min(100, (displayProfile.sc ?? 0))}%`, borderRadius: 2, transition: 'width 0.3s' }} />
-                </div>
+                )
+              })()}
+
+              {/* Sélecteurs stylisés */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+                {/* Maturité */}
+                {(() => {
+                  const mat = displayProfile.mat || ''
+                  const mc = MATURITY_COLORS[mat] || { bg: '#F3F4F6', text: '#6B7280' }
+                  return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: '#A0866A', textTransform: 'uppercase', letterSpacing: '0.05em', width: 60, flexShrink: 0 }}>Maturité</div>
+                      <div style={{ position: 'relative', flex: 1 }}>
+                        <select
+                          value={mat}
+                          onChange={(e) => handleChangeMaturity(e.target.value)}
+                          style={{
+                            appearance: 'none', WebkitAppearance: 'none',
+                            width: '100%', padding: '5px 24px 5px 10px',
+                            fontSize: 12, fontWeight: 600, borderRadius: 20,
+                            border: `1.5px solid ${mc.text}22`,
+                            background: mc.bg, color: mc.text,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {MATURITIES.map((m) => <option key={m} value={m}>{m}</option>)}
+                        </select>
+                        <div style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: 9, color: mc.text }}>▾</div>
+                      </div>
+                    </div>
+                  )
+                })()}
+
+                {/* Stade */}
+                {(() => {
+                  const stg = displayProfile.stg || ''
+                  const sc2 = STAGE_COLORS[stg] || { bg: '#F8FAFC', text: '#475569' }
+                  return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: '#A0866A', textTransform: 'uppercase', letterSpacing: '0.05em', width: 60, flexShrink: 0 }}>Stade</div>
+                      <div style={{ position: 'relative', flex: 1 }}>
+                        <select
+                          value={stg}
+                          onChange={(e) => handleChangeStage(e.target.value)}
+                          style={{
+                            appearance: 'none', WebkitAppearance: 'none',
+                            width: '100%', padding: '5px 24px 5px 10px',
+                            fontSize: 12, fontWeight: 600, borderRadius: 20,
+                            border: `1.5px solid ${sc2.text}22`,
+                            background: sc2.bg, color: sc2.text,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                        <div style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: 9, color: sc2.text }}>▾</div>
+                      </div>
+                    </div>
+                  )
+                })()}
+
+                {/* Source */}
+                {(() => {
+                  const src = displayProfile.src || ''
+                  const ss = SOURCE_STYLES[src] || { backgroundColor: '#f8fafc', color: '#94a3b8' }
+                  return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: '#A0866A', textTransform: 'uppercase', letterSpacing: '0.05em', width: 60, flexShrink: 0 }}>Source</div>
+                      <div style={{ position: 'relative', flex: 1 }}>
+                        <select
+                          value={src}
+                          onChange={(e) => handleChangeSource(e.target.value)}
+                          style={{
+                            appearance: 'none', WebkitAppearance: 'none',
+                            width: '100%', padding: '5px 24px 5px 10px',
+                            fontSize: 12, fontWeight: 600, borderRadius: 20,
+                            border: `1.5px solid ${ss.color}22`,
+                            background: ss.backgroundColor, color: ss.color,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {SOURCES.map((s) => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                        <div style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: 9, color: ss.color }}>▾</div>
+                      </div>
+                    </div>
+                  )
+                })()}
               </div>
-              <button type="button" onClick={() => setScoreCorrectionOpen(true)} style={{ marginTop: 6, fontSize: 11, color: '#ea580c', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left' }} title="Signaler un score inexact">
-                Signaler un score inexact
-              </button>
+
+              {/* Badge En pause si applicable */}
+              {displayProfile.mat === 'En pause' && (
+                <div style={{ background: '#FAEEDA', border: '1px solid #FAC775', borderRadius: 10, padding: '10px 12px', marginBottom: 10 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: '#633806', marginBottom: 4 }}>⏸ Profil en pause</div>
+                  {displayProfile.pause_reason && <div style={{ fontSize: 11, color: '#854F0B', marginBottom: 2 }}>Raison : {displayProfile.pause_reason}</div>}
+                  {displayProfile.pause_until && <div style={{ fontSize: 11, color: '#854F0B', marginBottom: 6 }}>Relance : {new Date(displayProfile.pause_until).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</div>}
+                  <button
+                    type="button"
+                    onClick={() => handleResumeFromPause(displayProfile.id, displayProfile.pause_stade)}
+                    style={{ width: '100%', padding: '5px 0', borderRadius: 6, background: '#173731', color: '#D2AB76', fontSize: 11, fontWeight: 500, border: 'none', cursor: 'pointer' }}
+                  >
+                    Reprendre le suivi
+                  </button>
+                </div>
+              )}
               {displayProfile.stg === 'Recruté' && (
                 <div style={{ marginTop: 8 }}>
                   {editingInteg ? (
@@ -3005,6 +3221,133 @@ export default function Pipeline() {
           </div>
         )
       })()}
+
+      {/* ── PauseModal ─────────────────────────────────────────────────────────── */}
+      {pauseModalProfile && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => setPauseModalProfile(null)}
+        >
+          <div
+            style={{ background: '#FFFCF7', borderRadius: 16, width: 440, padding: '28px 28px 24px', boxShadow: '0 8px 40px rgba(0,0,0,0.18)', position: 'relative' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: '#412402' }}>⏸ Mettre en pause</div>
+              <div style={{ fontSize: 13, color: '#854F0B', marginTop: 4 }}>
+                {pauseModalProfile.fn} {pauseModalProfile.ln} — {pauseModalProfile.co || '—'}
+              </div>
+            </div>
+
+            {/* Raison */}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: '#633806', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Raison</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {PAUSE_REASONS.map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => setPauseReason(r)}
+                    style={{
+                      padding: '5px 12px',
+                      borderRadius: 20,
+                      fontSize: 12,
+                      fontWeight: 500,
+                      border: '1.5px solid',
+                      cursor: 'pointer',
+                      background: pauseReason === r ? '#FAC775' : '#FFF7ED',
+                      borderColor: pauseReason === r ? '#E8A830' : '#FAC775',
+                      color: pauseReason === r ? '#412402' : '#854F0B',
+                      transition: 'all 0.1s',
+                    }}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Durée relance */}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: '#633806', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Relancer dans</div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {[4, 8, 12, 24].map((w) => {
+                  const d = new Date()
+                  d.setDate(d.getDate() + w * 7)
+                  const label = d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+                  return (
+                    <button
+                      key={w}
+                      type="button"
+                      onClick={() => setPauseWeeks(w)}
+                      style={{
+                        flex: 1,
+                        padding: '7px 4px',
+                        borderRadius: 8,
+                        fontSize: 11,
+                        fontWeight: 500,
+                        border: '1.5px solid',
+                        cursor: 'pointer',
+                        background: pauseWeeks === w ? '#FAC775' : '#FFF7ED',
+                        borderColor: pauseWeeks === w ? '#E8A830' : '#FAC775',
+                        color: pauseWeeks === w ? '#412402' : '#854F0B',
+                        textAlign: 'center',
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      <div style={{ fontSize: 12, fontWeight: 700 }}>{w}s</div>
+                      <div style={{ fontSize: 10, opacity: 0.8 }}>{label}</div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Note optionnelle */}
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: '#633806', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Note (optionnelle)</div>
+              <textarea
+                value={pauseNote}
+                onChange={(e) => setPauseNote(e.target.value)}
+                placeholder="Ex : séparation récente, à recontacter quand la situation se stabilise…"
+                style={{
+                  width: '100%',
+                  minHeight: 72,
+                  padding: '8px 12px',
+                  borderRadius: 8,
+                  border: '1px solid #FAC775',
+                  background: '#FFF7ED',
+                  fontSize: 12,
+                  color: '#412402',
+                  resize: 'vertical',
+                  fontFamily: 'inherit',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => setPauseModalProfile(null)}
+                style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #FAC775', background: 'transparent', color: '#854F0B', fontSize: 13, cursor: 'pointer' }}
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmPause}
+                disabled={pauseSaving}
+                style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: pauseSaving ? '#ccc' : '#412402', color: '#FAC775', fontSize: 13, fontWeight: 600, cursor: pauseSaving ? 'not-allowed' : 'pointer' }}
+              >
+                {pauseSaving ? 'Enregistrement…' : '⏸ Confirmer la pause'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         .kanban-card:not(.selected):hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); transform: translateY(-1px); }

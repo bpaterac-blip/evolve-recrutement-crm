@@ -1,5 +1,6 @@
 export const STAGES = ['R0', 'R1', 'Point Business Plan', "Point d'étape", 'Démission reconversion', 'R2 Amaury', 'Point juridique', 'Recruté']
-export const MATURITIES = ['Chaud', 'Tiède', 'Froid', 'Chute', 'Pas intéressé', 'Archivé']
+export const MATURITIES = ['Chaud', 'Tiède', 'Froid', 'Chute', 'En pause', 'Pas intéressé', 'Archivé']
+export const PAUSE_REASONS = ['Vie personnelle', 'Projet immobilier', 'Congé parental', 'Pas le bon moment', 'Attente interne', 'Autre']
 export const INTEG_OPTS = ['—', 'Janvier 2026', 'Avril 2026', 'Juin 2026', 'Juillet 2026', 'Septembre 2026', 'Novembre 2026', 'Janvier 2027', 'Avril 2027', 'Juin 2027', 'Septembre 2027', 'Novembre 2027', 'Intégré']
 export const INTEG_ADD_DATE = '+ Ajouter une date...'
 
