@@ -144,8 +144,8 @@ const ONBOARDING_STEPS = [
   },
   {
     id: 5,
-    short: 'CNPM',
-    name: 'Adhésion CNPM (Médiateur)',
+    short: 'Médiateur',
+    name: 'Adhésion Médiateur (CNPM)',
     optional: false,
     yousign: false,
     waitAttestation: true,
