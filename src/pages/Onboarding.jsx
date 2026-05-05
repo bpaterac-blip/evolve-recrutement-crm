@@ -97,7 +97,8 @@ const ONBOARDING_STEPS = [
     tasks: [
       { id: 't2_1', label: 'Recevoir le mail de validation d\'immatriculation de la société', links: [] },
       { id: 't2_2', label: 'Envoyer au gérant le mail concernant le pacte d\'associés', links: ['mail_pacte'] },
-      { id: 't2_3', label: 'Copier le pacte d\'associés, l\'intégrer aux Documents officiels et modifier les cases jaunes sur l\'ensemble du document', links: ['pacte', 'dossier'] },
+      { id: 't2_3', label: 'Copier le pacte d\'associés et modifier les cases jaunes sur l\'ensemble du document', links: ['pacte'] },
+      { id: 't2_3b', label: 'Enregistrer le pacte d\'associés dans le Drive NOS COURTIERS', links: ['dossier'] },
       { id: 't2_4', label: 'Se connecter à YouSign avec les IDs, préparer le document pour signature (paraphes à chaque page + "lu et approuvé" au-dessus des signatures)', links: ['yousign_ids'] },
       { id: 't2_5', label: 'Envoyer à Amaury et au gérant pour signature', links: [] },
       { id: 't2_6', label: 'Passer directement à l\'étape 3 dès réception de la signature du pacte', links: [] },
