@@ -280,65 +280,77 @@ export default function Onboarding() {
   const [newProfileBanner, setNewProfileBanner] = useState(null)
   const noteTimers = useRef({})  // debounce timers pour les notes
 
-  // ── Chargement initial depuis Supabase ────────────────────────────────────
+  // ── Init : chargement + injection éventuelle depuis Pipeline ────────────
   useEffect(() => {
-    async function load() {
+    const incoming = location.state?.onboardingProfile
+    if (incoming) window.history.replaceState({}, document.title)
+
+    async function init() {
       setLoading(true)
+      const today = new Date().toISOString().split('T')[0]
+
+      // 1. Si un profil arrive depuis la Pipeline → upsert d'abord
+      if (incoming) {
+        const row = {
+          profile_id:   incoming.id,
+          fn:           incoming.fn,
+          ln:           incoming.ln,
+          co:           incoming.co || '',
+          email:        incoming.email || '',
+          phone:        incoming.phone || '',
+          siren:        incoming.siren || '',
+          owner:        incoming.owner || 'Baptiste',
+          current_step: 1,
+          start_date:   today,
+          session:      '',
+          done:         {},
+          step_notes:   {},
+          task_notes:   {},
+        }
+        const { error: upsertErr } = await supabase
+          .from('onboarding_profiles')
+          .upsert(row, { onConflict: 'profile_id', ignoreDuplicates: true })
+        if (upsertErr) console.error('Onboarding upsert error:', upsertErr)
+      }
+
+      // 2. Charger tous les profils (incluant celui qu'on vient d'upsert)
       const { data, error } = await supabase
         .from('onboarding_profiles')
         .select('*')
         .order('created_at', { ascending: false })
-      if (error) { console.error('Onboarding load error:', error); setLoading(false); return }
-      const active    = (data || []).filter((r) => !r.is_completed).map(rowToProfile)
-      const done      = (data || []).filter((r) =>  r.is_completed).map(rowToProfile)
+
+      if (error) {
+        console.error('Onboarding load error:', error)
+        // Fallback : si la table n'existe pas encore, afficher le profil entrant localement
+        if (incoming) {
+          const fallback = {
+            id: incoming.id, fn: incoming.fn, ln: incoming.ln, co: incoming.co || '',
+            email: incoming.email || '', phone: incoming.phone || '', siren: '',
+            owner: incoming.owner || 'Baptiste', step: 1, start: today,
+            session: '', done: {}, step_notes: {}, task_notes: {},
+          }
+          setProfiles([fallback])
+          setNewProfileBanner(fallback)
+          setSelectedId(incoming.id)
+        }
+        setLoading(false)
+        return
+      }
+
+      const active = (data || []).filter((r) => !r.is_completed).map(rowToProfile)
+      const done   = (data || []).filter((r) =>  r.is_completed).map(rowToProfile)
       setProfiles(active)
       setCompleted(done)
+
+      if (incoming) {
+        const added = active.find((p) => p.id === incoming.id)
+        if (added) { setNewProfileBanner(added); setSelectedId(added.id) }
+      }
+
       setLoading(false)
     }
-    load()
-  }, [])
 
-  // ── Injection d'un profil depuis la Pipeline ──────────────────────────────
-  useEffect(() => {
-    const incoming = location.state?.onboardingProfile
-    if (!incoming) return
-    window.history.replaceState({}, document.title)
-
-    async function addProfile() {
-      const today = new Date().toISOString().split('T')[0]
-      const row = {
-        profile_id:   incoming.id,
-        fn:           incoming.fn,
-        ln:           incoming.ln,
-        co:           incoming.co || '',
-        email:        incoming.email || '',
-        phone:        incoming.phone || '',
-        siren:        incoming.siren || '',
-        owner:        incoming.owner || 'Baptiste',
-        current_step: 1,
-        start_date:   today,
-        session:      '',
-        done:         {},
-        step_notes:   {},
-        task_notes:   {},
-      }
-      // upsert : si déjà présent, on met juste à jour les infos de base
-      const { data, error } = await supabase
-        .from('onboarding_profiles')
-        .upsert(row, { onConflict: 'profile_id', ignoreDuplicates: false })
-        .select()
-        .single()
-      if (error) { console.error('Onboarding insert error:', error); return }
-      const newP = rowToProfile(data)
-      setProfiles((prev) => {
-        const alreadyIn = prev.some((p) => p.id === newP.id)
-        if (alreadyIn) return prev
-        setNewProfileBanner(newP)
-        return [newP, ...prev]
-      })
-      setSelectedId(newP.id)
-    }
-    addProfile()
+    init()
   }, [])  // eslint-disable-line
 
   const visibleSteps = ONBOARDING_STEPS.filter((s) => showOptional || !s.optional)
