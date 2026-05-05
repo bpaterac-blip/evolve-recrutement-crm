@@ -31,11 +31,9 @@ const L = {
   kbis_evolve:     { label: 'KBIS Evolve Courtage', url: 'https://drive.google.com/file/d/1vu8coZO8P8-_c-n0_yDW2CMsNgukjkYJ/view' },
   mail_rcp:        { label: 'Mail RCP (à envoyer au CGP)', url: 'https://docs.google.com/document/d/1A-ieosiW4vtdhRIs0Oy8YAgQa-XnQOooRmcnWiejd88/edit' },
   mail_cncef:      { label: 'Mail CNCEF (à envoyer au CGP)', url: 'https://docs.google.com/document/d/1tkhvdOAYIvwFAtKPlFQN_0Xl7vXyMBMzCbRqgIx4g-0/edit' },
-  abeille_mail:    { label: 'Mail Abeille', url: 'https://docs.google.com/document/d/1uv6Au6A2SrZFAhaaB8nkgpullojIKhUraPQLfIxgjXg/edit' },
   abeille_doc1:    { label: 'Document Abeille 1', url: 'https://drive.google.com/file/d/1jVwQEDymC5gpNBEr-JiSkNWWzNhx1BGv/view' },
   abeille_doc2:    { label: 'Document Abeille 2', url: 'https://docs.google.com/document/d/1eULoXNJlUyrFC-hQCqOJ_XkMql6UQCf5/edit' },
-  mma:             { label: 'Instructions MMA', url: 'https://docs.google.com/document/d/1MeOT2nT_ypVWdAbl6KJ9Rqj3Vwbnbj9_8B32G97Mlew/edit' },
-  swisslife:       { label: 'Instructions SwissLife', url: 'https://docs.google.com/document/d/1nFBv7RIqHcntekCPlr-CRmUQyoxAa4Rl1FcuOiQjKpQ/edit' },
+  codes_assureurs: { label: 'Renseigner les codes assureurs', url: 'https://docs.google.com/spreadsheets/d/1Kxpt9Od9xfsYMQpzpwOFu8FT0TiNVnxcF57AaHOKjHk/edit?gid=881522851#gid=881522851' },
 }
 
 // ── Remplace les placeholders {{…}} par les données du profil ─────────────────
@@ -245,11 +243,27 @@ const ONBOARDING_STEPS = [
     yousign: true,
     waitAttestation: false,
     mailTemplate: null,
+    mailTemplates: [
+      {
+        label: 'Abeille',
+        to: 'alexia.martinez@abeille-assurances.fr',
+        cc: '',
+        subject: 'Groupement EVOLVE COURTAGE – Nouvel Adhérent – {{prenom}} {{nom}}',
+        body: `<p>Bonjour Alexia,</p><p>Peux-tu bien vouloir procéder à l'enregistrement du nouvel adhérent au Groupement EVOLVE COURTAGE s'il te plait :</p><p><strong>Coordonnées</strong></p><p>{{prenom}} {{nom}}</p><p>{{email}}</p><p>{{telephone}}</p><p><strong>Tu trouveras en PJ :</strong></p><ul><li>Convention liant l'adhérent au groupement</li><li>RIB PRO</li><li>KBIS de moins de trois mois de l'Adhérent</li><li>Orias de l'année en cours</li><li>CNI de l'adhérent</li><li>CV de l'adhérent</li><li>AP COM signé</li><li>Demande de partenariat signée</li></ul><p>Te souhaitant bonne réception,</p><p>Bien à toi,</p><p>{{responsable}}</p>`,
+      },
+      {
+        label: 'SwissLife',
+        to: 'administration.courtage@swisslife.fr',
+        cc: 'anne-sophie.bedoret@swisslife.fr; paul.tissot@swisslife.fr',
+        subject: 'Groupement EVOLVE COURTAGE – Nouvel Adhérent – {{prenom}} {{nom}}',
+        body: `<p>Bonjour,</p><p>Nous vous remercions de bien vouloir procéder à l'enregistrement du nouvel adhérent au Groupement EVOLVE COURTAGE (Gpt Type 2 – Code éco 0076174).</p><p><strong>Coordonnées</strong></p><p>{{societe}}</p><p>{{email}}</p><p>{{telephone}}</p><p><strong>Vous trouverez en PJ :</strong></p><ul><li>Convention liant le nouveau membre au groupement</li><li>KBIS de moins de trois mois</li><li>Orias de l'année en cours</li><li>CNI en cours de validité du nouveau membre</li></ul><p><strong>Paramétrage souhaité dans MVS :</strong></p><p>Dénomination : {{societe}}</p><p>Complément d'identité : EVOLVE COURTAGE</p><p>E-Mail : {{email}}</p><p>Bdx de commissions : Le code ECO autorise la vision aux Bdx de commissions, aussi chaque adhérent doit avoir accès à ses bordereaux sous SLONE</p><p>Vous en souhaitant bonne réception,</p><p>Bien à vous,</p><p>{{responsable}}</p>`,
+      },
+    ],
     tasks: [
       { id: 't9_1', label: 'Créer l\'adresse mail professionnelle du CGP', links: [] },
-      { id: 't9_2', label: 'Abeille — remplir les deux documents et envoyer pour signature via YouSign', links: ['abeille_mail', 'abeille_doc1', 'abeille_doc2'] },
-      { id: 't9_3', label: 'MMA — démarches d\'ouverture de codes', links: ['mma'] },
-      { id: 't9_4', label: 'SwissLife — démarches d\'ouverture de codes', links: ['swisslife'] },
+      { id: 't9_2', label: 'Abeille — remplir les deux documents, envoyer pour signature via YouSign, puis envoyer le mail', links: ['abeille_doc1', 'abeille_doc2'] },
+      { id: 't9_3', label: 'SwissLife — envoyer le mail d\'ouverture de codes', links: [] },
+      { id: 't9_4', label: 'Renseigner les codes assureurs dans le tableau', links: ['codes_assureurs'] },
     ],
   },
 ]
