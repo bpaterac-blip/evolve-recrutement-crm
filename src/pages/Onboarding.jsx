@@ -573,9 +573,9 @@ export default function Onboarding() {
         </div>
       )}
 
-      {/* ── Panneau latéral ── */}
+      {/* ── Modale profil ── */}
       {selectedProfile && (
-        <SidePanel
+        <ProfileModal
           profile={selectedProfile}
           steps={visibleSteps}
           stepNotes={stepNotes}
@@ -700,8 +700,8 @@ function MailBlock({ mail, label, onCopy, onGmail }) {
   )
 }
 
-// ── Panneau latéral ────────────────────────────────────────────────────────────
-function SidePanel({ profile, steps, stepNotes, taskNotes, onClose, onToggleTask, onAdvance, onTaskNote, onStepNote }) {
+// ── Modale centrée ────────────────────────────────────────────────────────────
+function ProfileModal({ profile, steps, stepNotes, taskNotes, onClose, onToggleTask, onAdvance, onTaskNote, onStepNote }) {
   const days = daysSince(profile.start)
   const currentStepDef = ONBOARDING_STEPS.find((s) => s.id === profile.step)
   const totalTasks = currentStepDef?.tasks.length || 0
@@ -711,170 +711,201 @@ function SidePanel({ profile, steps, stepNotes, taskNotes, onClose, onToggleTask
   const currentVisibleIdx = steps.findIndex((s) => s.id === profile.step)
   const filledMails = currentStepDef ? (currentStepDef.mailTemplates || (currentStepDef.mailTemplate ? [currentStepDef.mailTemplate] : [])).map(t => fillMail(t, profile)) : []
 
+  const initials = getInitials(profile.fn, profile.ln)
+
   const copyMailBody = (mail) => {
     if (!mail) return
-    const html = bodyToHtml(mail.body)
-    copyAsHtml(html, mail.body)
+    copyAsHtml(bodyToHtml(mail.body), mail.body)
   }
 
   const openGmail = (mail) => {
     if (!mail) return
-    // Ouvre Gmail avec destinataire + objet pré-remplis — coller le corps avec Ctrl+V après
     const params = new URLSearchParams({ to: mail.to, su: mail.subject })
     if (mail.cc) params.set('cc', mail.cc)
     window.open(`https://mail.google.com/mail/?view=cm&fs=1&${params.toString()}`, '_blank')
-    // Copie simultanée du corps dans le presse-papier
     copyMailBody(mail)
   }
 
-  // Replace task label placeholders
   const fillLabel = (label) => label
     .replace(/\{\{prenom\}\}/g, profile.fn)
     .replace(/\{\{nom\}\}/g, profile.ln)
 
-  return (
-    <div style={{ width: 390, flexShrink: 0, background: 'white', borderLeft: '1px solid #E5E0D8', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+  // Fermer sur clic overlay
+  const handleOverlayClick = (e) => { if (e.target === e.currentTarget) onClose() }
 
-      {/* Header */}
-      <div style={{ padding: '16px 20px', borderBottom: '1px solid #E5E0D8', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: ACCENT }}>{profile.fn} {profile.ln}</div>
-            <div style={{ fontSize: 11, color: '#888', marginTop: 1 }}>{profile.co}</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-              <span style={{ fontSize: 10, background: BG, color: ACCENT, padding: '3px 9px', borderRadius: 10, fontWeight: 600 }}>📅 {profile.session}</span>
-              <span style={{ fontSize: 10, padding: '3px 9px', borderRadius: 10, fontWeight: 600, background: days > 30 ? '#FEE2E2' : BG, color: days > 30 ? '#ef4444' : '#888' }}>
-                {days > 30 ? '⚠ ' : ''}J+{days} dans le process
-              </span>
+  return (
+    <div onClick={handleOverlayClick} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div style={{ background: 'white', borderRadius: 16, width: '100%', maxWidth: 900, maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 8px 40px rgba(0,0,0,0.18)' }}>
+
+        {/* ── Header ── */}
+        <div style={{ background: ACCENT, padding: '18px 24px 14px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ width: 42, height: 42, borderRadius: '50%', background: GOLD, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: ACCENT, flexShrink: 0 }}>{initials}</div>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: 'white' }}>{profile.fn} {profile.ln}</div>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 1 }}>
+                  {profile.co}
+                  {profile.session ? ` · ${profile.session}` : ''}
+                  {' · '}
+                  <span style={{ color: days > 30 ? '#FCA5A5' : 'rgba(255,255,255,0.5)' }}>J+{days}</span>
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {profile.owner && (
+                <span style={{ fontSize: 10, background: 'rgba(210,171,118,0.18)', color: GOLD, padding: '3px 10px', borderRadius: 20, border: '0.5px solid rgba(210,171,118,0.3)' }}>
+                  {profile.owner}
+                </span>
+              )}
+              <button type="button" onClick={onClose} style={{ background: 'none', border: '0.5px solid rgba(255,255,255,0.2)', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.6)', fontSize: 16, cursor: 'pointer' }}>✕</button>
             </div>
           </div>
-          <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 18, color: '#bbb', cursor: 'pointer', padding: 4, flexShrink: 0 }}>✕</button>
-        </div>
-        <div style={{ marginTop: 12 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-            <span style={{ fontSize: 10, color: '#aaa', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Progression globale</span>
-            <span style={{ fontSize: 10, color: ACCENT, fontWeight: 700 }}>Étape {currentVisibleIdx + 1}/{steps.length}</span>
-          </div>
-          <div style={{ height: 5, background: '#F0EDE8', borderRadius: 3, overflow: 'hidden' }}>
-            <div style={{ height: '100%', borderRadius: 3, transition: 'width 0.3s', width: `${steps.length > 0 ? (currentVisibleIdx / steps.length) * 100 : 0}%`, background: GOLD }} />
-          </div>
-        </div>
-      </div>
 
-      {/* Corps : timeline */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
-        {steps.map((step, idx) => {
-          const status = step.id < profile.step ? 'done' : step.id === profile.step ? 'active' : 'todo'
-          const isActive = status === 'active'
-          const stepNoteKey = `${profile.id}-s${step.id}`
-
-          return (
-            <div key={step.id} style={{ marginBottom: 10 }}>
-
-              {/* En-tête étape */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, background: isActive ? BG : 'transparent', border: isActive ? `1px solid ${GOLD}` : '1px solid transparent' }}>
-                <div style={{ width: 22, height: 22, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, background: status === 'done' ? ACCENT : status === 'active' ? GOLD : '#F0EDE8', color: status === 'done' ? GOLD : status === 'active' ? ACCENT : '#bbb' }}>
-                  {status === 'done' ? '✓' : idx + 1}
-                </div>
-                <span style={{ fontSize: 11, flex: 1, lineHeight: 1.3, fontWeight: isActive ? 700 : 500, color: status === 'done' ? '#aaa' : status === 'active' ? ACCENT : '#ccc', textDecoration: status === 'done' ? 'line-through' : 'none' }}>
-                  {step.short}
-                  {step.optional && <span style={{ fontSize: 9, background: '#EDE9FE', color: '#7C3AED', padding: '1px 5px', borderRadius: 8, marginLeft: 5, fontWeight: 600 }}>Opt.</span>}
-                </span>
-                {isActive && (
-                  <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                    {(step.mailTemplate || step.mailTemplates?.length > 0) && <span style={{ fontSize: 9, background: '#EEF2FF', color: '#4338CA', padding: '2px 6px', borderRadius: 8, fontWeight: 600 }}>✉</span>}
-                    {step.yousign       && <span style={{ fontSize: 9, background: '#FEF3C7', color: '#D97706', padding: '2px 6px', borderRadius: 8, fontWeight: 600 }}>✍</span>}
-                    {step.waitAttestation && <span style={{ fontSize: 9, background: '#F0FDF4', color: '#16a34a', padding: '2px 6px', borderRadius: 8, fontWeight: 600 }}>⏳</span>}
+          {/* Stepper horizontal */}
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 0, overflowX: 'auto', paddingBottom: 2 }}>
+            {steps.map((step, idx) => {
+              const status = step.id < profile.step ? 'done' : step.id === profile.step ? 'active' : 'todo'
+              return (
+                <div key={step.id} style={{ display: 'flex', alignItems: 'flex-start', flexShrink: 0 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, width: 72 }}>
+                    <div style={{ width: 26, height: 26, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0,
+                      background: status === 'done' ? GOLD : status === 'active' ? 'rgba(210,171,118,0.2)' : 'rgba(255,255,255,0.07)',
+                      border: status === 'active' ? `1.5px solid ${GOLD}` : 'none',
+                      color: status === 'done' ? ACCENT : status === 'active' ? GOLD : 'rgba(255,255,255,0.25)' }}>
+                      {status === 'done' ? '✓' : idx + 1}
+                    </div>
+                    <span style={{ fontSize: 9, color: status === 'done' ? 'rgba(255,255,255,0.35)' : status === 'active' ? GOLD : 'rgba(255,255,255,0.22)', textAlign: 'center', lineHeight: 1.3, fontWeight: status === 'active' ? 600 : 400, whiteSpace: 'normal', maxWidth: 64 }}>
+                      {step.short}
+                    </span>
                   </div>
-                )}
+                  {idx < steps.length - 1 && (
+                    <div style={{ width: 14, height: 1, background: 'rgba(255,255,255,0.12)', marginTop: 13, flexShrink: 0 }} />
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* ── Corps 2 colonnes ── */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+
+          {/* Colonne gauche : tâches */}
+          <div style={{ overflowY: 'auto', padding: '20px 20px 20px 24px', borderRight: '0.5px solid #E5E0D8' }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: ACCENT, marginBottom: 2 }}>{currentStepDef?.name}</div>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
+              {(currentStepDef?.mailTemplate || currentStepDef?.mailTemplates?.length > 0) && <span style={{ fontSize: 9, background: '#EEF2FF', color: '#4338CA', padding: '2px 7px', borderRadius: 8, fontWeight: 600 }}>✉ Mail</span>}
+              {currentStepDef?.yousign && <span style={{ fontSize: 9, background: '#FEF3C7', color: '#D97706', padding: '2px 7px', borderRadius: 8, fontWeight: 600 }}>✍ YouSign</span>}
+              {currentStepDef?.waitAttestation && <span style={{ fontSize: 9, background: '#F0FDF4', color: '#16a34a', padding: '2px 7px', borderRadius: 8, fontWeight: 600 }}>⏳ Attestation</span>}
+            </div>
+
+            {/* Tâches */}
+            {currentStepDef?.tasks.map((task) => {
+              const done = !!profile.done[task.id]
+              const noteKey = `${profile.id}-${task.id}`
+              const noteVal = taskNotes[noteKey] || ''
+              return (
+                <div key={task.id} style={{ marginBottom: 8 }}>
+                  <div onClick={() => onToggleTask(profile.id, task.id)}
+                    style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '7px 8px', borderRadius: 6, cursor: 'pointer', background: done ? '#F0FDF4' : 'transparent', transition: 'background 0.1s' }}>
+                    <div style={{ width: 16, height: 16, borderRadius: 4, flexShrink: 0, marginTop: 1, border: `1.5px solid ${done ? '#16a34a' : '#D5D0C8'}`, background: done ? '#16a34a' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}>
+                      {done && <span style={{ color: 'white', fontSize: 9, fontWeight: 700 }}>✓</span>}
+                    </div>
+                    <span style={{ fontSize: 11, color: done ? '#16a34a' : '#333', lineHeight: 1.5, textDecoration: done ? 'line-through' : 'none', whiteSpace: 'pre-line' }}>
+                      {fillLabel(task.label)}
+                    </span>
+                  </div>
+
+                  {/* Liens sous la tâche */}
+                  {task.links && task.links.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, paddingLeft: 32, marginTop: 3 }}>
+                      {task.links.map((key) => {
+                        const link = L[key]
+                        if (!link) return null
+                        const isDrive = link.url.includes('drive.google') || link.url.includes('docs.google')
+                        const isSheets = link.url.includes('spreadsheets')
+                        const color = isSheets ? { text: '#0F6E56', bg: '#E1F5EE' } : isDrive ? { text: '#185FA5', bg: '#E6F1FB' } : { text: '#0F6E56', bg: '#E1F5EE' }
+                        return (
+                          <a key={key} href={link.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, color: color.text, background: color.bg, padding: '2px 8px', borderRadius: 10, textDecoration: 'none', fontWeight: 500 }}>
+                            {isSheets ? '📊' : isDrive ? '📄' : '🔗'} {link.label}
+                          </a>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  {/* Note courte inline */}
+                  <div style={{ paddingLeft: 32, marginTop: 4 }} onClick={(e) => e.stopPropagation()}>
+                    <input
+                      value={noteVal}
+                      onChange={(e) => onTaskNote(profile.id, task.id, e.target.value)}
+                      placeholder="Note courte…"
+                      style={{ fontSize: 10, border: '0.5px solid #E5E0D8', borderRadius: 4, padding: '2px 7px', width: '100%', background: noteVal ? '#FFFDF5' : 'transparent', color: '#555', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                </div>
+              )
+            })}
+
+            {/* Note d'étape */}
+            <div style={{ marginTop: 12, border: `0.5px solid ${GOLD}`, borderLeft: `3px solid ${GOLD}`, borderRadius: '0 6px 6px 0', padding: '8px 10px', background: '#FFFDF7' }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: '#9A7D4A', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>Note sur cette étape</div>
+              <textarea
+                value={stepNotes[`${profile.id}-s${profile.step}`] || ''}
+                onChange={(e) => onStepNote(profile.id, profile.step, e.target.value)}
+                placeholder="Contexte, blocage, info particulière…"
+                rows={2}
+                style={{ width: '100%', fontSize: 11, border: 'none', resize: 'none', background: 'transparent', color: '#444', lineHeight: 1.5, outline: 'none', fontFamily: 'inherit' }}
+              />
+            </div>
+          </div>
+
+          {/* Colonne droite : mails + progression */}
+          <div style={{ overflowY: 'auto', padding: '20px 24px 20px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+            {/* Blocs mails */}
+            {filledMails.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {filledMails.map((mail, mIdx) => (
+                  <MailBlock
+                    key={mIdx}
+                    mail={mail}
+                    label={mail.label || currentStepDef?.short}
+                    onCopy={() => copyMailBody(mail)}
+                    onGmail={() => openGmail(mail)}
+                  />
+                ))}
+              </div>
+            )}
+
+            {filledMails.length > 0 && <div style={{ borderTop: '0.5px solid #E5E0D8' }} />}
+
+            {/* Progression + bouton valider */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                <span style={{ fontSize: 11, color: '#888' }}>Progression étape</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: ACCENT }}>{doneTasks} / {totalTasks}</span>
+              </div>
+              <div style={{ height: 5, background: '#F0EDE8', borderRadius: 3, overflow: 'hidden', marginBottom: 14 }}>
+                <div style={{ height: '100%', borderRadius: 3, transition: 'width 0.3s', width: `${totalTasks > 0 ? (doneTasks / totalTasks) * 100 : 0}%`, background: GOLD }} />
               </div>
 
-              {/* Checklist (étape active uniquement) */}
-              {isActive && (
-                <div style={{ marginLeft: 11, paddingLeft: 19, borderLeft: `2px solid ${GOLD}`, marginTop: 4 }}>
-
-                  {step.tasks.map((task) => {
-                    const done = !!profile.done[task.id]
-                    const noteKey = `${profile.id}-${task.id}`
-                    const noteVal = taskNotes[noteKey] || ''
-
-                    return (
-                      <div key={task.id} style={{ marginBottom: 4 }}>
-                        {/* Ligne tâche */}
-                        <div onClick={() => onToggleTask(profile.id, task.id)} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 8px', borderRadius: 6, cursor: 'pointer', background: done ? '#F0FDF4' : 'transparent', transition: 'background 0.1s' }}>
-                          <div style={{ width: 16, height: 16, borderRadius: 4, flexShrink: 0, marginTop: 1, border: `1.5px solid ${done ? '#16a34a' : '#D5D0C8'}`, background: done ? '#16a34a' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}>
-                            {done && <span style={{ color: 'white', fontSize: 9, fontWeight: 700 }}>✓</span>}
-                          </div>
-                          <span style={{ fontSize: 11, color: done ? '#16a34a' : '#444', lineHeight: 1.5, textDecoration: done ? 'line-through' : 'none', whiteSpace: 'pre-line' }}>
-                            {fillLabel(task.label)}
-                          </span>
-                        </div>
-
-                        {/* Liens Drive sous la tâche */}
-                        {task.links && task.links.length > 0 && (
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, paddingLeft: 32, marginTop: 2, marginBottom: 2 }}>
-                            {task.links.map((key) => {
-                              const link = L[key]
-                              if (!link) return null
-                              const isDrive = link.url.includes('drive.google') || link.url.includes('docs.google')
-                              return (
-                                <a key={key} href={link.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
-                                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 9, color: isDrive ? '#1967D2' : '#0F6E56', background: isDrive ? '#E8F0FE' : '#E1F5EE', padding: '2px 7px', borderRadius: 10, textDecoration: 'none', fontWeight: 500 }}>
-                                  {isDrive ? '📄' : '🔗'} {link.label}
-                                </a>
-                              )
-                            })}
-                          </div>
-                        )}
-
-                        {/* Note courte inline */}
-                        <div style={{ paddingLeft: 32, marginTop: 2 }} onClick={(e) => e.stopPropagation()}>
-                          <input
-                            value={noteVal}
-                            onChange={(e) => onTaskNote(profile.id, task.id, e.target.value)}
-                            placeholder="Note courte…"
-                            style={{ fontSize: 10, border: '0.5px solid #E5E0D8', borderRadius: 4, padding: '2px 7px', width: '100%', background: noteVal ? '#FFFDF5' : 'transparent', color: '#555', outline: 'none', fontFamily: 'inherit' }}
-                          />
-                        </div>
-                      </div>
-                    )
-                  })}
-
-                  {/* Note d'étape */}
-                  <div style={{ margin: '10px 0 6px', borderLeft: `3px solid ${GOLD}`, borderRadius: '0 6px 6px 0', background: 'white', border: `0.5px solid ${GOLD}`, borderLeftWidth: 3, padding: '7px 10px' }}>
-                    <div style={{ fontSize: 9, fontWeight: 700, color: '#9A7D4A', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>Note sur cette étape</div>
-                    <textarea
-                      value={stepNotes[stepNoteKey] || ''}
-                      onChange={(e) => onStepNote(profile.id, step.id, e.target.value)}
-                      placeholder="Contexte, blocage, info particulière…"
-                      rows={2}
-                      style={{ width: '100%', fontSize: 11, border: 'none', resize: 'none', background: 'transparent', color: '#444', lineHeight: 1.5, outline: 'none', fontFamily: 'inherit' }}
-                    />
-                  </div>
-
-                  {/* Blocs mails pré-rédigés */}
-                  {filledMails.map((mail, mIdx) => (
-                    <MailBlock
-                      key={mIdx}
-                      mail={mail}
-                      label={mail.label || step.short}
-                      onCopy={() => copyMailBody(mail)}
-                      onGmail={() => openGmail(mail)}
-                    />
-                  ))}
-
-                  {/* Bouton avancer */}
-                  <button type="button" onClick={() => { if (allDone) onAdvance(profile.id) }}
-                    style={{ marginTop: 4, width: '100%', padding: '9px 0', borderRadius: 8, border: 'none', background: allDone ? ACCENT : '#F0EDE8', color: allDone ? 'white' : '#bbb', fontSize: 12, fontWeight: 600, cursor: allDone ? 'pointer' : 'not-allowed', transition: 'all 0.15s' }}>
-                    {allDone
-                      ? isLastStep ? '🎉 Marquer comme complété' : `Passer à l'étape ${idx + 2} →`
-                      : `${doneTasks}/${totalTasks} tâches complétées`}
-                  </button>
+              <button type="button" onClick={() => { if (allDone) onAdvance(profile.id) }}
+                style={{ width: '100%', padding: '10px 0', borderRadius: 8, border: 'none', background: allDone ? ACCENT : '#F0EDE8', color: allDone ? 'white' : '#bbb', fontSize: 12, fontWeight: 600, cursor: allDone ? 'pointer' : 'not-allowed', transition: 'all 0.15s' }}>
+                {allDone
+                  ? isLastStep ? 'Marquer comme complété' : `Valider → ${steps[currentVisibleIdx + 1]?.short || 'étape suivante'}`
+                  : `${totalTasks - doneTasks} tâche${totalTasks - doneTasks > 1 ? 's' : ''} restante${totalTasks - doneTasks > 1 ? 's' : ''}`}
+              </button>
+              {!allDone && (
+                <div style={{ fontSize: 10, color: '#bbb', textAlign: 'center', marginTop: 5 }}>
+                  Cochez toutes les tâches pour valider l'étape
                 </div>
               )}
             </div>
-          )
-        })}
+          </div>
+        </div>
       </div>
     </div>
   )
