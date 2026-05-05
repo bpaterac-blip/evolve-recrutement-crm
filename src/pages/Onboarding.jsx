@@ -430,13 +430,13 @@ export default function Onboarding() {
       if (!p) return prev
       let next = p.step + 1
       if (!showOptional && next === 3) next = 4
-      if (next > 8) {
+      if (next > 9) {
         // Marquer comme complété en DB
         supabase.from('onboarding_profiles')
-          .update({ is_completed: true, completed_at: new Date().toISOString(), current_step: 9 })
+          .update({ is_completed: true, completed_at: new Date().toISOString(), current_step: 10 })
           .eq('profile_id', profileId)
           .then(({ error }) => { if (error) console.error('complete error:', error) })
-        setCompleted((c) => [...c, { ...p, step: 9 }])
+        setCompleted((c) => [...c, { ...p, step: 10 }])
         return prev.filter((x) => x.id !== profileId)
       }
       // Avancer l'étape + reset done
@@ -687,7 +687,7 @@ function SidePanel({ profile, steps, stepNotes, taskNotes, onClose, onToggleTask
   const totalTasks = currentStepDef?.tasks.length || 0
   const doneTasks  = currentStepDef?.tasks.filter((t) => profile.done[t.id]).length || 0
   const allDone    = doneTasks === totalTasks && totalTasks > 0
-  const isLastStep = profile.step === 8
+  const isLastStep = profile.step === 9
   const currentVisibleIdx = steps.findIndex((s) => s.id === profile.step)
   const filledMails = currentStepDef ? (currentStepDef.mailTemplates || (currentStepDef.mailTemplate ? [currentStepDef.mailTemplate] : [])).map(t => fillMail(t, profile)) : []
 
