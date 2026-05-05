@@ -66,24 +66,8 @@ const ONBOARDING_STEPS = [
     mailTemplate: {
       to: 'florian.nardoux@l-expert-comptable.com',
       cc: '',
-      subject: '{{prenom}} {{nom}} Courtage / CREATION DE SOCIETE',
-      body: `Hello Florian,
-Comment tu vas ?
-
-Peux-tu, s'il te plaît, prendre contact avec {{prenom}} {{nom}} pour fixer un RDV en visioconférence avec l'expert-comptable et lancer les démarches de création ?
-
-Tu trouveras ses coordonnées ci-dessous :
-Numéro : {{telephone}}
-Mail : {{email}}
-
-Enfin, je t'envoie en pièce jointe les statuts constitutifs avec les informations mises à jour.
-
-Nous souhaitons une date d'immatriculation au 01 du M+1.
-Je reste à ta disposition si besoin.
-Bien à toi,
-{{responsable}}
-
-NB : Bien penser à mettre les statuts modifiés en PJ`,
+      subject: 'CRÉATION SOCIÉTÉ / {{societe}}',
+      body: `<p>Hello Florian,</p><p>Comment tu vas ?</p><p>Peux-tu, s'il te plaît, prendre contact avec {{prenom}} {{nom}} pour fixer un RDV en visioconférence avec l'expert-comptable et lancer les démarches de création ?</p><p>Tu trouveras ses coordonnées ci-dessous :</p><ul><li>Numéro : {{telephone}}</li><li>Mail : {{email}}</li></ul><p>Enfin, je t’envoie en pièce jointe les statuts constitutifs avec les informations mises à jour.</p><p>Nous souhaitons une date d’immatriculation au 01 du M+1.</p><p>Je reste à ta disposition si besoin.</p><p>Bien à toi,</p><p><strong>METTRE EN PJ LES STATUTS MODIFIÉS </strong></p><p>{{responsable}}</p>`,
     },
     tasks: [
       { id: 't1_1', label: 'Créer dossier {{prenom}} {{nom}} COURTAGE dans JURIDIQUE → NOS COURTIERS', links: ['dossier'] },
@@ -103,23 +87,8 @@ NB : Bien penser à mettre les statuts modifiés en PJ`,
     mailTemplate: {
       to: '{{email}}',
       cc: '',
-      subject: '{{prenom}} {{nom}} Courtage / VALIDATION IMMATRICULATION SOCIETE',
-      body: `Bonjour {{prenom}},
-
-J'espère que tu vas bien.
-
-Félicitations pour l'immatriculation de ta société {{prenom}} {{nom}} Courtage !
-
-La première étape réalisée, nous allons donc pouvoir avancer dans le processus de création.
-
-Tu vas recevoir dans la journée/soirée le pacte d'associés par mail qui sera à signer électroniquement.
-
-De notre côté, Amaury va également recevoir ce document pour signature.
-
-Je reviens vers toi après la signature du pacte pour les prochaines étapes.
-
-Bonne journée !
-{{responsable}}`,
+      subject: '{{societe}} / VALIDATION IMMATRICULATION SOCIETE',
+      body: `<p>Bonjour {{prenom}},</p><p>J’espère que tu vas bien.</p><p><strong>Félicitations pour l’immatriculation de ta société {{societe}} !</strong></p><p>La première étape réalisée, nous allons donc pouvoir avancer dans le processus de création.</p><p><strong>Tu vas recevoir dans la journée/soirée le pacte d’associés par mail qui sera à signer électroniquement.</strong></p><p>De notre côté, Amaury va également recevoir ce document pour signature.</p><p>Je reviens vers toi après la signature du pacte pour les prochaines étapes.</p><p>Bonne journée !</p><p>{{responsable}}</p>`,
     },
     tasks: [
       { id: 't2_1', label: 'Recevoir mail de validation de l\'immatriculation', links: [] },
@@ -139,37 +108,8 @@ Bonne journée !
     mailTemplate: {
       to: '{{email}}',
       cc: '',
-      subject: '{{prenom}} {{nom}} Courtage / PREPARATION DOCUMENTS COMPTE PRO',
-      body: `Bonjour {{prenom}},
-J'espère que tu vas bien.
-Nous avons bien reçu le pacte d'associés signé par Amaury et toi-même, je te remercie.
-Pour anticiper les demandes prochaines de Tiime (Outil de L'Expert-comptable) concernant l'ouverture du compte professionnel, voici un récapitulatif des documents à préparer :
-- Déclaration actionnariale
-- Extrait Kbis Evolve Courtage de moins de 3 mois
-- Registre des bénéficiaires effectifs
-
-Tu viens de recevoir un mail de YouSign pour signer la déclaration actionnariale, ainsi que les demandes pour obtenir le Registre des Bénéficiaires Effectifs.
-
-Tu trouveras en pièce jointe l'extrait Kbis d'Evolve Courtage.
-
-Concernant le Registre des bénéficiaires effectifs il te faudra ensuite, en tant que gérant de la société, envoyer le dossier de demande signé et ta CNI par mail à l'adresse suivante : certificatbe@infogreffe-siege.fr, en indiquant :
-
-en objet du mail : {{prenom}} {{nom}} Courtage - SIREN {{siren}}
-
-en corps du mail :
-
-"Bonjour,
-Ayant besoin de mon Registre des Bénéficiaires Effectifs afin de pouvoir réaliser l'ouverture de mon compte professionnel, vous pouvez retrouver en PJ le dossier de demande d'accès signé.
-De plus, en tant que gérant de la société pour laquelle je vous fait parvenir cette demande, vous pouvez également retrouver ma pièce d'identité en PJ.
-Je vous remercie par avance.
-Bonne journée"
-
-Lorsque tu auras reçu le document d'Infogreffe, pourrais-tu me le transmettre, s'il te plaît ?
-
-Une fois en possession de tous les documents, tu n'auras plus qu'à attendre le mail de Tiime te demandant ces pièces pour leur transmettre en retour.
-
-Je te souhaite une bonne journée.
-{{responsable}}`,
+      subject: '{{societe}} / PREPARATION DOCUMENTS COMPTE PRO',
+      body: `<p>Bonjour {{prenom}},</p><p>J’espère que tu vas bien.</p><p>Nous avons bien reçu le pacte d’associés signé par Amaury et toi-même, je te remercie.</p><p>Pour anticiper les demandes prochaines de Tiime (Outil de L’Expert-comptable)  concernant l’ouverture du compte professionnel, voici un récapitulatif des documents à préparer :</p><ul><li><strong>Déclaration actionnariale</strong></li><li><strong>Extrait Kbis Evolve Courtage de moins de 3 mois</strong></li><li><strong>Registre des bénéficiaires effectifs</strong></li></ul><p>Tu viens de recevoir un mail de YouSign pour signer la <strong>déclaration actionnariale, ainsi que les demandes pour obtenir le Registre des Bénéficiaires Effectifs.</strong></p><p>Tu trouveras en pièce jointe l'extrait <strong>Kbis d'Evolve Courtage.</strong></p><p>Concernant le <strong>Registre des bénéficiaires effectifs</strong> il te faudra ensuite, en tant que gérant de la société, <strong>envoyer le dossier de demande signé et ta CNI par mail à l’adresse suivante </strong>: <a href="mailto:certificatbe@infogreffe-siege.fr">certificatbe@infogreffe-siege.fr</a>, en indiquant :</p><ul><li>en objet du mail : <strong>{{societe}} - SIREN {{siren}}</strong>.</li><li>en corps du mail :</li></ul><p><em>“Bonjour, </em></p><p><em>Ayant besoin de mon Registre des Bénéficiaires Effectifs afin de pouvoir réaliser l’ouverture de mon compte professionnel, vous pouvez retrouver en PJ le dossier de demande d’accès signé.</em></p><p><em>De plus, en tant que gérant de la société pour laquelle je vous fait parvenir cette demande, vous pouvez également retrouver ma pièce d’identité en PJ.</em></p><p><em>Je vous remercie par avance.</em></p><p><em>Bonne journée”</em></p><p><strong>Lorsque tu auras reçu le document d’Infogreffe, pourrais-tu me le transmettre, s'il te plaît ?</strong></p><p>Une fois en possession de tous les documents, tu n’auras plus qu’à attendre le mail de Tiime te demandant ces pièces pour leur transmettre en retour.</p><p>Je te souhaite une bonne journée.</p><p>Bien à toi,</p><p>{{responsable}}</p>`,
     },
     tasks: [
       { id: 't3_1', label: 'Copier + remplir la Déclaration actionnariale dans le dossier Drive', links: ['declaration'] },
@@ -189,39 +129,8 @@ Je te souhaite une bonne journée.
     mailTemplate: {
       to: '{{email}}',
       cc: '',
-      subject: '{{prenom}} {{nom}} Courtage / RESPONSABILITÉ CIVILE PROFESSIONNELLE',
-      body: `Bonjour {{prenom}},
-
-J'espère que tu vas bien.
-
-Tu viens de recevoir les demandes d'adhésions RC Pro à signer et parapher électroniquement.
-Tu peux retrouver en PJ un dossier compressé avec les documents obligatoires à transmettre.
-
-Peux-tu rajouter à ce dossier s'il te plaît :
-
-- La demande d'adhésion signée et paraphée
-- Ton RIB
-
-Après avoir intégré ces documents aux autres dans le dossier merci de le compresser et de l'envoyer par mail à :
-
-Yann ARNOUD : yarnoud@verspieren.com
-En mettant en copie :
-ntouadi@verspieren.com
-rjarlot@verspieren.com
-
-En indiquant :
-
-Objet : ADHÉSION {{prenom}} {{nom}} Courtage - SIREN {{siren}}
-
-"Bonjour,
-Vous pouvez retrouver mon dossier d'adhésion complet sous format compressé en pièce jointe.
-Je reste à votre disposition pour tout complément d'information
-Bonne journée à vous"
-
-Merci de me transmettre l'attestation lorsque tu auras reçu celle-ci
-
-Bonne journée !
-{{responsable}}`,
+      subject: '{{societe}} / RESPONSABILITÉ CIVILE PROFESSIONNELLE',
+      body: `<p>Bonjour {{prenom}},</p><p>J’espère que tu vas bien.</p><p>Tu viens de recevoir les demandes d'adhésions RC Pro à signer et parapher électroniquement.</p><p>Tu peux retrouver en PJ un dossier compressé avec les documents obligatoires à transmettre.</p><p><strong>Peux-tu rajouter à ce dossier s'il te plaît :</strong></p><p><strong>- La demande d'adhésion signée et paraphée</strong></p><p><strong>- Ton RIB</strong></p><p><strong>Après avoir intégré ces documents aux autres dans le dossier merci de le compresser et de l'envoyer par mail à :</strong></p><p>Yann ARNOUD : yarnoud@verspieren.com</p><p><strong>En mettant en copie :</strong></p><p>ntouadi@verspieren.com</p><p><a href="mailto:rjarlot@verspieren.com">rjarlot@verspieren.com</a></p><p>En indiquant :</p><p>Objet : ADHÉSION {{societe}} - SIREN {{siren}}</p><p><em>&quot;Bonjour,</em></p><p><em>Vous pouvez retrouver mon dossier d'adhésion complet sous format compressé en pièce jointe.</em></p><p><em>Je reste à votre disposition pour tout complément d'information</em></p><p><em>Bonne journée à vous&quot;</em></p><p><strong>Merci de me transmettre l'attestation lorsque tu auras reçu celle-ci</strong></p><p>Bonne journée !</p><p>{{responsable}}</p>`,
     },
     tasks: [
       { id: 't4_1', label: 'Remplir le document d\'adhésion RCP IAS', links: [] },
@@ -241,29 +150,8 @@ Bonne journée !
     mailTemplate: {
       to: '{{email}}',
       cc: '',
-      subject: '{{prenom}} {{nom}} Courtage / MEDIATEUR',
-      body: `Bonjour {{prenom}},
-
-Nous venons de demander ton adhésion au médiateur MEDCONSO.
-
-En effet, depuis le 1er janvier 2016, et conformément aux articles L.611-1 et suivants et R.612 et suivants du Code de la Consommation, les professionnels ont l'obligation de proposer à tout consommateur le recours à la médiation de la consommation afin de résoudre leurs différends dans le cadre de l'exécution d'un contrat de vente ou d'une prestation de service.
-
-Tu vas recevoir un mail de la CNPM, il te faudra ensuite aller sur : https://www.medconsodev.eu/  Puis, cliquer en haut à droite sur ACCÈS PROFESSIONNEL
-
-Après t'être connecté, tu pourras visualiser le projet de convention et régler la cotisation d'adhésion.
-
-Voici tes identifiants pour te connecter :
-
-ID : {{email}}
-
-MDP : #{{prenom}}{{annee}}
-
-Ensuite, il te faudra télécharger l'attestation de convention sur ton espace et me la transmettre par mail.
-
-Je reste à ta disposition si besoin,
-
-Bonne journée !
-{{responsable}}`,
+      subject: '{{societe}} / MEDIATEUR',
+      body: `<p>Bonjour {{prenom}},</p><p>Nous venons de demander ton adhésion au médiateur MEDCONSO.</p><p><em>En effet, depuis le 1er janvier 2016, et conformément aux articles L.611-1 et suivants et R.612 et suivants du Code de la Consommation, les professionnels ont l’obligation de proposer à tout consommateur le recours à la médiation de la consommation afin de résoudre leurs différends dans le cadre de l'exécution d'un contrat de vente ou d'une prestation de service.</em></p><ul><li>Tu vas recevoir un mail de MEDCONSO, il te faudra ensuite aller sur :<a href="https://www.cnpm-mediation-consommation.eu/"> </a>https://www.medconsodev.eu/</li><li>Puis, cliquer en haut à droite sur ACCÈS PROFESSIONNEL </li><li><strong>Après t’être connecté, tu pourras visualiser le projet de convention et régler la cotisation d’adhésion.</strong></li></ul><p>Voici tes identifiants pour te connecter :</p><ul><li>ID : {{email}}</li><li>MDP : #{{prenom}}{{annee}}</li></ul><p><strong>Ensuite, il te faudra télécharger l’attestation de convention sur ton espace et me la transmettre par mail.</strong></p><p>Je reste à ta disposition si besoin,</p><p>Bonne journée !</p><p>{{responsable}}</p>`,
     },
     tasks: [
       { id: 't5_1', label: 'Remplir le formulaire CNPM (affiliation : ADHÉRENT CNCEF — PAIEMENT ANNUEL)', links: ['cnpm'] },
@@ -279,20 +167,23 @@ Bonne journée !
     optional: false,
     yousign: false,
     waitAttestation: true,
-    mailTemplate: {
-      to: '{{email}}',
-      cc: '',
-      subject: 'Adhésion CNCEF et ORIAS — {{prenom}} {{nom}} Courtage',
-      body: `Bonjour {{prenom}},
-
-Nous avons procédé à votre adhésion à la CNCEF et lancé votre immatriculation ORIAS.
-
-Ces deux démarches sont indispensables pour exercer en tant que CGP indépendant. Vous recevrez vos attestations par courrier dans les prochaines semaines.
-
-À très bientôt,
-{{responsable}}
-Evolve Investissement`,
-    },
+    mailTemplate: null,
+    mailTemplates: [
+      {
+        label: 'CNCEF',
+        to: '{{email}}',
+        cc: '',
+        subject: '{{societe}} / CNCEF - ASSOCIATION PROFESSIONNELLE',
+        body: `<p>Bonjour {{prenom}},</p><p>J’espère que tu vas bien.</p><p>Nous venons de finaliser la demande d’adhésion à la CNCEF (association professionnelle).</p><p><em>En effet, depuis le 1er avril 2022, l’adhésion à une association professionnelle est obligatoire pour tous les professionnels souhaitant s’immatriculer à l’ORIAS en tant que courtiers ou mandataires de courtiers.</em></p><p>Tu devrais donc recevoir prochainement un email de leur part. Si tu as besoin d’informations complémentaires, n’hésite pas à me transférer leurs messages. Une fois que tu auras reçu l’attestation, je te serais reconnaissant de me la transmettre.</p><p>Merci à toi et bonne journée !</p><p>{{responsable}}</p>`,
+      },
+      {
+        label: 'ORIAS',
+        to: '{{email}}',
+        cc: '',
+        subject: '{{societe}} / IMMATRICULATION ORIAS',
+        body: `<p>Bonjour {{prenom}},</p><p>Comment tu vas ?</p><p>Suite à la validation de ton adhésion à la CNCEF, il faut désormais que tu puisses <strong>t’immatriculer à l’ORIAS.</strong></p><p>Pour ce faire, je te laisse finaliser ton dossier suite au mail que tu as reçu de la part de l’ORIAS.</p><p>Voici quelques indications pour la bonne finalisation :</p><ul><li>“Je déclare que l’on ne me confie pas de fonds”</li><li>“Je déclare ne pas avoir de liens étroits avec des entités de l’ORIAS”</li><li>“Activité exercée à titre principal”</li><li>Déposer ton KBIS</li><li>Déposer ton attestation de responsabilité civile professionnelle (VERSPIERREN)</li><li>Déposer ton attestation de capacité professionnelle (Attestation employeur d’expérience OU Diplôme si Master 2 OU Certification 150h IAS 1) -&gt; n’hésite pas à me contacter si besoin</li><li>Déposer ton attestation CNCEF</li></ul><p>Je reste à ta disposition si besoin d’éléments complémentaires</p><p>Bonne journée à toi !</p><p>{{responsable}}</p>`,
+      },
+    ],
     tasks: [
       { id: 't6_1', label: 'Remplir formulaire CNCEF', links: ['cncef'] },
       { id: 't6_2', label: 'Envoyer mail CNCEF', links: [] },
@@ -312,18 +203,8 @@ Evolve Investissement`,
     mailTemplate: {
       to: '{{email}}',
       cc: '',
-      subject: 'Convention de partenariat — signature requise',
-      body: `Bonjour {{prenom}},
-
-Félicitations pour l'avancement de votre dossier !
-
-Vous allez recevoir via YouSign la convention de partenariat Evolve Investissement × {{prenom}} {{nom}} Courtage. Ce document formalise officiellement notre collaboration.
-
-Attention : merci de vérifier qu'il s'agit bien du modèle adapté à votre forme juridique (SAS ou SARL).
-
-À très bientôt,
-{{responsable}}
-Evolve Investissement`,
+      subject: '{{societe}} / CONVENTION DE PARTENARIAT',
+      body: `<p>Hello {{prenom}},</p><p>Suite à la validation de ton immatriculation à l’ORIAS, tu viens de recevoir une demande de signature électronique concernant la convention de partenariat entre EVOLVE et ta société.</p><p>À la suite de cette signature, nous pourrons entamer les démarches d’ouvertures de tes codes d’accès chez les assureurs.</p><p>Bonne journée à toi !</p><p>{{responsable}}</p>`,
     },
     tasks: [
       { id: 't7_1', label: 'Modifier la convention de partenariat (attention : modèle SAS, pas SARL)', links: ['convention_sas', 'convention_sarl'] },
@@ -563,9 +444,54 @@ function ProfileCard({ profile, step, isSelected, onSelect }) {
   )
 }
 
+
+// ── Bloc mail pré-rédigé (réutilisable) ───────────────────────────────────────
+function MailBlock({ mail, label, onCopy, onGmail }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div style={{ border: '0.5px solid #DBEAFE', borderRadius: 8, overflow: 'hidden', marginBottom: 8 }}>
+      <div onClick={() => setOpen(!open)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 10px', background: '#EEF2FF', cursor: 'pointer' }}>
+        <span style={{ fontSize: 10, fontWeight: 600, color: '#4338CA' }}>✉ Mail — {label}</span>
+        <span style={{ fontSize: 10, color: '#4338CA' }}>{open ? '▴' : '▾'}</span>
+      </div>
+      {open && (
+        <div style={{ padding: '10px 12px', background: 'white' }}>
+          {[
+            { lbl: 'À', val: mail.to },
+            mail.cc ? { lbl: 'CC', val: mail.cc } : null,
+            { lbl: 'Objet', val: mail.subject },
+          ].filter(Boolean).map(({ lbl, val }) => (
+            <div key={lbl} style={{ marginBottom: 6 }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: '#aaa', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 2 }}>{lbl}</div>
+              <div style={{ fontSize: 10, color: '#333', background: '#F5F5F5', borderRadius: 4, padding: '4px 8px' }}>{val}</div>
+            </div>
+          ))}
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ fontSize: 9, fontWeight: 700, color: '#aaa', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 2 }}>Corps</div>
+            <div
+              style={{ fontSize: 10, color: '#333', background: '#F5F5F5', borderRadius: 4, padding: '6px 8px', lineHeight: 1.6, maxHeight: 220, overflowY: 'auto', userSelect: 'text' }}
+              dangerouslySetInnerHTML={{ __html: bodyToHtml(mail.body) }}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button type="button" onClick={onCopy} style={{ flex: 1, padding: '6px 0', borderRadius: 6, border: '0.5px solid #D5D0C8', background: 'white', fontSize: 10, fontWeight: 600, color: '#555', cursor: 'pointer' }}>
+              Copier le corps
+            </button>
+            <button type="button" onClick={onGmail} style={{ flex: 1, padding: '6px 0', borderRadius: 6, border: 'none', background: ACCENT, fontSize: 10, fontWeight: 600, color: 'white', cursor: 'pointer' }}>
+              Gmail + copier ↗
+            </button>
+          </div>
+          <div style={{ fontSize: 9, color: '#aaa', marginTop: 4, textAlign: 'center' }}>
+            Gmail s'ouvre avec À + Objet pré-remplis — colle le corps avec Ctrl+V
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Panneau latéral ────────────────────────────────────────────────────────────
 function SidePanel({ profile, steps, stepNotes, taskNotes, onClose, onToggleTask, onAdvance, onTaskNote, onStepNote }) {
-  const [mailOpen, setMailOpen] = useState(false)
   const days = daysSince(profile.start)
   const currentStepDef = ONBOARDING_STEPS.find((s) => s.id === profile.step)
   const totalTasks = currentStepDef?.tasks.length || 0
@@ -573,22 +499,22 @@ function SidePanel({ profile, steps, stepNotes, taskNotes, onClose, onToggleTask
   const allDone    = doneTasks === totalTasks && totalTasks > 0
   const isLastStep = profile.step === 8
   const currentVisibleIdx = steps.findIndex((s) => s.id === profile.step)
-  const filledMail = currentStepDef ? fillMail(currentStepDef.mailTemplate, profile) : null
+  const filledMails = currentStepDef ? (currentStepDef.mailTemplates || (currentStepDef.mailTemplate ? [currentStepDef.mailTemplate] : [])).map(t => fillMail(t, profile)) : []
 
-  const copyMailBody = () => {
-    if (!filledMail) return
-    const html = bodyToHtml(filledMail.body)
-    copyAsHtml(html, filledMail.body)
+  const copyMailBody = (mail) => {
+    if (!mail) return
+    const html = bodyToHtml(mail.body)
+    copyAsHtml(html, mail.body)
   }
 
-  const openGmail = () => {
-    if (!filledMail) return
+  const openGmail = (mail) => {
+    if (!mail) return
     // Ouvre Gmail avec destinataire + objet pré-remplis — coller le corps avec Ctrl+V après
-    const params = new URLSearchParams({ to: filledMail.to, su: filledMail.subject })
-    if (filledMail.cc) params.set('cc', filledMail.cc)
+    const params = new URLSearchParams({ to: mail.to, su: mail.subject })
+    if (mail.cc) params.set('cc', mail.cc)
     window.open(`https://mail.google.com/mail/?view=cm&fs=1&${params.toString()}`, '_blank')
     // Copie simultanée du corps dans le presse-papier
-    copyMailBody()
+    copyMailBody(mail)
   }
 
   // Replace task label placeholders
@@ -646,7 +572,7 @@ function SidePanel({ profile, steps, stepNotes, taskNotes, onClose, onToggleTask
                 </span>
                 {isActive && (
                   <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                    {step.mailTemplate && <span style={{ fontSize: 9, background: '#EEF2FF', color: '#4338CA', padding: '2px 6px', borderRadius: 8, fontWeight: 600 }}>✉</span>}
+                    {(step.mailTemplate || step.mailTemplates?.length > 0) && <span style={{ fontSize: 9, background: '#EEF2FF', color: '#4338CA', padding: '2px 6px', borderRadius: 8, fontWeight: 600 }}>✉</span>}
                     {step.yousign       && <span style={{ fontSize: 9, background: '#FEF3C7', color: '#D97706', padding: '2px 6px', borderRadius: 8, fontWeight: 600 }}>✍</span>}
                     {step.waitAttestation && <span style={{ fontSize: 9, background: '#F0FDF4', color: '#16a34a', padding: '2px 6px', borderRadius: 8, fontWeight: 600 }}>⏳</span>}
                   </div>
@@ -716,47 +642,16 @@ function SidePanel({ profile, steps, stepNotes, taskNotes, onClose, onToggleTask
                     />
                   </div>
 
-                  {/* Bloc mail pré-rédigé */}
-                  {filledMail && (
-                    <div style={{ border: '0.5px solid #DBEAFE', borderRadius: 8, overflow: 'hidden', marginBottom: 8 }}>
-                      <div onClick={() => setMailOpen(!mailOpen)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 10px', background: '#EEF2FF', cursor: 'pointer' }}>
-                        <span style={{ fontSize: 10, fontWeight: 600, color: '#4338CA' }}>✉ Mail pré-rédigé — {step.short}</span>
-                        <span style={{ fontSize: 10, color: '#4338CA' }}>{mailOpen ? '▴' : '▾'}</span>
-                      </div>
-                      {mailOpen && (
-                        <div style={{ padding: '10px 12px', background: 'white' }}>
-                          {[
-                            { lbl: 'À', val: filledMail.to },
-                            filledMail.cc ? { lbl: 'CC', val: filledMail.cc } : null,
-                            { lbl: 'Objet', val: filledMail.subject },
-                          ].filter(Boolean).map(({ lbl, val }) => (
-                            <div key={lbl} style={{ marginBottom: 6 }}>
-                              <div style={{ fontSize: 9, fontWeight: 700, color: '#aaa', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 2 }}>{lbl}</div>
-                              <div style={{ fontSize: 10, color: '#333', background: '#F5F5F5', borderRadius: 4, padding: '4px 8px' }}>{val}</div>
-                            </div>
-                          ))}
-                          <div style={{ marginBottom: 8 }}>
-                            <div style={{ fontSize: 9, fontWeight: 700, color: '#aaa', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 2 }}>Corps</div>
-                            <div
-                              style={{ fontSize: 10, color: '#333', background: '#F5F5F5', borderRadius: 4, padding: '6px 8px', lineHeight: 1.6, maxHeight: 220, overflowY: 'auto', userSelect: 'text' }}
-                              dangerouslySetInnerHTML={{ __html: bodyToHtml(filledMail.body) }}
-                            />
-                          </div>
-                          <div style={{ display: 'flex', gap: 6 }}>
-                            <button type="button" onClick={copyMailBody} style={{ flex: 1, padding: '6px 0', borderRadius: 6, border: '0.5px solid #D5D0C8', background: 'white', fontSize: 10, fontWeight: 600, color: '#555', cursor: 'pointer' }}>
-                              Copier le corps
-                            </button>
-                            <button type="button" onClick={openGmail} style={{ flex: 1, padding: '6px 0', borderRadius: 6, border: 'none', background: ACCENT, fontSize: 10, fontWeight: 600, color: 'white', cursor: 'pointer' }}>
-                              Gmail + copier ↗
-                            </button>
-                          </div>
-                          <div style={{ fontSize: 9, color: '#aaa', marginTop: 4, textAlign: 'center' }}>
-                            Gmail s'ouvre avec À + Objet pré-remplis — colle le corps avec Ctrl+V
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  {/* Blocs mails pré-rédigés */}
+                  {filledMails.map((mail, mIdx) => (
+                    <MailBlock
+                      key={mIdx}
+                      mail={mail}
+                      label={mail.label || step.short}
+                      onCopy={() => copyMailBody(mail)}
+                      onGmail={() => openGmail(mail)}
+                    />
+                  ))}
 
                   {/* Bouton avancer */}
                   <button type="button" onClick={() => { if (allDone) onAdvance(profile.id) }}
