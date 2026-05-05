@@ -443,6 +443,14 @@ export default function Onboarding() {
     })
   }, [])
 
+  // ── supprimer un profil ────────────────────────────────────────────────────
+  const deleteProfile = useCallback(async (profileId) => {
+    const { error } = await supabase.from('onboarding_profiles').delete().eq('profile_id', profileId)
+    if (error) { console.error('deleteProfile error:', error); return }
+    setProfiles((prev) => prev.filter((x) => x.id !== profileId))
+    setSelectedId(null)
+  }, [])
+
   // ── avancer d'étape ────────────────────────────────────────────────────────
   const advanceStep = useCallback((profileId) => {
     setProfiles((prev) => {
@@ -585,6 +593,7 @@ export default function Onboarding() {
           onAdvance={advanceStep}
           onTaskNote={setTaskNote}
           onStepNote={setStepNote}
+          onDelete={deleteProfile}
         />
       )}
     </div>
@@ -701,7 +710,8 @@ function MailBlock({ mail, label, onCopy, onGmail }) {
 }
 
 // ── Modale centrée ────────────────────────────────────────────────────────────
-function ProfileModal({ profile, steps, stepNotes, taskNotes, onClose, onToggleTask, onAdvance, onTaskNote, onStepNote }) {
+function ProfileModal({ profile, steps, stepNotes, taskNotes, onClose, onToggleTask, onAdvance, onTaskNote, onStepNote, onDelete }) {
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const days = daysSince(profile.start)
   const currentStepDef = ONBOARDING_STEPS.find((s) => s.id === profile.step)
   const totalTasks = currentStepDef?.tasks.length || 0
@@ -757,6 +767,16 @@ function ProfileModal({ profile, steps, stepNotes, taskNotes, onClose, onToggleT
                 <span style={{ fontSize: 10, background: 'rgba(210,171,118,0.18)', color: GOLD, padding: '3px 10px', borderRadius: 20, border: '0.5px solid rgba(210,171,118,0.3)' }}>
                   {profile.owner}
                 </span>
+              )}
+              {/* Bouton suppression avec confirmation */}
+              {confirmDelete ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 11, color: '#FCA5A5' }}>Supprimer ?</span>
+                  <button type="button" onClick={() => onDelete(profile.id)} style={{ background: '#DC2626', border: 'none', borderRadius: 6, padding: '4px 10px', color: 'white', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>Oui</button>
+                  <button type="button" onClick={() => setConfirmDelete(false)} style={{ background: 'none', border: '0.5px solid rgba(255,255,255,0.2)', borderRadius: 6, padding: '4px 10px', color: 'rgba(255,255,255,0.6)', fontSize: 11, cursor: 'pointer' }}>Non</button>
+                </div>
+              ) : (
+                <button type="button" onClick={() => setConfirmDelete(true)} title="Supprimer ce profil" style={{ background: 'none', border: '0.5px solid rgba(255,255,255,0.15)', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.4)', fontSize: 13, cursor: 'pointer' }}>🗑</button>
               )}
               <button type="button" onClick={onClose} style={{ background: 'none', border: '0.5px solid rgba(255,255,255,0.2)', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.6)', fontSize: 16, cursor: 'pointer' }}>✕</button>
             </div>
