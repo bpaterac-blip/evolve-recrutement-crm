@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 
 // ── Couleurs ──────────────────────────────────────────────────────────────────
 const ACCENT = '#173731'
@@ -249,12 +250,46 @@ const OWNER_STYLE = {
 
 // ── Composant principal ────────────────────────────────────────────────────────
 export default function Onboarding() {
+  const location = useLocation()
   const [showOptional, setShowOptional] = useState(false)
   const [selectedId,   setSelectedId]   = useState(null)
   const [profiles,     setProfiles]     = useState(MOCK_PROFILES)
   const [completed,    setCompleted]    = useState([])
   const [stepNotes,    setStepNotes]    = useState({})  // key: `${profileId}-s${stepId}`
   const [taskNotes,    setTaskNotes]    = useState({})  // key: `${profileId}-${taskId}`
+  const [newProfileBanner, setNewProfileBanner] = useState(null) // banner de confirmation
+
+  // Injection d'un profil depuis la Pipeline (navigation state)
+  useEffect(() => {
+    const incoming = location.state?.onboardingProfile
+    if (!incoming) return
+    // Éviter les doublons si rechargement
+    setProfiles((prev) => {
+      const alreadyIn = prev.some((p) => p.id === incoming.id)
+      if (alreadyIn) return prev
+      const today = new Date().toISOString().split('T')[0]
+      const newP = {
+        id: incoming.id,
+        fn: incoming.fn,
+        ln: incoming.ln,
+        co: incoming.co || '',
+        email: incoming.email || '',
+        phone: incoming.phone || '',
+        siren: incoming.siren || '',
+        owner: incoming.owner || 'Baptiste',
+        step: 1,
+        start: today,
+        session: '',
+        done: {},
+      }
+      setNewProfileBanner(newP)
+      return [newP, ...prev]
+    })
+    // Auto-sélectionner le profil ajouté
+    setSelectedId(incoming.id)
+    // Effacer le state de navigation pour éviter les réinjections
+    window.history.replaceState({}, document.title)
+  }, [])  // eslint-disable-line
 
   const visibleSteps = ONBOARDING_STEPS.filter((s) => showOptional || !s.optional)
 
@@ -362,6 +397,18 @@ export default function Onboarding() {
           </div>
         </div>
       </div>
+
+      {/* ── Banner nouveau profil ajouté ── */}
+      {newProfileBanner && (
+        <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 9999, background: ACCENT, color: 'white', borderRadius: 10, padding: '12px 20px', boxShadow: '0 4px 16px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', gap: 12, minWidth: 320 }}>
+          <span style={{ fontSize: 18 }}>🎉</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>{newProfileBanner.fn} {newProfileBanner.ln} ajouté à l'onboarding</div>
+            <div style={{ fontSize: 11, color: GOLD, marginTop: 2 }}>Étape 1 — Création société</div>
+          </div>
+          <button type="button" onClick={() => setNewProfileBanner(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', fontSize: 16, cursor: 'pointer', padding: 2 }}>✕</button>
+        </div>
+      )}
 
       {/* ── Panneau latéral ── */}
       {selectedProfile && (

@@ -689,6 +689,7 @@ export default function Pipeline() {
   const [editSelectedSessionId, setEditSelectedSessionId] = useState('')
   const [profileToAssign, setProfileToAssign] = useState(null)
   const [showSessionModal, setShowSessionModal] = useState(false)
+  const [onboardingProposal, setOnboardingProposal] = useState(null) // profil à proposer pour l'onboarding
   const [sessions, setSessions] = useState([])
   const [sessionsWithCount, setSessionsWithCount] = useState([])
   const [sessionsLoading, setSessionsLoading] = useState(false)
@@ -2045,6 +2046,14 @@ export default function Pipeline() {
                       </button>
                     </div>
                   )}
+                  {/* Bouton onboarding */}
+                  <button
+                    type="button"
+                    onClick={() => setOnboardingProposal({ id: displayProfile.id, fn: displayProfile.fn, ln: displayProfile.ln, co: displayProfile.co, mail: displayProfile.mail, phone: displayProfile.phone, owner_full_name: displayProfile.owner_full_name })}
+                    style={{ marginTop: 8, width: '100%', padding: '7px 0', borderRadius: 8, border: 'none', background: '#173731', color: '#D2AB76', fontSize: 11, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                  >
+                    🚀 Démarrer l'onboarding
+                  </button>
                 </div>
               )}
               <div style={{ height: 1, background: 'rgba(0,0,0,0.06)', margin: '16px 0' }} />
@@ -3038,6 +3047,63 @@ export default function Pipeline() {
           />
         </div>
       )}
+      {/* ── MODALE PROPOSITION ONBOARDING ────────────────────────────────────── */}
+      {onboardingProposal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setOnboardingProposal(null)}>
+          <div style={{ background: '#F5F0E8', borderRadius: 14, boxShadow: '0 8px 32px rgba(0,0,0,0.18)', width: 400, overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div style={{ background: '#173731', padding: '20px 24px', textAlign: 'center' }}>
+              <div style={{ fontSize: 28, marginBottom: 6 }}>🎉</div>
+              <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 18, fontWeight: 600, color: 'white', lineHeight: 1.3 }}>
+                {onboardingProposal.fn} {onboardingProposal.ln} est recruté !
+              </div>
+              <div style={{ fontSize: 12, color: '#D2AB76', marginTop: 4 }}>
+                Démarrer le process d'onboarding ?
+              </div>
+            </div>
+            {/* Body */}
+            <div style={{ padding: '20px 24px' }}>
+              <p style={{ fontSize: 13, color: '#555', lineHeight: 1.6, margin: '0 0 20px' }}>
+                Le profil sera ajouté à la page <strong>Onboarding CGP</strong> à l'étape 1 — Création société. Vous pouvez suivre toutes les démarches administratives depuis cette page.
+              </p>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const p = onboardingProposal
+                    setOnboardingProposal(null)
+                    navigate('/onboarding', {
+                      state: {
+                        onboardingProfile: {
+                          id: p.id,
+                          fn: p.fn || p.first_name || '',
+                          ln: p.ln || p.last_name || '',
+                          co: p.co || '',
+                          email: p.mail || p.email || '',
+                          phone: p.phone || '',
+                          siren: '',
+                          owner: p.owner_full_name || userProfile?.full_name || user?.email || 'Baptiste',
+                        },
+                      },
+                    })
+                  }}
+                  style={{ flex: 2, padding: '10px 0', borderRadius: 8, border: 'none', background: '#173731', color: '#D2AB76', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                >
+                  Oui, démarrer l'onboarding →
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOnboardingProposal(null)}
+                  style={{ flex: 1, padding: '10px 0', borderRadius: 8, border: '1px solid #D5D0C8', background: 'white', fontSize: 13, color: '#666', cursor: 'pointer' }}
+                >
+                  Plus tard
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showSessionModal && profileToAssign && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => { setShowSessionModal(false); setProfileToAssign(null); setShowCreateSession(false); setNewSession({ date_session: '', lieu: '', places_total: 6, statut: 'planifiée', notes: '' }); }}>
           <div style={{ background: '#F5F0E8', borderRadius: 12, boxShadow: '0 4px 20px rgba(0,0,0,0.15)', minWidth: 400, maxWidth: 480, overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
@@ -3071,11 +3137,11 @@ export default function Pipeline() {
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 12, marginTop: 20, paddingTop: 16, paddingLeft: 24, paddingRight: 24, paddingBottom: 24, borderTop: '1px solid rgba(0,0,0,0.06)' }}>
               {showCreateSession ? (
-                <button type="button" onClick={async () => { if (!newSession.date_session || !profileToAssign?.id) return; const { data: newSess } = await supabase.from('sessions_formation').insert({ date_session: newSession.date_session, lieu: newSession.lieu || null, places_total: newSession.places_total, statut: newSession.statut, notes: newSession.notes || null }).select().single(); if (newSess?.id) { await supabase.from('profiles').update({ session_formation_id: newSess.id, integration_confirmed: true }).eq('id', profileToAssign.id); setShowSessionModal(false); setProfileToAssign(null); setShowCreateSession(false); setNewSession({ date_session: '', lieu: '', places_total: 6, statut: 'planifiée', notes: '' }); fetchProfiles(); window.dispatchEvent(new CustomEvent('evolve:session-updated')); } }} disabled={!newSession.date_session} style={{ padding: '10px 16px', fontSize: 13, border: 'none', borderRadius: 6, background: ACCENT, color: 'white', cursor: 'pointer', opacity: newSession.date_session ? 1 : 0.6 }}>Créer et assigner</button>
+                <button type="button" onClick={async () => { if (!newSession.date_session || !profileToAssign?.id) return; const { data: newSess } = await supabase.from('sessions_formation').insert({ date_session: newSession.date_session, lieu: newSession.lieu || null, places_total: newSession.places_total, statut: newSession.statut, notes: newSession.notes || null }).select().single(); if (newSess?.id) { await supabase.from('profiles').update({ session_formation_id: newSess.id, integration_confirmed: true }).eq('id', profileToAssign.id); const p = profileToAssign; setShowSessionModal(false); setProfileToAssign(null); setShowCreateSession(false); setNewSession({ date_session: '', lieu: '', places_total: 6, statut: 'planifiée', notes: '' }); fetchProfiles(); window.dispatchEvent(new CustomEvent('evolve:session-updated')); setOnboardingProposal(p); } }} disabled={!newSession.date_session} style={{ padding: '10px 16px', fontSize: 13, border: 'none', borderRadius: 6, background: ACCENT, color: 'white', cursor: 'pointer', opacity: newSession.date_session ? 1 : 0.6 }}>Créer et assigner</button>
               ) : (
-                <button type="button" onClick={async () => { if (!selectedSession || !profileToAssign?.id) return; const sess = sessionsWithCount.find((s) => s.id === selectedSession); const updates = { integration_confirmed: true }; if (!profileToAssign.session_formation_id) { updates.session_formation_id = selectedSession; updates.integration_periode = sess?.periode ?? null; updates.integration_annee = sess?.annee ?? null; } await supabase.from('profiles').update(updates).eq('id', profileToAssign.id); setShowSessionModal(false); setProfileToAssign(null); fetchProfiles(); window.dispatchEvent(new CustomEvent('evolve:session-updated')); }} disabled={!selectedSession} style={{ padding: '10px 16px', fontSize: 13, border: 'none', borderRadius: 6, background: ACCENT, color: 'white', cursor: 'pointer', opacity: selectedSession ? 1 : 0.6 }}>Assigner à cette session</button>
+                <button type="button" onClick={async () => { if (!selectedSession || !profileToAssign?.id) return; const sess = sessionsWithCount.find((s) => s.id === selectedSession); const updates = { integration_confirmed: true }; if (!profileToAssign.session_formation_id) { updates.session_formation_id = selectedSession; updates.integration_periode = sess?.periode ?? null; updates.integration_annee = sess?.annee ?? null; } await supabase.from('profiles').update(updates).eq('id', profileToAssign.id); const p = profileToAssign; setShowSessionModal(false); setProfileToAssign(null); fetchProfiles(); window.dispatchEvent(new CustomEvent('evolve:session-updated')); setOnboardingProposal(p); }} disabled={!selectedSession} style={{ padding: '10px 16px', fontSize: 13, border: 'none', borderRadius: 6, background: ACCENT, color: 'white', cursor: 'pointer', opacity: selectedSession ? 1 : 0.6 }}>Assigner à cette session</button>
               )}
-              <button type="button" onClick={() => { setShowSessionModal(false); setProfileToAssign(null); setShowCreateSession(false); fetchProfiles(); }} style={{ padding: '10px 16px', fontSize: 13, border: `1px solid ${ACCENT}`, borderRadius: 6, background: 'transparent', color: ACCENT, cursor: 'pointer' }}>Passer sans assigner</button>
+              <button type="button" onClick={() => { const p = profileToAssign; setShowSessionModal(false); setProfileToAssign(null); setShowCreateSession(false); fetchProfiles(); setOnboardingProposal(p); }} style={{ padding: '10px 16px', fontSize: 13, border: `1px solid ${ACCENT}`, borderRadius: 6, background: 'transparent', color: ACCENT, cursor: 'pointer' }}>Passer sans assigner</button>
             </div>
           </div>
         </div>
