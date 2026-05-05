@@ -14,7 +14,7 @@ const L = {
   statuts_sarl:    { label: 'Statuts SARL', url: 'https://docs.google.com/document/d/1_jjDXaz4-X7mLx5LXJ4x7SWS4lWPVXwa8czM7Fd_d8c/edit' },
   mail_pacte:      { label: 'Mail pacte d\'associés', url: 'https://docs.google.com/document/d/1hDf0Gqivt0vR-944o7u9-OYCxjXCPJEF-mZst9gF15Y/edit' },
   pacte:           { label: 'Pacte d\'associés', url: 'https://docs.google.com/document/d/1z-FUO7iBc5dER5-5CYek78WQUuekaF5z/edit' },
-  yousign_ids:     { label: 'IDs YouSign', url: 'https://docs.google.com/spreadsheets/d/1G98pOlYxTIlJgbZuSSYWMFepxxUEfDntWagNH3TnKPA/edit' },
+  yousign_ids:     { label: 'IDs YouSign', url: 'https://docs.google.com/spreadsheets/d/1G98pOlYxTIlJgbZuSSYWMFepxxUEfDntWagNH3TnKPA/edit?gid=761556900#gid=761556900' },
   declaration:     { label: 'Déclaration actionnariale', url: 'https://docs.google.com/document/d/1jpHUEHrrPdppFwbGDJB1gBkfG3O_z_SE/edit' },
   rbe:             { label: 'Formulaire RBE', url: 'https://drive.google.com/file/d/1bXixeh7H20uDH1PqBYyL-uplktEvQIX5/view' },
   lettre_acces:    { label: 'Lettre d\'accès', url: 'https://drive.google.com/file/d/1IXsYc3GSxJf-zrJw5mWwMtBUPvpBDMVu/view' },
