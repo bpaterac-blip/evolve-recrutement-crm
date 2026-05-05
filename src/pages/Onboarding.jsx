@@ -443,11 +443,12 @@ export default function Onboarding() {
     })
   }, [])
 
-  // ── supprimer un profil ────────────────────────────────────────────────────
+  // ── supprimer un profil (actif ou complété) ───────────────────────────────
   const deleteProfile = useCallback(async (profileId) => {
     const { error } = await supabase.from('onboarding_profiles').delete().eq('profile_id', profileId)
     if (error) { console.error('deleteProfile error:', error); return }
     setProfiles((prev) => prev.filter((x) => x.id !== profileId))
+    setCompleted((prev) => prev.filter((x) => x.id !== profileId))
     setSelectedId(null)
   }, [])
 
@@ -554,11 +555,7 @@ export default function Onboarding() {
               </div>
               <div style={{ flex: 1, overflowY: 'auto', background: '#F0FDF4', border: '1px solid #BBF7D0', borderTop: 'none', borderRadius: '0 0 10px 10px', padding: 8, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 120 }}>
                 {completed.map((p) => (
-                  <div key={p.id} style={{ background: 'white', borderRadius: 8, border: '1px solid #BBF7D0', padding: '10px 12px' }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: '#16a34a' }}>✓ {p.fn} {p.ln}</div>
-                    <div style={{ fontSize: 10, color: '#888', marginTop: 2 }}>{p.co}</div>
-                    <div style={{ fontSize: 10, color: '#16a34a', marginTop: 4 }}>📅 {p.session}</div>
-                  </div>
+                  <CompletedCard key={p.id} profile={p} onDelete={deleteProfile} />
                 ))}
                 {completed.length === 0 && (
                   <div style={{ textAlign: 'center', padding: '24px 0', fontSize: 11, color: '#bbb' }}>Aucun pour l'instant</div>
@@ -619,6 +616,33 @@ function KanbanColumn({ step, idx, profiles, selectedId, onSelect }) {
           <ProfileCard key={profile.id} profile={profile} step={step} isSelected={selectedId === profile.id} onSelect={onSelect} />
         ))}
         {profiles.length === 0 && <div style={{ textAlign: 'center', padding: '24px 0', fontSize: 11, color: '#bbb' }}>Aucun CGP</div>}
+      </div>
+    </div>
+  )
+}
+
+// ── Carte profil complété (avec suppression) ───────────────────────────────────
+function CompletedCard({ profile, onDelete }) {
+  const [confirm, setConfirm] = useState(false)
+  return (
+    <div style={{ background: 'white', borderRadius: 8, border: '1px solid #BBF7D0', padding: '10px 12px', position: 'relative' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 6 }}>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#16a34a' }}>✓ {profile.fn} {profile.ln}</div>
+          <div style={{ fontSize: 10, color: '#888', marginTop: 2 }}>{profile.co}</div>
+          <div style={{ fontSize: 10, color: '#16a34a', marginTop: 4 }}>📅 {profile.session}</div>
+        </div>
+        {confirm ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end', flexShrink: 0 }}>
+            <span style={{ fontSize: 10, color: '#DC2626', fontWeight: 600 }}>Supprimer ?</span>
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button type="button" onClick={() => onDelete(profile.id)} style={{ background: '#DC2626', border: 'none', borderRadius: 5, padding: '2px 8px', color: 'white', fontSize: 10, fontWeight: 600, cursor: 'pointer' }}>Oui</button>
+              <button type="button" onClick={() => setConfirm(false)} style={{ background: '#F3F4F6', border: 'none', borderRadius: 5, padding: '2px 8px', color: '#666', fontSize: 10, cursor: 'pointer' }}>Non</button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" onClick={() => setConfirm(true)} title="Supprimer" style={{ background: 'none', border: 'none', color: '#ccc', fontSize: 13, cursor: 'pointer', padding: 2, flexShrink: 0, lineHeight: 1 }}>🗑</button>
+        )}
       </div>
     </div>
   )
