@@ -1271,7 +1271,32 @@ export default function Pipeline() {
     const profile = all.find((p) => String(p.id) === String(profileId))
     if (!profile || profile.stg === newStage) return
 
-    // Always route through pendingStageChange to allow intermediate stage selection
+    // Pour Recruté : pas de modale de date — on exécute directement
+    if (newStage === 'Recruté') {
+      const today = new Date().toISOString().split('T')[0]
+      const oldStage = profile.stg ?? '—'
+      changeStage(profileId, 'Recruté')
+      if (useSupabase) {
+        await supabase.from('profiles').update({ stage: 'Recruté', integration_confirmed: true }).eq('id', profile.id)
+        await supabase.from('activities').insert({
+          profile_id: profile.id,
+          activity_type: 'stage_change',
+          type: 'stage_change',
+          old_value: oldStage,
+          new_value: 'Recruté',
+          note: `${oldStage} → Recruté`,
+          date: today,
+          icon: 'refresh',
+          source: 'manual',
+        })
+        fetchProfiles()
+      }
+      setProfileToAssign({ id: profile.id, fn: profile.fn, ln: profile.ln, session_formation_id: profile.session_formation_id, stg: 'Recruté' })
+      setShowSessionModal(true)
+      return
+    }
+
+    // Autres stades : modale de confirmation avec date
     const intermediate = getIntermediateStages(profile.stg, newStage)
     setIntermediateStages(intermediate)
     setPendingStageChange({ profileId, profile, newStage })
@@ -2627,7 +2652,7 @@ export default function Pipeline() {
           </div>
         </div>
       )}
-      {pendingStageChange && pendingStageChange.newStage !== 'Recruté' && (() => {
+      {pendingStageChange && (() => {
         const { profile, newStage } = pendingStageChange
         const currentStage = profile.stg || 'R0'
         return (
@@ -2877,7 +2902,7 @@ export default function Pipeline() {
                 <button
                   type="button"
                   onClick={handleConfirmStageChange}
-                  disabled={!stageChangeDate.trim() || !stageChangeTime || (currentStage === 'R1' && !r1ScoringConfirmed)}
+                  disabled={pendingStageChange?.newStage !== 'Recruté' && (!stageChangeDate.trim() || !stageChangeTime || (currentStage === 'R1' && !r1ScoringConfirmed))}
                   title={currentStage === 'R1' && !r1ScoringConfirmed ? 'Confirmez avoir rempli la grille de notation' : undefined}
                   style={{
                     padding: '8px 16px',
@@ -2886,8 +2911,8 @@ export default function Pipeline() {
                     borderRadius: 6,
                     background: '#173731',
                     color: '#E7E0D0',
-                    cursor: (stageChangeDate.trim() && stageChangeTime && (currentStage !== 'R1' || r1ScoringConfirmed)) ? 'pointer' : 'not-allowed',
-                    opacity: (stageChangeDate.trim() && stageChangeTime && (currentStage !== 'R1' || r1ScoringConfirmed)) ? 1 : 0.4,
+                    cursor: (pendingStageChange?.newStage === 'Recruté' || (stageChangeDate.trim() && stageChangeTime && (currentStage !== 'R1' || r1ScoringConfirmed))) ? 'pointer' : 'not-allowed',
+                    opacity: (pendingStageChange?.newStage === 'Recruté' || (stageChangeDate.trim() && stageChangeTime && (currentStage !== 'R1' || r1ScoringConfirmed))) ? 1 : 0.4,
                   }}
                 >Confirmer →</button>
               </div>
