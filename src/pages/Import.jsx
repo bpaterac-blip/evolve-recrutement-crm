@@ -231,6 +231,24 @@ const generateConversationSummary = async (messages, apiKey) => {
 const CHAT_SUGGESTIONS = ['Pourquoi ce score ?', 'Quel séquence Lemlist recommandes-tu ?', 'Points forts et points faibles ?', 'Est-il vraiment prioritaire ?']
 const CORRECTION_SUGGESTIONS = ['Employeur non reconnu', 'A déjà travaillé en cabinet CGP', 'Titre mal interprété', 'Ancienneté incorrecte', 'Profil hors cible']
 
+const CORRECTION_PRIORITY_OPTS = [
+  { label: 'Contact immédiat', color: '#065F46', bg: '#D1FAE5', border: '#34D399', score: 90 },
+  { label: 'Prioritaire', color: '#15803d', bg: '#dcfce7', border: '#86efac', score: 75 },
+  { label: 'À travailler', color: '#a16207', bg: '#fefce8', border: '#fde68a', score: 55 },
+  { label: 'À écarter', color: '#dc2626', bg: '#fef2f2', border: '#fca5a5', score: 20 },
+]
+
+// Detect suggested category from IA response text
+function detectIACategoryFromText(text) {
+  if (!text) return null
+  const t = text.toLowerCase()
+  if (t.includes('contact immédiat') || t.includes('contacter immédiatement') || t.includes('à contacter en priorité absolue')) return 'Contact immédiat'
+  if (t.includes('prioritaire') && !t.includes('non prioritaire') && !t.includes('pas prioritaire')) return 'Prioritaire'
+  if (t.includes('à travailler') || t.includes('à nurture') || t.includes('potentiel à développer')) return 'À travailler'
+  if (t.includes('à écarter') || t.includes('hors cible') || t.includes('ne pas contacter') || t.includes('déconseille')) return 'À écarter'
+  return null
+}
+
 const ProfileImportModal = ({
   profile,
   rowKey,
@@ -251,6 +269,7 @@ const ProfileImportModal = ({
   const [correctedScore, setCorrectedScore] = useState(profile?.sc ?? 0)
   const [priorityLabel, setPriorityLabel] = useState('')
   const [correctionReason, setCorrectionReason] = useState('')
+  const [iaValidating, setIaValidating] = useState(false)
   const messagesEndRef = useRef(null)
   const initialCalledRef = useRef(false)
 
@@ -320,6 +339,37 @@ Applique ces instructions en priorité dans ton analyse. Réponds toujours en fr
 
   const addCorrectionSuggestion = (s) => {
     setCorrectionReason((prev) => (prev ? `${prev}\n${s}` : s))
+  }
+
+  // Validate IA suggestion directly from last assistant message
+  const handleValidateIASuggestion = async () => {
+    const lastAssistantMsg = [...(messages || [])].reverse().find((m) => m.role === 'assistant')
+    if (!lastAssistantMsg) return
+    const detectedCategory = detectIACategoryFromText(lastAssistantMsg.content)
+    const opt = CORRECTION_PRIORITY_OPTS.find((o) => o.label === detectedCategory)
+    const newScore = opt ? opt.score : profile?.sc ?? 0
+    setIaValidating(true)
+    try {
+      if (useSupabase) {
+        await supabase.from('scoring_feedback').insert({
+          profile_id: profile?.id || null,
+          profile_data: !profile?.id ? { name: `${profile?.fn || ''} ${profile?.ln || ''}`.trim(), company: profile?.co, title: profile?.ti, score: profile?.sc } : null,
+          original_score: profile?.sc ?? 0,
+          corrected_score: newScore,
+          reason: `Validation suggestion IA : ${detectedCategory || 'catégorie détectée'}`,
+          priority_label: detectedCategory || null,
+          author: userProfile?.full_name?.trim() || user?.email || null,
+          consolidated: false,
+        })
+      }
+      onProfileCorrection?.(profile, { sc: newScore, _correctedByUser: true, _correctedAt: Date.now() })
+      showNotif(`✓ Suggestion IA validée : ${detectedCategory || 'score mis à jour'}`)
+      onClose()
+    } catch (err) {
+      showNotif(`Erreur : ${err?.message}`)
+    } finally {
+      setIaValidating(false)
+    }
   }
 
   const handleSaveCorrection = async () => {
@@ -442,6 +492,28 @@ Applique ces instructions en priorité dans ton analyse. Réponds toujours en fr
                   )}
                   <div ref={messagesEndRef} />
                 </div>
+                {/* IA validation banner — shown when IA recommends a category */}
+                {(() => {
+                  const lastMsg = [...(messages || [])].reverse().find((m) => m.role === 'assistant')
+                  const detected = lastMsg ? detectIACategoryFromText(lastMsg.content) : null
+                  const opt = detected ? CORRECTION_PRIORITY_OPTS.find((o) => o.label === detected) : null
+                  if (!detected || !opt || loading) return null
+                  return (
+                    <div style={{ flexShrink: 0, padding: '8px 12px', background: opt.bg, borderTop: `1px solid ${opt.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                      <span style={{ fontSize: 12, color: opt.color, fontWeight: 500 }}>
+                        💡 L'IA recommande : <strong>{detected}</strong>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleValidateIASuggestion}
+                        disabled={iaValidating}
+                        style={{ padding: '6px 14px', borderRadius: 8, background: opt.color, color: 'white', fontSize: 12, fontWeight: 600, border: 'none', cursor: iaValidating ? 'not-allowed' : 'pointer', opacity: iaValidating ? 0.7 : 1, whiteSpace: 'nowrap' }}
+                      >
+                        {iaValidating ? '…' : '✓ Valider cette suggestion'}
+                      </button>
+                    </div>
+                  )
+                })()}
                 <div style={{ flexShrink: 0, padding: 12, borderTop: '1px solid #E5E0D8', background: '#FAFAF9' }}>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
                     {CHAT_SUGGESTIONS.map((s) => (
@@ -466,22 +538,48 @@ Applique ces instructions en priorité dans ton analyse. Réponds toujours en fr
                     </div>
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: '#374151' }}>Catégorie réelle</label>
-                    <select value={priorityLabel} onChange={(e) => setPriorityLabel(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: 6, border: '1px solid #E5E0D8', fontSize: 13 }}>
-                      <option value="">—</option>
-                      {PRIORITY_OPTS.map((o) => <option key={o} value={o}>{o}</option>)}
-                    </select>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 8, color: '#374151' }}>Catégorie réelle</label>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      {CORRECTION_PRIORITY_OPTS.map((opt) => {
+                        const isSelected = priorityLabel === opt.label
+                        return (
+                          <button
+                            key={opt.label}
+                            type="button"
+                            onClick={() => setPriorityLabel(isSelected ? '' : opt.label)}
+                            style={{
+                              padding: '10px 12px',
+                              borderRadius: 10,
+                              border: `2px solid ${isSelected ? opt.border : '#E5E0D8'}`,
+                              background: isSelected ? opt.bg : 'white',
+                              color: isSelected ? opt.color : '#6B7280',
+                              fontSize: 13,
+                              fontWeight: isSelected ? 700 : 500,
+                              cursor: 'pointer',
+                              textAlign: 'left',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 8,
+                              transition: 'all 0.15s',
+                            }}
+                          >
+                            <span style={{ width: 10, height: 10, borderRadius: '50%', background: isSelected ? opt.color : '#D1D5DB', flexShrink: 0 }} />
+                            {opt.label}
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: '#374151' }}>Raison de la correction</label>
-                    <textarea value={correctionReason} onChange={(e) => setCorrectionReason(e.target.value)} placeholder="Expliquez pourquoi vous corrigez ce score... Ex: L'employeur Banque Courtois n'est pas reconnu mais c'est une banque" style={{ width: '100%', minHeight: 300, padding: '10px', borderRadius: 6, border: '1px solid #E5E0D8', fontSize: 13, resize: 'vertical' }} />
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: '#374151' }}>Raison de la correction <span style={{ color: '#9CA3AF', fontWeight: 400 }}>(optionnelle)</span></label>
+                    <textarea value={correctionReason} onChange={(e) => setCorrectionReason(e.target.value)} placeholder="Ex : L'employeur Banque Courtois n'est pas reconnu mais c'est une banque" style={{ width: '100%', minHeight: 100, padding: '10px', borderRadius: 6, border: '1px solid #E5E0D8', fontSize: 13, resize: 'vertical' }} />
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
                       {CORRECTION_SUGGESTIONS.map((s) => (
                         <button key={s} type="button" onClick={() => addCorrectionSuggestion(s)} style={{ padding: '6px 12px', borderRadius: 6, background: '#FFF7ED', border: '1px solid #F97316', color: '#F97316', fontSize: 12, cursor: 'pointer' }}>{s}</button>
                       ))}
                     </div>
                   </div>
-                  <button type="button" onClick={handleSaveCorrection} disabled={saving} style={{ padding: '10px 20px', borderRadius: 8, background: '#D2AB76', color: '#173731', fontSize: 13, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', alignSelf: 'flex-start' }}>{saving ? 'Enregistrement…' : 'Enregistrer la correction'}</button>
+                  <button type="button" onClick={handleSaveCorrection} disabled={saving} style={{ padding: '10px 20px', borderRadius: 8, background: '#173731', color: 'white', fontSize: 13, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', alignSelf: 'flex-start' }}>{saving ? 'Enregistrement…' : 'Enregistrer la correction'}</button>
                 </div>
               </div>
             )}
@@ -528,6 +626,31 @@ export default function Import() {
   const pdfInputRef = useRef(null)
   const pdfFileRef = useRef(null)
   const [pdfAnalyzing, setPdfAnalyzing] = useState(false)
+  const [selectedIds, setSelectedIds] = useState(new Set()) // Set of `${fn}|${ln}|${co}`
+
+  const getProfileId = (p) => `${p.fn || ''}|${p.ln || ''}|${p.co || ''}`
+
+  const toggleSelect = (p, e) => {
+    e.stopPropagation()
+    const id = getProfileId(p)
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const handleBulkCategory = (targetCategory) => {
+    const opt = CORRECTION_PRIORITY_OPTS.find((o) => o.label === targetCategory)
+    const newScore = opt ? opt.score : 20
+    setParsedRows((prev) => prev.map((p) => {
+      if (!selectedIds.has(getProfileId(p))) return p
+      return { ...p, sc: newScore, _correctedByUser: true, _correctedAt: Date.now() }
+    }))
+    setSelectedIds(new Set())
+    showNotif(`✓ ${selectedIds.size} profil(s) classés "${targetCategory}"`)
+  }
 
   const scpill = (s) => s >= 70 ? 'sh' : s >= 50 ? 'sm2' : 'sl'
   const ini = (a, b) => (a?.[0] || '') + (b?.[0] || '')
@@ -1051,6 +1174,19 @@ export default function Import() {
             </div>
           )}
 
+          {/* Bulk action bar */}
+          {selectedIds.size > 0 && (
+            <div style={{ position: 'sticky', top: 0, zIndex: 50, background: '#173731', borderRadius: 10, padding: '10px 16px', marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, boxShadow: '0 4px 12px rgba(23,55,49,0.3)' }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#D2AB76' }}>{selectedIds.size} profil{selectedIds.size > 1 ? 's' : ''} sélectionné{selectedIds.size > 1 ? 's' : ''}</span>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button type="button" onClick={() => handleBulkCategory('Prioritaire')} style={{ padding: '6px 14px', borderRadius: 8, background: '#dcfce7', color: '#15803d', fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer' }}>Prioritaire</button>
+                <button type="button" onClick={() => handleBulkCategory('À travailler')} style={{ padding: '6px 14px', borderRadius: 8, background: '#fefce8', color: '#a16207', fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer' }}>À travailler</button>
+                <button type="button" onClick={() => handleBulkCategory('À écarter')} style={{ padding: '6px 14px', borderRadius: 8, background: '#fef2f2', color: '#dc2626', fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer' }}>À écarter</button>
+                <button type="button" onClick={() => setSelectedIds(new Set())} style={{ padding: '6px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.15)', color: 'white', fontSize: 12, border: 'none', cursor: 'pointer' }}>Annuler</button>
+              </div>
+            </div>
+          )}
+
           <div style={{ marginBottom: 16, background: 'white', borderRadius: 16, border: '1px solid rgba(0,0,0,0.06)', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
             <div style={{ padding: '16px 24px', borderBottom: '1px solid rgba(0,0,0,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1060,13 +1196,16 @@ export default function Import() {
               <span style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, background: '#dcfce7', color: '#15803d', fontWeight: 500 }}>{priorCount} profils · ≥70 pts</span>
             </div>
             <div style={{ padding: '0 24px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '36px 2.5fr 1.5fr 2fr 70px 110px 40px', alignItems: 'center', gap: 12, padding: '12px 0', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#bbb', borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
-                <span>Avatar</span><span>Profil</span><span>Employeur</span><span>Intitulé</span><span>Score</span><span>Priorité</span><span />
+              <div style={{ display: 'grid', gridTemplateColumns: '20px 36px 2.5fr 1.5fr 2fr 70px 110px 40px', alignItems: 'center', gap: 12, padding: '12px 0', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#bbb', borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+                <span></span><span>Avatar</span><span>Profil</span><span>Employeur</span><span>Intitulé</span><span>Score</span><span>Priorité</span><span />
               </div>
               {priorRows.map((p, i) => {
                 const rowKey = `prior-${i}`
+                const pid = getProfileId(p)
+                const isSelected = selectedIds.has(pid)
                 return (
-                  <div key={rowKey} style={{ display: 'grid', gridTemplateColumns: '36px 2.5fr 1.5fr 2fr 70px 110px 40px', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid rgba(0,0,0,0.04)', cursor: 'pointer' }} onClick={() => { setModalProfile(p); setModalRowKey(rowKey) }} onMouseEnter={(e) => { e.currentTarget.style.background = '#f8fafc' }} onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}>
+                  <div key={rowKey} style={{ display: 'grid', gridTemplateColumns: '20px 36px 2.5fr 1.5fr 2fr 70px 110px 40px', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid rgba(0,0,0,0.04)', cursor: 'pointer', background: isSelected ? '#f0fdf4' : 'transparent' }} onClick={() => { setModalProfile(p); setModalRowKey(rowKey) }} onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = '#f8fafc' }} onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = 'transparent' }}>
+                    <input type="checkbox" checked={isSelected} onChange={(e) => toggleSelect(p, e)} onClick={(e) => e.stopPropagation()} style={{ width: 16, height: 16, cursor: 'pointer', accentColor: '#173731' }} />
                     <div style={{ width: 36, height: 36, borderRadius: '50%', background: ACCENT, color: GOLD, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600 }}>{ini(p.fn, p.ln)}</div>
                     <span style={{ fontSize: 13, color: '#333', fontWeight: 500 }}>{p.fn} {p.ln}</span>
                     <span style={{ fontSize: 12, color: '#555' }}>{p.co || '—'}</span>
@@ -1096,13 +1235,16 @@ export default function Import() {
               <span style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, background: '#fefce8', color: '#a16207', fontWeight: 500 }}>{workCount} profils · 50-69 pts</span>
             </div>
             <div style={{ padding: '0 24px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '36px 2.5fr 1.5fr 2fr 70px 110px 40px', alignItems: 'center', gap: 12, padding: '12px 0', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#bbb', borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
-                <span>Avatar</span><span>Profil</span><span>Employeur</span><span>Intitulé</span><span>Score</span><span>Priorité</span><span />
+              <div style={{ display: 'grid', gridTemplateColumns: '20px 36px 2.5fr 1.5fr 2fr 70px 110px 40px', alignItems: 'center', gap: 12, padding: '12px 0', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#bbb', borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+                <span></span><span>Avatar</span><span>Profil</span><span>Employeur</span><span>Intitulé</span><span>Score</span><span>Priorité</span><span />
               </div>
               {workRows.map((p, i) => {
                 const rowKey = `work-${i}`
+                const pid = getProfileId(p)
+                const isSelected = selectedIds.has(pid)
                 return (
-                  <div key={rowKey} style={{ display: 'grid', gridTemplateColumns: '36px 2.5fr 1.5fr 2fr 70px 110px 40px', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid rgba(0,0,0,0.04)', cursor: 'pointer' }} onClick={() => { setModalProfile(p); setModalRowKey(rowKey) }} onMouseEnter={(e) => { e.currentTarget.style.background = '#f8fafc' }} onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}>
+                  <div key={rowKey} style={{ display: 'grid', gridTemplateColumns: '20px 36px 2.5fr 1.5fr 2fr 70px 110px 40px', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid rgba(0,0,0,0.04)', cursor: 'pointer', background: isSelected ? '#fffbeb' : 'transparent' }} onClick={() => { setModalProfile(p); setModalRowKey(rowKey) }} onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = '#f8fafc' }} onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = 'transparent' }}>
+                    <input type="checkbox" checked={isSelected} onChange={(e) => toggleSelect(p, e)} onClick={(e) => e.stopPropagation()} style={{ width: 16, height: 16, cursor: 'pointer', accentColor: '#173731' }} />
                     <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#fefce8', color: '#a16207', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600 }}>{ini(p.fn, p.ln)}</div>
                     <span style={{ fontSize: 13, color: '#333', fontWeight: 500 }}>{p.fn} {p.ln}</span>
                     <span style={{ fontSize: 12, color: '#555' }}>{p.co || '—'}</span>
@@ -1134,13 +1276,16 @@ export default function Import() {
             </button>
             {ecarteExpanded && (
               <div style={{ padding: '0 24px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '36px 2.5fr 1.5fr 2fr 70px 110px minmax(140px, auto)', alignItems: 'center', gap: 12, padding: '12px 0', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#bbb', borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
-                  <span>Avatar</span><span>Profil</span><span>Employeur</span><span>Intitulé</span><span>Score</span><span>Priorité</span><span style={{ textAlign: 'right' }}>Actions</span>
+                <div style={{ display: 'grid', gridTemplateColumns: '20px 36px 2.5fr 1.5fr 2fr 70px 110px minmax(140px, auto)', alignItems: 'center', gap: 12, padding: '12px 0', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#bbb', borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+                  <span></span><span>Avatar</span><span>Profil</span><span>Employeur</span><span>Intitulé</span><span>Score</span><span>Priorité</span><span style={{ textAlign: 'right' }}>Actions</span>
                 </div>
                 {ecarteRows.map((p, i) => {
                   const rowKey = `ecarte-${i}`
+                  const pid = getProfileId(p)
+                  const isSelected = selectedIds.has(pid)
                   return (
-                    <div key={rowKey} style={{ display: 'grid', gridTemplateColumns: '36px 2.5fr 1.5fr 2fr 70px 110px minmax(140px, auto)', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid rgba(0,0,0,0.04)', cursor: 'pointer' }} onClick={() => { setModalProfile(p); setModalRowKey(rowKey) }} onMouseEnter={(e) => { e.currentTarget.style.background = '#f8fafc' }} onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}>
+                    <div key={rowKey} style={{ display: 'grid', gridTemplateColumns: '20px 36px 2.5fr 1.5fr 2fr 70px 110px minmax(140px, auto)', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid rgba(0,0,0,0.04)', cursor: 'pointer', background: isSelected ? '#fff1f2' : 'transparent' }} onClick={() => { setModalProfile(p); setModalRowKey(rowKey) }} onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = '#f8fafc' }} onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = 'transparent' }}>
+                      <input type="checkbox" checked={isSelected} onChange={(e) => toggleSelect(p, e)} onClick={(e) => e.stopPropagation()} style={{ width: 16, height: 16, cursor: 'pointer', accentColor: '#173731' }} />
                       <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#fef2f2', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600 }}>{ini(p.fn, p.ln)}</div>
                       <span style={{ fontSize: 13, color: '#333', fontWeight: 500 }}>{p.fn} {p.ln}</span>
                       <span style={{ fontSize: 12, color: '#555' }}>{p.co || '—'}</span>

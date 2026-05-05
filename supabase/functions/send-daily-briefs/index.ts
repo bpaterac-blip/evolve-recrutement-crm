@@ -9,9 +9,6 @@ const BG       = '#F5F0E8'
 // ── Étapes qui déclenchent un brief ───────────────────────────────────────────
 const BRIEF_STAGES = ['R1', 'Point Business Plan', "Point d'étape", "Point d'étape téléphonique"]
 
-// ── Email destinataire R2 Amaury ───────────────────────────────────────────────
-const AMAURY_EMAIL = 'amaurydubuisson@evolveinvestissement.com'
-
 // ── Expéditeurs ────────────────────────────────────────────────────────────────
 const SENDERS: Record<string, { displayName: string; from: string; toEmail: string }> = {
   'b.paterac@gmail.com':               { displayName: 'Baptiste PATERAC', from: 'Baptiste Paterac <bpaterac@evolveinvestissement.com>', toEmail: 'bpaterac@evolveinvestissement.com' },
@@ -36,8 +33,12 @@ function fmtDateLong(iso: string) {
 
 function fmtTime(iso: string | null) {
   if (!iso) return ''
-  const d = new Date(iso)
-  return `${String(d.getHours()).padStart(2,'0')}h${String(d.getMinutes()).padStart(2,'0')}`
+  // Extraire l'heure directement depuis la chaîne ISO (ex: "2026-04-27T15:30:00")
+  const timePart = iso.split('T')[1]
+  if (!timePart) return ''
+  const [h, m] = timePart.split(':')
+  if (!h || !m) return ''
+  return `${h.padStart(2,'0')}h${m.padStart(2,'0')}`
 }
 
 function fmtNoteDate(iso: string) {
@@ -246,7 +247,7 @@ Deno.serve(async (req) => {
     const { data: profilesRaw, error: profilesErr } = await supabase
       .from('profiles')
       .select('id, first_name, last_name, company, title, city, region, stage, maturity, score, next_event_date, owner_email, owner_full_name, integration_periode, integration_annee')
-      .in('stage', [...BRIEF_STAGES, 'R2 Amaury'])
+      .in('stage', BRIEF_STAGES)
       .gte('next_event_date', `${today}T00:00:00`)
       .lt('next_event_date', `${tomorrow}T00:00:00`)
 
@@ -284,9 +285,7 @@ Deno.serve(async (req) => {
 
         // ── 3. Déterminer expéditeur et destinataire ──────────────────────
         const senderConfig = resolveSender(profile.owner_email)
-        const toList = stage === 'R2 Amaury'
-          ? [AMAURY_EMAIL, senderConfig.toEmail].filter((v, i, a) => v && a.indexOf(v) === i)
-          : [senderConfig.toEmail]
+        const toList = [senderConfig.toEmail]
 
         // ── 4. Construire et envoyer l'email ──────────────────────────────
         const subject = `📋 Brief RDV — ${fullName} · ${stage}${time ? ` à ${time}` : ''}`
