@@ -574,21 +574,20 @@ function DroppableColumn({ stage, cards, onCardClick, selectedCardId, onDrop, sh
     >
       <div
         style={{
-          background: '#ffffff',
+          background: hexWithOpacity(stageColor, 0.07),
           borderRadius: 10,
-          borderTop: `3px solid ${stageColor}`,
+          border: `1.5px solid ${stageColor}`,
           padding: '8px 12px',
-          marginBottom: 12,
+          marginBottom: 10,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
         }}
       >
-        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: stageColor }}>
+        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: stageColor }}>
           {stage}
         </span>
-        <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: hexWithOpacity(stageColor, 0.1), color: stageColor }}>
+        <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 8px', borderRadius: 20, background: stageColor, color: '#fff' }}>
           {cards.length}
         </span>
       </div>
