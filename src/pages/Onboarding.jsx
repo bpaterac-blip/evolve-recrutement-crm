@@ -31,6 +31,11 @@ const L = {
   kbis_evolve:     { label: 'KBIS Evolve Courtage', url: 'https://drive.google.com/file/d/1vu8coZO8P8-_c-n0_yDW2CMsNgukjkYJ/view' },
   mail_rcp:        { label: 'Mail RCP (à envoyer au CGP)', url: 'https://docs.google.com/document/d/1A-ieosiW4vtdhRIs0Oy8YAgQa-XnQOooRmcnWiejd88/edit' },
   mail_cncef:      { label: 'Mail CNCEF (à envoyer au CGP)', url: 'https://docs.google.com/document/d/1tkhvdOAYIvwFAtKPlFQN_0Xl7vXyMBMzCbRqgIx4g-0/edit' },
+  abeille_mail:    { label: 'Mail Abeille', url: 'https://docs.google.com/document/d/1uv6Au6A2SrZFAhaaB8nkgpullojIKhUraPQLfIxgjXg/edit' },
+  abeille_doc1:    { label: 'Document Abeille 1', url: 'https://drive.google.com/file/d/1jVwQEDymC5gpNBEr-JiSkNWWzNhx1BGv/view' },
+  abeille_doc2:    { label: 'Document Abeille 2', url: 'https://docs.google.com/document/d/1eULoXNJlUyrFC-hQCqOJ_XkMql6UQCf5/edit' },
+  mma:             { label: 'Instructions MMA', url: 'https://docs.google.com/document/d/1MeOT2nT_ypVWdAbl6KJ9Rqj3Vwbnbj9_8B32G97Mlew/edit' },
+  swisslife:       { label: 'Instructions SwissLife', url: 'https://docs.google.com/document/d/1nFBv7RIqHcntekCPlr-CRmUQyoxAa4Rl1FcuOiQjKpQ/edit' },
 }
 
 // ── Remplace les placeholders {{…}} par les données du profil ─────────────────
@@ -242,9 +247,9 @@ const ONBOARDING_STEPS = [
     mailTemplate: null,
     tasks: [
       { id: 't9_1', label: 'Créer l\'adresse mail professionnelle du CGP', links: [] },
-      { id: 't9_2', label: 'Abeille : remplir les deux documents + envoyer via YouSign', links: [] },
-      { id: 't9_3', label: 'MMA : démarches d\'ouverture de codes', links: [] },
-      { id: 't9_4', label: 'SwissLife : démarches d\'ouverture de codes', links: [] },
+      { id: 't9_2', label: 'Abeille — remplir les deux documents et envoyer pour signature via YouSign', links: ['abeille_mail', 'abeille_doc1', 'abeille_doc2'] },
+      { id: 't9_3', label: 'MMA — démarches d\'ouverture de codes', links: ['mma'] },
+      { id: 't9_4', label: 'SwissLife — démarches d\'ouverture de codes', links: ['swisslife'] },
     ],
   },
 ]
