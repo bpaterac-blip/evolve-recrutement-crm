@@ -264,7 +264,7 @@ const ONBOARDING_STEPS = [
       { id: 't9_2', label: 'Abeille — remplir les deux documents, envoyer pour signature via YouSign, puis envoyer le mail', links: ['abeille_doc1', 'abeille_doc2'] },
       { id: 't9_3', label: 'SwissLife — envoyer le mail d\'ouverture de codes', links: [] },
       { id: 't9_4', label: 'Renseigner les codes assureurs dans le tableau', links: ['codes_assureurs'] },
-      { id: 't9_5', label: 'Vérifier le dossier "Documents officiels" du CGP sur le Drive — s\'assurer que tous les documents sont bien présents :\n• CNI {{societe}}\n• KBIS {{societe}}\n• CNCEF {{societe}} (maj tous les ans)\n• RCP IAS {{societe}} (maj tous les ans)\n• RCP PRO Immo {{societe}} (maj tous les ans)\n• MÉDIATION {{societe}} (maj tous les ans)\n• ORIAS {{societe}} (maj tous les ans)\n• PACTE D\'ASSOCIÉ SIGNÉ {{societe}}\n• STATUTS SIGNÉS {{societe}}\n• CONVENTION DE PARTENARIAT SIGNÉ {{societe}}', links: ['dossier'] },
+      { id: 't9_5', label: 'Vérifier le dossier "Documents officiels" du CGP sur le Drive — s\'assurer que tous les documents sont bien présents :\n• CNI {{prenom}} {{nom}} Courtage\n• KBIS {{prenom}} {{nom}} Courtage\n• CNCEF {{prenom}} {{nom}} Courtage\n• RCP IAS {{prenom}} {{nom}} Courtage\n• MÉDIATION {{prenom}} {{nom}} Courtage\n• ORIAS {{prenom}} {{nom}} Courtage\n• PACTE D\'ASSOCIÉ SIGNÉ {{prenom}} {{nom}} Courtage\n• STATUTS SIGNÉS {{prenom}} {{nom}} Courtage\n• CONVENTION DE PARTENARIAT SIGNÉ {{prenom}} {{nom}} Courtage', links: ['dossier'] },
     ],
   },
 ]
