@@ -264,6 +264,7 @@ const ONBOARDING_STEPS = [
       { id: 't9_2', label: 'Abeille — remplir les deux documents, envoyer pour signature via YouSign, puis envoyer le mail', links: ['abeille_doc1', 'abeille_doc2'] },
       { id: 't9_3', label: 'SwissLife — envoyer le mail d\'ouverture de codes', links: [] },
       { id: 't9_4', label: 'Renseigner les codes assureurs dans le tableau', links: ['codes_assureurs'] },
+      { id: 't9_5', label: 'Vérifier le dossier "Documents officiels" du CGP sur le Drive — s\'assurer que tous les documents sont bien présents :\n• CNI {{societe}}\n• KBIS {{societe}}\n• CNCEF {{societe}} (maj tous les ans)\n• RCP IAS {{societe}} (maj tous les ans)\n• RCP PRO Immo {{societe}} (maj tous les ans)\n• MÉDIATION {{societe}} (maj tous les ans)\n• ORIAS {{societe}} (maj tous les ans)\n• PACTE D\'ASSOCIÉ SIGNÉ {{societe}}\n• STATUTS SIGNÉS {{societe}}\n• CONVENTION DE PARTENARIAT SIGNÉ {{societe}}', links: ['dossier'] },
     ],
   },
 ]
@@ -804,7 +805,7 @@ function SidePanel({ profile, steps, stepNotes, taskNotes, onClose, onToggleTask
                           <div style={{ width: 16, height: 16, borderRadius: 4, flexShrink: 0, marginTop: 1, border: `1.5px solid ${done ? '#16a34a' : '#D5D0C8'}`, background: done ? '#16a34a' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}>
                             {done && <span style={{ color: 'white', fontSize: 9, fontWeight: 700 }}>✓</span>}
                           </div>
-                          <span style={{ fontSize: 11, color: done ? '#16a34a' : '#444', lineHeight: 1.5, textDecoration: done ? 'line-through' : 'none' }}>
+                          <span style={{ fontSize: 11, color: done ? '#16a34a' : '#444', lineHeight: 1.5, textDecoration: done ? 'line-through' : 'none', whiteSpace: 'pre-line' }}>
                             {fillLabel(task.label)}
                           </span>
                         </div>
