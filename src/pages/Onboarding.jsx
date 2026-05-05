@@ -22,7 +22,7 @@ const L = {
   cnpm:            { label: 'Formulaire CNPM', url: 'https://www.medconsodev.eu/demande-adhesion-pro.php' },
   cncef:           { label: 'Formulaire CNCEF', url: 'https://inscription.cncef.org/assurance' },
   orias:           { label: 'Formulaire ORIAS', url: 'https://www.orias.fr/public/enregistrement/index' },
-  convention_sas:  { label: 'Convention SAS', url: 'https://docs.google.com/document/d/1tt9Gbu6-0YyxOGPkyAfQibwPlH3VnjWy/edit' },
+  convention_sas:  { label: 'Convention SAS', url: 'https://docs.google.com/document/d/1U9Nvn6YpeqyZFRBouG4PY_5g4Z6fB2Rz/edit?usp=sharing&ouid=111155859468150040618&rtpof=true&sd=true' },
   convention_sarl: { label: 'Convention SARL (YouSign)', url: 'https://yousign.app/auth/workspace/workflows' },
   adhesion_rcp:    { label: 'Document d\'adhésion RCP', url: 'https://drive.google.com/file/d/1GPj2EFtWVF0eohgCgxQW27GFZKyZQO_2/view' },
   adhesion_rcp2:   { label: 'Document complémentaire RCP', url: 'https://drive.google.com/file/d/1Br5MfCIJO6i1nXy1knIQmElb7P8WI7IS/view' },
