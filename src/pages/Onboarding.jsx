@@ -24,6 +24,12 @@ const L = {
   orias:           { label: 'Formulaire ORIAS', url: 'https://www.orias.fr/public/enregistrement/index' },
   convention_sas:  { label: 'Convention SAS', url: 'https://docs.google.com/document/d/1tt9Gbu6-0YyxOGPkyAfQibwPlH3VnjWy/edit' },
   convention_sarl: { label: 'Convention SARL (YouSign)', url: 'https://yousign.app/auth/workspace/workflows' },
+  adhesion_rcp:    { label: 'Document d\'adhésion RCP', url: 'https://drive.google.com/file/d/1GPj2EFtWVF0eohgCgxQW27GFZKyZQO_2/view' },
+  adhesion_rcp2:   { label: 'Document complémentaire RCP', url: 'https://drive.google.com/file/d/1Br5MfCIJO6i1nXy1knIQmElb7P8WI7IS/view' },
+  cni_amaury:      { label: 'CNI Amaury', url: 'https://drive.google.com/file/d/1nIUZGo5phWMuuAAgBFkPM8vjj9-75q-D/view' },
+  cv_amaury:       { label: 'CV Amaury', url: 'https://drive.google.com/file/d/15s5EAW0R2CthG8LLlDzEHhfH9_15_1e4/view' },
+  kbis_evolve:     { label: 'KBIS Evolve Courtage', url: 'https://drive.google.com/file/d/1vu8coZO8P8-_c-n0_yDW2CMsNgukjkYJ/view' },
+  mail_rcp:        { label: 'Mail RCP (à envoyer au CGP)', url: 'https://docs.google.com/document/d/1A-ieosiW4vtdhRIs0Oy8YAgQa-XnQOooRmcnWiejd88/edit' },
 }
 
 // ── Remplace les placeholders {{…}} par les données du profil ─────────────────
@@ -140,11 +146,12 @@ const ONBOARDING_STEPS = [
       body: `<p>Bonjour {{prenom}},</p><p>J’espère que tu vas bien.</p><p>Tu viens de recevoir les demandes d'adhésions RC Pro à signer et parapher électroniquement.</p><p>Tu peux retrouver en PJ un dossier compressé avec les documents obligatoires à transmettre.</p><p><strong>Peux-tu rajouter à ce dossier s'il te plaît :</strong></p><p><strong>- La demande d'adhésion signée et paraphée</strong></p><p><strong>- Ton RIB</strong></p><p><strong>Après avoir intégré ces documents aux autres dans le dossier merci de le compresser et de l'envoyer par mail à :</strong></p><p>Yann ARNOUD : yarnoud@verspieren.com</p><p><strong>En mettant en copie :</strong></p><p>ntouadi@verspieren.com</p><p><a href="mailto:rjarlot@verspieren.com">rjarlot@verspieren.com</a></p><p>En indiquant :</p><p>Objet : ADHÉSION {{societe}} - SIREN {{siren}}</p><p><em>&quot;Bonjour,</em></p><p><em>Vous pouvez retrouver mon dossier d'adhésion complet sous format compressé en pièce jointe.</em></p><p><em>Je reste à votre disposition pour tout complément d'information</em></p><p><em>Bonne journée à vous&quot;</em></p><p><strong>Merci de me transmettre l'attestation lorsque tu auras reçu celle-ci</strong></p><p>Bonne journée !</p><p>{{responsable}}</p>`,
     },
     tasks: [
-      { id: 't4_1', label: 'Remplir le document d\'adhésion RCP IAS', links: [] },
-      { id: 't4_2', label: 'Préparer dossier compressé : CNI Amaury, CNI Gérant, CV Gérant, CV Amaury, KBIS Evolve Courtage, KBIS société, Statuts signés', links: ['dossier'] },
-      { id: 't4_3', label: 'Envoyer document d\'adhésion via YouSign au CGP (se mettre en copie destinataire)', links: [] },
-      { id: 't4_4', label: 'Envoyer mail au CGP → il transfère à Yann ARNOUD (yarnoud@verspieren.com)', links: [] },
-      { id: 't4_5', label: 'Attendre attestation RCP IAS → l\'intégrer au dossier Drive', links: ['dossier'] },
+      { id: 't4_1', label: 'Télécharger et remplir via Aperçu le document d\'adhésion RCP et le document complémentaire (cases pré-remplies)', links: ['adhesion_rcp', 'adhesion_rcp2'] },
+      { id: 't4_2', label: 'Enregistrer les documents remplis dans le dossier AUTRES DOCUMENTS du courtier sur le Drive', links: ['dossier'] },
+      { id: 't4_3', label: 'Préparer un dossier compressé "PRÉNOM NOM COURTAGE / DOSSIER RCP" avec : CNI Amaury · CNI Gérant · CV Gérant (LinkedIn — si pas de Master : Attestation formation 150h OU Attestation capacité professionnelle) · CV Amaury · KBIS Evolve Courtage · KBIS de la société · Statuts signés (dossier AUTRES DOCUMENTS ou Pappers)', links: ['cni_amaury', 'cv_amaury', 'kbis_evolve', 'dossier'] },
+      { id: 't4_4', label: 'Préparer les paraphes et signatures du doc RCP → envoyer le document d\'adhésion via YouSign au CGP (se mettre en copie destinataire pour réceptionner la signature)', links: ['yousign_ids'] },
+      { id: 't4_5', label: 'Envoyer le mail au CGP → il le transmet ensuite à Yann ARNOUD (yarnoud@verspieren.com)', links: ['mail_rcp'] },
+      { id: 't4_6', label: 'Attendre l\'attestation RCP IAS → l\'intégrer au dossier Drive du CGP', links: ['dossier'] },
     ],
   },
   {
