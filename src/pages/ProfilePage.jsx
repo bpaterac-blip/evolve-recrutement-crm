@@ -673,115 +673,127 @@ export default function ProfilePage() {
       </header>
       </div>
 
-      <div className="profile-grid" style={{ display: 'grid', gridTemplateColumns: '40% 1fr', gap: 24, flex: 1, minHeight: 0, padding: '0 28px 22px', overflow: 'hidden' }}>
-        <div style={{ overflowY: 'auto', minHeight: 0 }}>
-          <div style={{ background: PAGE_STYLE.cardBg, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: PAGE_STYLE.radius, padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-            <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: PAGE_STYLE.textSecondary, marginBottom: 16 }}>Informations</div>
-            <FieldRow field="fn" value={profile.fn} label="Prénom" icon={<IconUser />} />
-            <FieldRow field="ln" value={profile.ln} label="Nom" icon={<IconUser />} />
-            <FieldRow field="mail" value={profile.mail} label="Email" icon={<IconEnvelope />} placeholder="email@…" />
-            <FieldRow field="phone" value={profile.phone} label="Téléphone" icon={<span style={{ fontSize: 14 }}>📞</span>} placeholder="+33 6 …" />
-            <FieldRow field="li" value={profile.li} label="LinkedIn" icon={<IconLink />} placeholder="linkedin.com/in/…" isLink />
-            <FieldRow field="city" value={profile.city} label="Ville" icon={<IconMapPin />} />
-            {/* ── Paternité ── */}
-            {(() => {
-              const knownUsers = [...new Map(
-                profiles
-                  .filter(p => p.owner_id)
-                  .map(p => [p.owner_id, { id: p.owner_id, email: p.owner_email || '', name: p.owner_full_name?.trim() || (p.owner_email || '').split('@')[0] || 'Inconnu' }])
-              ).values()]
-              if (user?.id && !knownUsers.find(u => u.id === user.id)) {
-                knownUsers.push({ id: user.id, email: user.email || '', name: userProfile?.full_name?.trim() || (user.email || '').split('@')[0] || 'Moi' })
-              }
-              return (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: `1px solid ${PAGE_STYLE.border}` }}>
-                  <span style={iconStyle}><IconUser /></span>
-                  <span style={{ color: PAGE_STYLE.textSecondary, fontSize: 13, width: 100, flexShrink: 0 }}>Paternité</span>
-                  <select
-                    value={profile.owner_id || ''}
-                    onChange={async (e) => {
-                      const selectedId = e.target.value
-                      const selectedUser = knownUsers.find(u => u.id === selectedId)
-                      if (!selectedUser) return
-                      await supabase.from('profiles').update({
-                        owner_id: selectedUser.id,
-                        owner_email: selectedUser.email,
-                        owner_full_name: selectedUser.name,
-                      }).eq('id', profile.id)
-                      await fetchProfiles()
-                      showNotif(`Paternité → ${selectedUser.name}`)
-                    }}
-                    style={{ flex: 1, padding: '6px 10px', fontSize: 13, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6, background: 'white', cursor: 'pointer', outline: 'none', color: PAGE_STYLE.text }}
-                  >
-                    {!profile.owner_id && <option value="">— Non assigné —</option>}
-                    {knownUsers.map(u => (
-                      <option key={u.id} value={u.id}>
-                        {u.id === user?.id ? `${u.name} (vous)` : u.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )
-            })()}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: `1px solid ${PAGE_STYLE.border}` }}>
-              <span style={{ ...iconStyle, width: 24, display: 'flex', alignItems: 'center' }}><IconMap /></span>
-              <span style={{ color: PAGE_STYLE.textSecondary, fontSize: 13, width: 100 }}>Région</span>
-              <select value={profile.region || ''} onChange={(e) => handleChangeRegion(e.target.value)} style={{ flex: 1, padding: '6px 10px', fontSize: 13, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6 }}>
-                <option value="">—</option>
-                {REGIONS.map((r) => <option key={r} value={r}>{r}</option>)}
-              </select>
+      <div className="profile-grid" style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 0, flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        {/* ── COLONNE GAUCHE REDESIGNÉE ── */}
+        <div style={{ overflowY: 'auto', minHeight: 0, background: '#F5F0E8', borderRight: '0.5px solid rgba(180,150,100,0.2)', padding: '20px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+          {/* Avatar + nom */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 50, height: 50, borderRadius: '50%', background: '#173731', color: '#E7E0D0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 600, flexShrink: 0, boxShadow: '0 2px 8px rgba(23,55,49,0.18)' }}>
+              {initials(profile.fn, profile.ln)}
             </div>
-            <FieldRow field="co" value={profile.co} label="Employeur" icon={<IconBuilding />} />
-            <FieldRow field="ti" value={profile.ti} label="Intitulé" icon={<IconTag />} />
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: `1px solid ${PAGE_STYLE.border}` }}>
-              <span style={iconStyle}><IconTag /></span>
-              <span style={{ color: PAGE_STYLE.textSecondary, fontSize: 13, width: 100 }}>Source</span>
-              <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <InlineDropdown options={SOURCES} value={profile.src} onChange={handleChangeSource} buttonStyle={() => ({ border: `1px solid ${PAGE_STYLE.border}`, background: PAGE_STYLE.cardBg, color: PAGE_STYLE.text })} />
-                {profile.sequence_lemlist && (
-                  <span style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, background: '#FFF7ED', color: '#F97316', fontWeight: 500 }}>Lemlist : {profile.sequence_lemlist}</span>
-                )}
-              </div>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#173731', lineHeight: 1.3 }}>{capFirst(profile.fn)} {capFirst(profile.ln)}</div>
+              <div style={{ fontSize: 11, color: '#8B7355', marginTop: 2 }}>{profile.co || '—'}</div>
+              <div style={{ fontSize: 11, color: '#A0866A' }}>{profile.ti || '—'} · {profile.city || '—'}</div>
             </div>
-            <div style={{ padding: '10px 0', borderBottom: `1px solid ${PAGE_STYLE.border}` }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span style={iconStyle}><IconStar /></span>
-                <span style={{ color: PAGE_STYLE.textSecondary, fontSize: 13, width: 100 }}>Score</span>
-                <div className="score-row" style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontWeight: 600, fontSize: 13 }}>{profile.sc ?? '—'}</span>
-                  <button
-                    type="button"
-                    onClick={() => setScoreCorrectionOpen(true)}
-                    className="score-inexact-btn"
-                    style={{ fontSize: 12, color: '#F97316', background: 'transparent', border: 'none', cursor: 'pointer', opacity: 0, transition: 'opacity 0.15s' }}
-                    title="Signaler un score inexact"
-                  >
-                    ⚠ Score inexact
+          </div>
+
+          {/* Score ring */}
+          {(() => {
+            const sc = profile.sc ?? 0
+            const r = 26
+            const circ = 2 * Math.PI * r
+            const dash = (sc / 100) * circ
+            const scoreColor = sc >= 70 ? '#15803d' : sc >= 50 ? '#d97706' : '#94a3b8'
+            const priorityLabel = sc >= 70 ? 'Prioritaire' : sc >= 50 ? 'À travailler' : 'À écarter'
+            return (
+              <div style={{ background: 'rgba(255,255,255,0.65)', borderRadius: 11, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 14, border: '0.5px solid rgba(180,150,100,0.2)' }}>
+                <svg width="66" height="66" viewBox="0 0 66 66" style={{ flexShrink: 0 }}>
+                  <circle cx={33} cy={33} r={r} fill="none" stroke="rgba(0,0,0,0.07)" strokeWidth={5} />
+                  <circle cx={33} cy={33} r={r} fill="none" stroke={scoreColor} strokeWidth={5}
+                    strokeDasharray={`${dash} ${circ}`} strokeLinecap="round" transform="rotate(-90 33 33)"
+                    style={{ transition: 'stroke-dasharray 0.4s ease' }} />
+                  <text x={33} y={37} textAnchor="middle" fontSize={14} fontWeight={700} fill="#173731" fontFamily="inherit">{sc}</text>
+                </svg>
+                <div>
+                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#A0866A', marginBottom: 3 }}>Score IA</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: scoreColor, marginBottom: 5 }}>{priorityLabel}</div>
+                  <button type="button" onClick={() => setScoreCorrectionOpen(true)} style={{ fontSize: 10, color: '#ea580c', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>
+                    Corriger
                   </button>
                 </div>
               </div>
-              <div style={{ height: 4, background: 'rgba(0,0,0,0.08)', borderRadius: 2, marginTop: 8, overflow: 'hidden' }}>
-                <div style={{ height: '100%', background: '#173731', width: `${Math.min(100, (profile.sc ?? 0))}%`, borderRadius: 2, transition: 'width 0.3s' }} />
-              </div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: `1px solid ${PAGE_STYLE.border}` }}>
-              <span style={iconStyle}><IconTag /></span>
-              <span style={{ color: PAGE_STYLE.textSecondary, fontSize: 13, width: 100 }}>Maturité</span>
-              <div style={{ flex: 1 }}>
-                <InlineDropdown options={MATURITIES} value={profile.mat} onChange={handleChangeMaturity} buttonStyle={matStyle} />
-              </div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: `1px solid ${PAGE_STYLE.border}` }}>
-              <span style={iconStyle}><IconStar /></span>
-              <span style={{ color: PAGE_STYLE.textSecondary, fontSize: 13, width: 100 }}>Stade</span>
-              <div style={{ flex: 1 }}>
-                <InlineDropdown options={STAGES} value={profile.stg} onChange={handleChangeStage} buttonStyle={stag} placeholder="—" />
-              </div>
-            </div>
+            )
+          })()}
+
+          {/* Sélecteurs Pipeline */}
+          <div style={{ background: 'rgba(255,255,255,0.65)', borderRadius: 11, padding: '11px 13px', border: '0.5px solid rgba(180,150,100,0.2)', display: 'flex', flexDirection: 'column', gap: 7 }}>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#A0866A', fontWeight: 600, marginBottom: 2 }}>Pipeline</div>
+            {/* Maturité */}
+            {(() => {
+              const mat = profile.mat || ''
+              const mc = MATURITY_COLORS[mat] || { bg: '#F3F4F6', text: '#6B7280' }
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ fontSize: 10, color: '#A0866A', width: 54, flexShrink: 0 }}>Maturité</div>
+                  <div style={{ position: 'relative', flex: 1 }}>
+                    <select
+                      value={mat}
+                      onChange={(e) => handleChangeMaturity(e.target.value)}
+                      style={{ appearance: 'none', WebkitAppearance: 'none', width: '100%', padding: '5px 22px 5px 9px', fontSize: 12, fontWeight: 600, borderRadius: 20, border: `1.5px solid ${mc.text}22`, background: mc.bg, color: mc.text, cursor: 'pointer', fontFamily: 'inherit' }}
+                    >
+                      {MATURITIES.map((m) => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                    <div style={{ position: 'absolute', right: 7, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: 8, color: mc.text }}>▾</div>
+                  </div>
+                </div>
+              )
+            })()}
+            {/* Stade */}
+            {(() => {
+              const stg = profile.stg || ''
+              const sc2 = STAGE_COLORS[stg] || { bg: '#F8FAFC', text: '#475569' }
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ fontSize: 10, color: '#A0866A', width: 54, flexShrink: 0 }}>Stade</div>
+                  <div style={{ position: 'relative', flex: 1 }}>
+                    <select
+                      value={stg}
+                      onChange={(e) => handleChangeStage(e.target.value)}
+                      style={{ appearance: 'none', WebkitAppearance: 'none', width: '100%', padding: '5px 22px 5px 9px', fontSize: 12, fontWeight: 600, borderRadius: 20, border: `1.5px solid ${sc2.text}22`, background: sc2.bg, color: sc2.text, cursor: 'pointer', fontFamily: 'inherit' }}
+                    >
+                      {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                    <div style={{ position: 'absolute', right: 7, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: 8, color: sc2.text }}>▾</div>
+                  </div>
+                </div>
+              )
+            })()}
+            {/* Source */}
+            {(() => {
+              const src = profile.src || ''
+              const SOURCE_PILL_COLORS = {
+                'Chasse LinkedIn': { bg: '#eff6ff', text: '#1d4ed8' },
+                'Recommandation': { bg: '#fefce8', text: '#a16207' },
+                'Chasse Mail': { bg: '#f0fdf4', text: '#15803d' },
+                'Chasse externe': { bg: '#fff7ed', text: '#c2410c' },
+                'Inbound Marketing': { bg: '#faf5ff', text: '#7e22ce' },
+                'Ads': { bg: '#fff1f2', text: '#e11d48' },
+                'Autre': { bg: '#f8fafc', text: '#94a3b8' },
+                'Inbound': { bg: '#faf5ff', text: '#7e22ce' },
+              }
+              const spc = SOURCE_PILL_COLORS[src] || { bg: '#f8fafc', text: '#94a3b8' }
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ fontSize: 10, color: '#A0866A', width: 54, flexShrink: 0 }}>Source</div>
+                  <div style={{ position: 'relative', flex: 1 }}>
+                    <select
+                      value={src}
+                      onChange={(e) => handleChangeSource(e.target.value)}
+                      style={{ appearance: 'none', WebkitAppearance: 'none', width: '100%', padding: '5px 22px 5px 9px', fontSize: 12, fontWeight: 600, borderRadius: 20, border: `1.5px solid ${spc.text}22`, background: spc.bg, color: spc.text, cursor: 'pointer', fontFamily: 'inherit' }}
+                    >
+                      {SOURCES.map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                    <div style={{ position: 'absolute', right: 7, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: 8, color: spc.text }}>▾</div>
+                  </div>
+                </div>
+              )
+            })()}
+            {/* Session cible (conditionnelle) */}
             {showSessionCible && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: `1px solid ${PAGE_STYLE.border}` }}>
-                <span style={iconStyle}><IconCalendar /></span>
-                <span style={{ color: PAGE_STYLE.textSecondary, fontSize: 13, width: 100 }}>Session cible</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ fontSize: 10, color: '#A0866A', width: 54, flexShrink: 0 }}>Session</div>
                 <select
                   value={profile.session_formation_id || ''}
                   onChange={async (e) => {
@@ -797,7 +809,7 @@ export default function ProfilePage() {
                     updateProfile(profile.id, { session_formation_id: sessionId, integration_periode: session?.periode, integration_annee: session?.annee, integration_confirmed: false })
                     fetchProfiles?.()
                   }}
-                  style={{ flex: 1, padding: '6px 10px', fontSize: 13, borderRadius: 6, border: `1px solid ${PAGE_STYLE.border}`, background: PAGE_STYLE.cardBg, cursor: 'pointer' }}
+                  style={{ flex: 1, padding: '5px 9px', fontSize: 12, borderRadius: 20, border: '1.5px solid rgba(23,55,49,0.15)', background: '#f0fdf4', color: '#065F46', cursor: 'pointer', fontFamily: 'inherit' }}
                 >
                   <option value="">—</option>
                   {sessionsCibles.map((s) => (
@@ -806,23 +818,149 @@ export default function ProfilePage() {
                 </select>
               </div>
             )}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: `1px solid ${PAGE_STYLE.border}` }}>
-              <span style={iconStyle}><IconCalendar /></span>
-              <span style={{ color: PAGE_STYLE.textSecondary, fontSize: 13, width: 100 }}>Prochain événement</span>
+          </div>
+
+          {/* Informations */}
+          <div style={{ background: 'rgba(255,255,255,0.65)', borderRadius: 11, padding: '11px 13px', border: '0.5px solid rgba(180,150,100,0.2)' }}>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#A0866A', fontWeight: 600, marginBottom: 8 }}>Informations</div>
+            {/* Employeur */}
+            {(['co', 'ti', 'city'] ).map((field) => {
+              const labels = { co: 'Employeur', ti: 'Intitulé', city: 'Ville' }
+              const val = profile[field]
+              return (
+                <div key={field} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '0.5px solid rgba(180,150,100,0.15)' }}>
+                  <div style={{ fontSize: 10, color: '#A0866A', width: 60, flexShrink: 0 }}>{labels[field]}</div>
+                  {editingField === field ? (
+                    <div style={{ display: 'flex', gap: 6, flex: 1 }}>
+                      <input
+                        type="text"
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && saveEdit(field)}
+                        autoFocus
+                        style={{ flex: 1, padding: '3px 8px', fontSize: 12, border: '1.5px solid #173731', borderRadius: 6, outline: 'none', fontFamily: 'inherit' }}
+                      />
+                      <button type="button" onClick={() => saveEdit(field)} style={{ padding: '3px 8px', background: '#173731', color: '#E7E0D0', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11 }}>✓</button>
+                      <button type="button" onClick={() => setEditingField(null)} style={{ padding: '3px 6px', background: 'none', border: '0.5px solid #C4A882', borderRadius: 6, cursor: 'pointer', fontSize: 11, color: '#8B7355' }}>✕</button>
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 12, fontWeight: 500, color: val ? '#1A1A1A' : '#A0866A', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{val || '—'}</div>
+                      <button type="button" onClick={() => startEdit(field, val)} style={{ padding: 3, background: 'none', border: 'none', cursor: 'pointer', color: '#C4A882', display: 'inline-flex', flexShrink: 0 }} title="Modifier">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                      </button>
+                    </>
+                  )}
+                </div>
+              )
+            })}
+            {/* Région */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '0.5px solid rgba(180,150,100,0.15)' }}>
+              <div style={{ fontSize: 10, color: '#A0866A', width: 60, flexShrink: 0 }}>Région</div>
+              <select
+                value={profile.region || ''}
+                onChange={(e) => handleChangeRegion(e.target.value)}
+                style={{ flex: 1, padding: '4px 8px', fontSize: 12, border: '0.5px solid rgba(180,150,100,0.3)', borderRadius: 6, background: 'transparent', cursor: 'pointer', fontFamily: 'inherit', color: '#1A1A1A' }}
+              >
+                <option value="">—</option>
+                {REGIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </div>
+            {/* Paternité */}
+            {(() => {
+              const knownUsers = [...new Map(
+                profiles
+                  .filter(p => p.owner_id)
+                  .map(p => [p.owner_id, { id: p.owner_id, email: p.owner_email || '', name: p.owner_full_name?.trim() || (p.owner_email || '').split('@')[0] || 'Inconnu' }])
+              ).values()]
+              if (user?.id && !knownUsers.find(u => u.id === user.id)) {
+                knownUsers.push({ id: user.id, email: user.email || '', name: userProfile?.full_name?.trim() || (user.email || '').split('@')[0] || 'Moi' })
+              }
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0' }}>
+                  <div style={{ fontSize: 10, color: '#A0866A', width: 60, flexShrink: 0 }}>Paternité</div>
+                  <select
+                    value={profile.owner_id || ''}
+                    onChange={async (e) => {
+                      const selectedId = e.target.value
+                      const selectedUser = knownUsers.find(u => u.id === selectedId)
+                      if (!selectedUser) return
+                      await supabase.from('profiles').update({
+                        owner_id: selectedUser.id,
+                        owner_email: selectedUser.email,
+                        owner_full_name: selectedUser.name,
+                      }).eq('id', profile.id)
+                      updateProfile(profile.id, { owner_id: selectedUser.id, owner_email: selectedUser.email, owner_full_name: selectedUser.name })
+                      await fetchProfiles()
+                      showNotif(`Paternité → ${selectedUser.name}`)
+                    }}
+                    style={{ flex: 1, padding: '4px 8px', fontSize: 12, border: '0.5px solid rgba(180,150,100,0.3)', borderRadius: 6, background: 'transparent', cursor: 'pointer', fontFamily: 'inherit', color: '#1A1A1A' }}
+                  >
+                    {!profile.owner_id && <option value="">— Non assigné —</option>}
+                    {knownUsers.map(u => (
+                      <option key={u.id} value={u.id}>{u.id === user?.id ? `${u.name} (vous)` : u.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )
+            })()}
+          </div>
+
+          {/* Contact */}
+          <div style={{ background: 'rgba(255,255,255,0.65)', borderRadius: 11, padding: '11px 13px', border: '0.5px solid rgba(180,150,100,0.2)' }}>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#A0866A', fontWeight: 600, marginBottom: 8 }}>Contact</div>
+            {[
+              { field: 'mail', label: 'Email', placeholder: 'email@…', isLink: false },
+              { field: 'phone', label: 'Tél.', placeholder: '+33 6 …', isLink: false },
+              { field: 'li', label: 'LinkedIn', placeholder: 'linkedin.com/in/…', isLink: true },
+            ].map(({ field, label, placeholder, isLink }) => {
+              const val = profile[field]
+              const linkUrl = val && (val.startsWith('http') ? val : `https://${val}`)
+              return (
+                <div key={field} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '0.5px solid rgba(180,150,100,0.15)' }}>
+                  <div style={{ fontSize: 10, color: '#A0866A', width: 42, flexShrink: 0 }}>{label}</div>
+                  {editingField === field ? (
+                    <div style={{ display: 'flex', gap: 6, flex: 1 }}>
+                      <input
+                        type="text"
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && saveEdit(field)}
+                        autoFocus
+                        style={{ flex: 1, padding: '3px 8px', fontSize: 12, border: '1.5px solid #173731', borderRadius: 6, outline: 'none', fontFamily: 'inherit' }}
+                      />
+                      <button type="button" onClick={() => saveEdit(field)} style={{ padding: '3px 8px', background: '#173731', color: '#E7E0D0', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11 }}>✓</button>
+                      <button type="button" onClick={() => setEditingField(null)} style={{ padding: '3px 6px', background: 'none', border: '0.5px solid #C4A882', borderRadius: 6, cursor: 'pointer', fontSize: 11, color: '#8B7355' }}>✕</button>
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 12, color: val ? (isLink ? '#0a66c2' : '#1A1A1A') : '#A0866A', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: val ? 500 : 400 }}>
+                        {isLink && val ? <a href={linkUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#0a66c2', textDecoration: 'none' }}>{val}</a> : (val || placeholder)}
+                      </div>
+                      <button type="button" onClick={() => startEdit(field, val)} style={{ padding: 3, background: 'none', border: 'none', cursor: 'pointer', color: '#C4A882', display: 'inline-flex', flexShrink: 0 }} title="Modifier">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                      </button>
+                    </>
+                  )}
+                </div>
+              )
+            })}
+            {/* Prochain RDV */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '0.5px solid rgba(180,150,100,0.15)' }}>
+              <div style={{ fontSize: 10, color: '#A0866A', width: 42, flexShrink: 0 }}>RDV</div>
               <input
                 type="date"
-                value={profile.next_event_date || ''}
+                value={profile.next_event_date ? profile.next_event_date.split('T')[0] : ''}
                 onChange={(e) => updateProfileField(profile.id, 'next_event_date', e.target.value || null)}
-                style={{ flex: 1, padding: '6px 10px', fontSize: 13, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6 }}
+                style={{ flex: 1, padding: '3px 8px', fontSize: 12, border: '0.5px solid rgba(180,150,100,0.3)', borderRadius: 6, background: 'transparent', cursor: 'pointer', fontFamily: 'inherit', color: '#1A1A1A' }}
               />
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: `1px solid ${PAGE_STYLE.border}` }}>
-              <span style={iconStyle}><IconTag /></span>
-              <span style={{ color: PAGE_STYLE.textSecondary, fontSize: 13, width: 100 }}>Type d'événement</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0' }}>
+              <div style={{ fontSize: 10, color: '#A0866A', width: 42, flexShrink: 0 }}>Type</div>
               <select
                 value={profile.next_event_label || ''}
                 onChange={(e) => updateProfileField(profile.id, 'next_event_label', e.target.value || null)}
-                style={{ flex: 1, padding: '6px 10px', fontSize: 13, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 6 }}
+                style={{ flex: 1, padding: '4px 8px', fontSize: 12, border: '0.5px solid rgba(180,150,100,0.3)', borderRadius: 6, background: 'transparent', cursor: 'pointer', fontFamily: 'inherit', color: '#1A1A1A' }}
               >
                 <option value="">—</option>
                 {['Téléphone', 'Google Meet', 'Présentiel', 'Visioconférence', 'Autre'].map((opt) => (
@@ -832,34 +970,68 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          <div style={{ marginTop: 24, background: PAGE_STYLE.cardBg, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: PAGE_STYLE.radius, padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-            <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: PAGE_STYLE.textSecondary, marginBottom: 16 }}>Actions rapides</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {(profile.cv_url_path || profile.cv_url) && (
-                <button type="button" onClick={openCV} style={{ padding: '10px 14px', textAlign: 'left', borderRadius: 8, border: `1px solid ${PAGE_STYLE.border}`, background: 'none', cursor: 'pointer', fontSize: 13, transition: PAGE_STYLE.transition, display: 'flex', alignItems: 'center', gap: 8 }}><IconDocument /> Voir le CV</button>
-              )}
-              <button type="button" onClick={handleExportPDF} style={{ padding: '10px 14px', textAlign: 'left', borderRadius: 8, border: `1px solid ${PAGE_STYLE.border}`, background: 'none', cursor: 'pointer', fontSize: 13, transition: PAGE_STYLE.transition, display: 'flex', alignItems: 'center', gap: 8 }}><IconUpload /> Exporter la fiche</button>
-              <button type="button" onClick={handleDeleteProfile} style={{ padding: '10px 14px', textAlign: 'left', borderRadius: 8, border: '1px solid #e5c0c0', background: 'none', color: '#c0392b', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}><IconTrash /> Supprimer le profil</button>
+          {/* Lemlist badge si applicable */}
+          {profile.sequence_lemlist && (
+            <div style={{ background: '#FFF7ED', border: '0.5px solid #FED7AA', borderRadius: 8, padding: '7px 12px', fontSize: 11, color: '#c2410c', fontWeight: 500 }}>
+              Séquence Lemlist : {profile.sequence_lemlist}
             </div>
+          )}
+
+          {/* Prénom / Nom (rarement modifiés — en bas) */}
+          <div style={{ background: 'rgba(255,255,255,0.65)', borderRadius: 11, padding: '11px 13px', border: '0.5px solid rgba(180,150,100,0.2)' }}>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#A0866A', fontWeight: 600, marginBottom: 8 }}>Identité</div>
+            {[{ field: 'fn', label: 'Prénom' }, { field: 'ln', label: 'Nom' }].map(({ field, label }) => {
+              const val = profile[field]
+              return (
+                <div key={field} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: field === 'fn' ? '0.5px solid rgba(180,150,100,0.15)' : 'none' }}>
+                  <div style={{ fontSize: 10, color: '#A0866A', width: 42, flexShrink: 0 }}>{label}</div>
+                  {editingField === field ? (
+                    <div style={{ display: 'flex', gap: 6, flex: 1 }}>
+                      <input type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && saveEdit(field)} autoFocus
+                        style={{ flex: 1, padding: '3px 8px', fontSize: 12, border: '1.5px solid #173731', borderRadius: 6, outline: 'none', fontFamily: 'inherit' }} />
+                      <button type="button" onClick={() => saveEdit(field)} style={{ padding: '3px 8px', background: '#173731', color: '#E7E0D0', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11 }}>✓</button>
+                      <button type="button" onClick={() => setEditingField(null)} style={{ padding: '3px 6px', background: 'none', border: '0.5px solid #C4A882', borderRadius: 6, cursor: 'pointer', fontSize: 11, color: '#8B7355' }}>✕</button>
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 12, fontWeight: 500, color: '#1A1A1A', flex: 1 }}>{val || '—'}</div>
+                      <button type="button" onClick={() => startEdit(field, val)} style={{ padding: 3, background: 'none', border: 'none', cursor: 'pointer', color: '#C4A882', display: 'inline-flex', flexShrink: 0 }}>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                      </button>
+                    </>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Actions rapides */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+            {(profile.cv_url_path || profile.cv_url) && (
+              <button type="button" onClick={openCV} style={{ padding: '8px 12px', textAlign: 'left', borderRadius: 8, border: '0.5px solid rgba(180,150,100,0.3)', background: 'rgba(255,255,255,0.6)', cursor: 'pointer', fontSize: 12, color: '#173731', display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'inherit' }}><IconDocument /> Voir le CV</button>
+            )}
+            <button type="button" onClick={handleExportPDF} style={{ padding: '8px 12px', textAlign: 'left', borderRadius: 8, border: '0.5px solid rgba(180,150,100,0.3)', background: 'rgba(255,255,255,0.6)', cursor: 'pointer', fontSize: 12, color: '#173731', display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'inherit' }}><IconUpload /> Exporter la fiche</button>
+            <button type="button" onClick={handleDeleteProfile} style={{ padding: '8px 12px', textAlign: 'left', borderRadius: 8, border: '0.5px solid #FCA5A5', background: '#FEF2F2', color: '#DC2626', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'inherit' }}><IconTrash /> Supprimer le profil</button>
           </div>
 
           {Array.isArray(profile.experiences) && profile.experiences.length > 0 && (
-            <div style={{ marginTop: 24, background: PAGE_STYLE.cardBg, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: PAGE_STYLE.radius, padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-              <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: PAGE_STYLE.textSecondary, marginBottom: 16 }}>Parcours professionnel</div>
-              <div style={{ position: 'relative', paddingLeft: 20 }}>
-                <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 2, background: PAGE_STYLE.accent, borderRadius: 1 }} />
+            <div style={{ background: 'rgba(255,255,255,0.65)', borderRadius: 11, padding: '11px 13px', border: '0.5px solid rgba(180,150,100,0.2)' }}>
+              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#A0866A', fontWeight: 600, marginBottom: 10 }}>Parcours professionnel</div>
+              <div style={{ position: 'relative', paddingLeft: 16 }}>
+                <div style={{ position: 'absolute', left: 3, top: 0, bottom: 0, width: 1.5, background: 'rgba(23,55,49,0.2)', borderRadius: 1 }} />
                 {profile.experiences.map((exp, i) => {
                   const badge = getExperienceBadge(exp)
+                  const isCurrent = exp.isCurrent
                   return (
-                    <div key={i} style={{ position: 'relative', paddingBottom: 20 }}>
-                      <div style={{ position: 'absolute', left: -24, top: 4, width: 10, height: 10, borderRadius: '50%', background: PAGE_STYLE.cardBg, border: `2px solid ${PAGE_STYLE.accent}` }} />
-                      <div style={{ fontWeight: 600, fontSize: 13, color: PAGE_STYLE.text }}>{exp.company || '—'}</div>
-                      <div style={{ fontSize: 12, color: PAGE_STYLE.textSecondary, marginTop: 2 }}>{exp.title || '—'}</div>
-                      <div style={{ fontSize: 12, color: PAGE_STYLE.textSecondary, marginTop: 4 }}>{formatExperiencePeriod(exp)}</div>
-                      <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-                        {badge === 'cabinet' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#D4EDE1', color: '#1A7A4A', fontWeight: 500 }}>Cabinet CGP</span>}
-                        {badge === 'banque' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#EFF6FF', color: '#1D4ED8', fontWeight: 500 }}>Banque</span>}
-                        {badge === 'assurance' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#ECFDF5', color: '#065F46', fontWeight: 500 }}>Assurance</span>}
+                    <div key={i} style={{ position: 'relative', paddingBottom: 14 }}>
+                      <div style={{ position: 'absolute', left: -17, top: 4, width: 8, height: 8, borderRadius: '50%', background: isCurrent ? '#173731' : 'rgba(255,255,255,0.8)', border: `1.5px solid ${isCurrent ? '#173731' : 'rgba(23,55,49,0.3)'}` }} />
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#1A1A1A' }}>{exp.company || '—'}</div>
+                      <div style={{ fontSize: 11, color: '#8B7355', marginTop: 1 }}>{exp.title || '—'}</div>
+                      <div style={{ fontSize: 10, color: '#A0866A', marginTop: 2 }}>{formatExperiencePeriod(exp)}</div>
+                      <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
+                        {badge === 'cabinet' && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: '#D4EDE1', color: '#1A7A4A', fontWeight: 500 }}>Cabinet CGP</span>}
+                        {badge === 'banque' && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: '#EFF6FF', color: '#1D4ED8', fontWeight: 500 }}>Banque</span>}
+                        {badge === 'assurance' && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: '#ECFDF5', color: '#065F46', fontWeight: 500 }}>Assurance</span>}
                       </div>
                     </div>
                   )
