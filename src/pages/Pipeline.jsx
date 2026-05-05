@@ -386,6 +386,18 @@ function renderNote(content) {
   return html
 }
 
+// Stages à partir desquels on affiche le score de la grille de notation
+const GRILLE_STAGES = ["Point d'étape", "Point d'étape téléphonique", 'Point Business Plan', 'Démission reconversion', 'R2 Amaury', 'Point juridique', 'Recruté']
+
+// Couleur barre gauche selon la paternité (Baptiste=rouge, Aurélien=gris)
+function getOwnerBorderColor(profile) {
+  const email = (profile.owner_email || '').toLowerCase()
+  if (email.includes('paterac') || email.includes('b.paterac')) return '#e11d48'
+  if (email.includes('goutard') || email.includes('agoutard')) return '#94a3b8'
+  if (!email && !profile.owner_id) return '#e5e7eb'
+  return '#e11d48' // par défaut Baptiste
+}
+
 function KanbanCard({ profile, stage, onClick, isSelected, ownerBadge, nextEvent, onEditDate }) {
   const [expanded, setExpanded] = useState(false)
   const handleClick = () => onClick?.(profile)
@@ -398,12 +410,14 @@ function KanbanCard({ profile, stage, onClick, isSelected, ownerBadge, nextEvent
   const displayDate = hasNextEventDate
     ? formatShortDate(profile.next_event_date)
     : (profile.created_at ? formatShortDate(profile.created_at) : profile.dt || '')
-  const dateColor = hasNextEventDate ? '#D2AB76' : '#ccc'
   const dateTitle = hasNextEventDate ? `Prochain événement : ${formatDateWithYear(profile.next_event_date)}` : undefined
 
-  const borderColor = STAGE_BORDER_COLORS[stage] || '#94a3b8'
+  // Calcul J-X pour le RDV
+  const daysUntilRdv = hasNextEventDate
+    ? Math.round((new Date(profile.next_event_date) - new Date()) / (1000 * 60 * 60 * 24))
+    : null
+
   const matStyle = MATURITY_BADGE_STYLES[profile.mat] || { backgroundColor: '#f8fafc', color: '#94a3b8' }
-  const scoreStyle = getScoreBadgeStyle(profile.sc)
   const isChute = profile.mat === 'Chute'
   const isPasInteresse = profile.mat === 'Pas intéressé'
   const sessionLabel = profile.integration_periode && profile.integration_annee
@@ -412,31 +426,29 @@ function KanbanCard({ profile, stage, onClick, isSelected, ownerBadge, nextEvent
       ? 'Session assignée'
       : null
 
-  // Owner color for left border
-  const ownerColor = ownerBadge?.text || borderColor
+  // Barre gauche = couleur paternité (Baptiste rouge / Aurélien gris)
+  const ownerBorderColor = getOwnerBorderColor(profile)
+
+  // Score affiché : grille notation à partir de Point d'étape, sinon IA
+  const useGrille = GRILLE_STAGES.includes(stage)
+  const grilleTotal = useGrille && profile.grille_notation
+    ? Object.values(profile.grille_notation).filter((v) => v !== null && v !== undefined).reduce((s, v) => s + Number(v), 0)
+    : null
+  const displayScore = useGrille ? (grilleTotal !== null && grilleTotal > 0 ? grilleTotal : null) : (profile.sc ?? null)
+  const scoreStyle = getScoreBadgeStyle(useGrille ? (displayScore != null ? Math.min(100, displayScore) : null) : profile.sc)
 
   return (
     <div
       className={`kanban-card${isSelected ? ' selected' : ''}`}
       draggable={true}
       onDragStart={(e) => e.dataTransfer.setData('profileId', String(profile.id))}
-      onMouseEnter={(e) => {
-        if (!isSelected) {
-          e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)'
-          e.currentTarget.style.transform = 'translateY(-1px)'
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!isSelected) {
-          e.currentTarget.style.boxShadow = ''
-          e.currentTarget.style.transform = ''
-        }
-      }}
+      onMouseEnter={(e) => { if (!isSelected) { e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)'; e.currentTarget.style.transform = 'translateY(-1px)' } }}
+      onMouseLeave={(e) => { if (!isSelected) { e.currentTarget.style.boxShadow = ''; e.currentTarget.style.transform = '' } }}
       style={{
         background: '#ffffff',
         borderRadius: expanded ? 12 : 8,
         border: `1px solid rgba(0,0,0,0.06)`,
-        borderLeft: `4px ${(isChute || isPasInteresse) ? 'dashed' : 'solid'} ${ownerColor}`,
+        borderLeft: `4px ${(isChute || isPasInteresse) ? 'dashed' : 'solid'} ${ownerBorderColor}`,
         padding: expanded ? 14 : '8px 12px',
         marginBottom: expanded ? 8 : 4,
         cursor: 'pointer',
@@ -448,21 +460,23 @@ function KanbanCard({ profile, stage, onClick, isSelected, ownerBadge, nextEvent
         width: '100%',
       }}
     >
-      {/* Ligne compacte (toujours visible) */}
-      <div
-        onClick={handleToggle}
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}
-      >
+      {/* Ligne compacte */}
+      <div onClick={handleToggle} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
           {ownerBadge && (
             <span style={{ fontSize: 8, fontWeight: 700, width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: ownerBadge.bg, color: ownerBadge.text, flexShrink: 0, letterSpacing: '-0.5px' }} title={ownerBadge.name}>
               {ownerBadge.initial}
             </span>
           )}
-          <span style={{ fontSize: 12, fontWeight: 600, color: '#173731', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile.fn} {profile.ln}</span>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#173731', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile.fn} {profile.ln}</div>
+            {!expanded && profile.co && <div style={{ fontSize: 10, color: '#8B7355', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 1 }}>{profile.co}</div>}
+          </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-          <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 6, ...scoreStyle }}>{profile.sc ?? '—'}</span>
+          <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 6, ...scoreStyle }}>
+            {displayScore ?? '—'}
+          </span>
           <span style={{ fontSize: 10, color: '#bbb', transition: 'transform 0.15s', transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>▾</span>
         </div>
       </div>
@@ -471,72 +485,67 @@ function KanbanCard({ profile, stage, onClick, isSelected, ownerBadge, nextEvent
       {expanded && (
         <div style={{ marginTop: 10 }}>
           {/* Employeur + Ville */}
-          <div style={{ background: 'var(--color-background-secondary)', borderRadius: 6, padding: '6px 10px', marginBottom: 8 }}>
-            <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-primary)', margin: '0 0 1px' }}>
-              {profile.co || profile.company || '—'}
-            </p>
-            <p style={{ fontSize: 11, color: 'var(--color-text-secondary)', margin: 0 }}>
-              {[profile.city, profile.region].filter(Boolean).join(' · ') || '—'}
-            </p>
+          <div style={{ background: '#F5F0E8', borderRadius: 7, padding: '7px 10px', marginBottom: 8 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#173731', marginBottom: 1 }}>{profile.co || '—'}</div>
+            <div style={{ fontSize: 11, color: '#8B7355' }}>{[profile.city, profile.region].filter(Boolean).join(' · ') || '—'}</div>
           </div>
 
-          {/* Badge source */}
-          {profile.src && (
-            <div style={{ marginBottom: 6 }}>
-              <span style={{ display: 'inline-block', borderRadius: 20, padding: '3px 7px', fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...(SOURCE_STYLES[profile.src] || { backgroundColor: '#f8fafc', color: '#94a3b8' }) }}>
-                {profile.src}
-              </span>
-            </div>
-          )}
-
-          {/* Maturité | Date */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
-            <span style={{ fontSize: 10, borderRadius: 20, padding: '2px 7px', fontWeight: 600, ...matStyle }}>
-              {profile.mat}
-            </span>
-            {stage === 'Recruté' ? (
-              <span style={{ fontSize: 10, fontWeight: 600, color: '#16a34a' }}>Intégré ✓</span>
-            ) : (
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); onEditDate?.(profile, stage) }}
-                title={dateTitle || 'Modifier la date du prochain RDV'}
-                style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', borderRadius: 4, color: dateColor }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.05)' }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'none' }}
-              >
-                <span style={{ fontSize: 10, fontWeight: 600 }}>{displayDate}</span>
-                <span style={{ fontSize: 9, opacity: 0.6 }}>✎</span>
-              </button>
+          {/* Pills source + maturité */}
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 8 }}>
+            {profile.src && (
+              <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20, ...(SOURCE_STYLES[profile.src] || { backgroundColor: '#f8fafc', color: '#94a3b8' }) }}>{profile.src}</span>
+            )}
+            {profile.mat && (
+              <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20, ...matStyle }}>{profile.mat}</span>
             )}
           </div>
 
-          {/* Badge session */}
-          {sessionLabel && (
-            <div style={{ marginTop: 6 }}>
-              <span style={{ display: 'inline-block', background: '#f0fdf4', color: '#15803d', fontSize: 9, fontWeight: 600, padding: '2px 6px', borderRadius: 20 }}>
-                {sessionLabel}
+          {/* RDV */}
+          {stage !== 'Recruté' && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onEditDate?.(profile, stage) }}
+              title={dateTitle || 'Modifier la date du prochain RDV'}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', background: '#F5F0E8', border: 'none', borderRadius: 7, padding: '6px 8px', cursor: 'pointer', marginBottom: 8 }}
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#8B7355" strokeWidth={1.5} style={{ flexShrink: 0 }}><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              <span style={{ fontSize: 11, fontWeight: 600, color: hasNextEventDate ? '#173731' : '#C4A882', flex: 1, textAlign: 'left' }}>
+                {hasNextEventDate ? displayDate : 'Aucun RDV'}
               </span>
+              {daysUntilRdv !== null && (
+                <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 20, background: daysUntilRdv < 0 ? '#fee2e2' : daysUntilRdv <= 3 ? '#fef9c3' : '#f0fdf4', color: daysUntilRdv < 0 ? '#be123c' : daysUntilRdv <= 3 ? '#854d0e' : '#15803d', flexShrink: 0 }}>
+                  {daysUntilRdv < 0 ? `J+${Math.abs(daysUntilRdv)}` : `J-${daysUntilRdv}`}
+                </span>
+              )}
+              <span style={{ fontSize: 9, color: '#C4A882' }}>✎</span>
+            </button>
+          )}
+
+          {/* Session recrutée */}
+          {sessionLabel && (
+            <div style={{ marginBottom: 7 }}>
+              <span style={{ display: 'inline-block', background: '#f0fdf4', color: '#15803d', fontSize: 9, fontWeight: 600, padding: '2px 6px', borderRadius: 20 }}>{sessionLabel}</span>
             </div>
           )}
 
           {/* Propriétaire */}
           {ownerBadge && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 6 }}>
-              <span style={{ fontSize: 10, color: ownerBadge.text, fontWeight: 500 }}>{ownerBadge.name}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 10 }}>
+              <div style={{ width: 16, height: 16, borderRadius: '50%', background: ownerBorderColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+                {ownerBadge.initial}
+              </div>
+              <span style={{ fontSize: 10, color: '#8B7355', fontWeight: 500 }}>{ownerBadge.name}</span>
             </div>
           )}
 
           {/* Bouton voir profil */}
-          <div style={{ marginTop: 10, textAlign: 'right' }}>
-            <button
-              type="button"
-              onClick={handleClick}
-              style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, border: '1px solid #173731', color: '#173731', background: 'transparent', cursor: 'pointer', fontWeight: 500 }}
-            >
-              Voir le profil →
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={handleClick}
+            style={{ width: '100%', padding: '7px 0', borderRadius: 8, border: 'none', background: '#173731', color: '#E7E0D0', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+          >
+            Voir le profil →
+          </button>
         </div>
       )}
     </div>
