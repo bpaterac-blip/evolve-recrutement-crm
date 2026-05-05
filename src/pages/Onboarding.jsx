@@ -30,9 +30,28 @@ function fillMail(tpl, p) {
     .replace(/\{\{nom\}\}/g, p.ln)
     .replace(/\{\{societe\}\}/g, `${p.fn} ${p.ln} Courtage`)
     .replace(/\{\{email\}\}/g, p.email || '')
+    .replace(/\{\{telephone\}\}/g, p.phone || '(téléphone)')
+    .replace(/\{\{siren\}\}/g, p.siren || '...........')
     .replace(/\{\{responsable\}\}/g, p.owner)
     .replace(/\{\{annee\}\}/g, String(year))
   return { to: replace(tpl.to), cc: tpl.cc || '', subject: replace(tpl.subject), body: replace(tpl.body) }
+}
+
+// Corps du mail en HTML : convertit \n → <br> et préserve le HTML si déjà présent
+function bodyToHtml(body) {
+  if (/<[a-z][\s\S]*>/i.test(body)) return body
+  return body.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')
+}
+
+// Copier dans le presse-papier avec formatage HTML préservé
+function copyAsHtml(htmlStr, plainStr) {
+  try {
+    const htmlBlob  = new Blob([htmlStr],  { type: 'text/html' })
+    const plainBlob = new Blob([plainStr], { type: 'text/plain' })
+    navigator.clipboard.write([new ClipboardItem({ 'text/html': htmlBlob, 'text/plain': plainBlob })])
+  } catch (_) {
+    navigator.clipboard.writeText(plainStr).catch(() => {})
+  }
 }
 
 // ── Étapes d'onboarding ───────────────────────────────────────────────────────
@@ -45,18 +64,26 @@ const ONBOARDING_STEPS = [
     yousign: false,
     waitAttestation: true,
     mailTemplate: {
-      to: '[email Florian NARDOUX]',
-      cc: '{{responsable}} — responsable réseau',
-      subject: 'Création société — {{prenom}} {{nom}} Courtage',
-      body: `Bonjour Florian,
+      to: 'florian.nardoux@l-expert-comptable.com',
+      cc: '',
+      subject: '{{prenom}} {{nom}} Courtage / CREATION DE SOCIETE',
+      body: `Hello Florian,
+Comment tu vas ?
 
-Je me permets de vous contacter concernant la création de la société de {{prenom}} {{nom}}, futur partenaire CGP chez Evolve Investissement.
+Peux-tu, s'il te plaît, prendre contact avec {{prenom}} {{nom}} pour fixer un RDV en visioconférence avec l'expert-comptable et lancer les démarches de création ?
 
-Veuillez trouver en pièce jointe les statuts de la société {{prenom}} {{nom}} Courtage. Pourriez-vous prendre en charge les démarches d'immatriculation et de dépôt de capital ?
+Tu trouveras ses coordonnées ci-dessous :
+Numéro : {{telephone}}
+Mail : {{email}}
 
-En vous remerciant par avance,
+Enfin, je t'envoie en pièce jointe les statuts constitutifs avec les informations mises à jour.
+
+Nous souhaitons une date d'immatriculation au 01 du M+1.
+Je reste à ta disposition si besoin.
+Bien à toi,
 {{responsable}}
-Evolve Investissement`,
+
+NB : Bien penser à mettre les statuts modifiés en PJ`,
     },
     tasks: [
       { id: 't1_1', label: 'Créer dossier {{prenom}} {{nom}} COURTAGE dans JURIDIQUE → NOS COURTIERS', links: ['dossier'] },
@@ -76,18 +103,23 @@ Evolve Investissement`,
     mailTemplate: {
       to: '{{email}}',
       cc: '',
-      subject: 'Félicitations — {{prenom}} {{nom}} Courtage est immatriculée !',
+      subject: '{{prenom}} {{nom}} Courtage / VALIDATION IMMATRICULATION SOCIETE',
       body: `Bonjour {{prenom}},
 
-Excellente nouvelle ! Votre société {{prenom}} {{nom}} Courtage vient d'être officiellement immatriculée.
+J'espère que tu vas bien.
 
-Vous allez recevoir via YouSign le pacte d'associés à signer. Merci d'apposer vos paraphes et la mention "lu et approuvé" aux endroits demandés.
+Félicitations pour l'immatriculation de ta société {{prenom}} {{nom}} Courtage !
 
-N'hésitez pas à nous contacter si vous avez des questions.
+La première étape réalisée, nous allons donc pouvoir avancer dans le processus de création.
 
-À très bientôt,
-{{responsable}}
-Evolve Investissement`,
+Tu vas recevoir dans la journée/soirée le pacte d'associés par mail qui sera à signer électroniquement.
+
+De notre côté, Amaury va également recevoir ce document pour signature.
+
+Je reviens vers toi après la signature du pacte pour les prochaines étapes.
+
+Bonne journée !
+{{responsable}}`,
     },
     tasks: [
       { id: 't2_1', label: 'Recevoir mail de validation de l\'immatriculation', links: [] },
@@ -107,18 +139,37 @@ Evolve Investissement`,
     mailTemplate: {
       to: '{{email}}',
       cc: '',
-      subject: 'Documents compte pro — {{prenom}} {{nom}} Courtage',
+      subject: '{{prenom}} {{nom}} Courtage / PREPARATION DOCUMENTS COMPTE PRO',
       body: `Bonjour {{prenom}},
+J'espère que tu vas bien.
+Nous avons bien reçu le pacte d'associés signé par Amaury et toi-même, je te remercie.
+Pour anticiper les demandes prochaines de Tiime (Outil de L'Expert-comptable) concernant l'ouverture du compte professionnel, voici un récapitulatif des documents à préparer :
+- Déclaration actionnariale
+- Extrait Kbis Evolve Courtage de moins de 3 mois
+- Registre des bénéficiaires effectifs
 
-Veuillez trouver ci-joint les documents relatifs à l'ouverture de votre compte professionnel :
-• Déclaration actionnaire signée
-• Formulaire RBE
+Tu viens de recevoir un mail de YouSign pour signer la déclaration actionnariale, ainsi que les demandes pour obtenir le Registre des Bénéficiaires Effectifs.
 
-Merci de signer les documents via YouSign lorsque vous les recevrez.
+Tu trouveras en pièce jointe l'extrait Kbis d'Evolve Courtage.
 
-À très bientôt,
-{{responsable}}
-Evolve Investissement`,
+Concernant le Registre des bénéficiaires effectifs il te faudra ensuite, en tant que gérant de la société, envoyer le dossier de demande signé et ta CNI par mail à l'adresse suivante : certificatbe@infogreffe-siege.fr, en indiquant :
+
+en objet du mail : {{prenom}} {{nom}} Courtage - SIREN {{siren}}
+
+en corps du mail :
+
+"Bonjour,
+Ayant besoin de mon Registre des Bénéficiaires Effectifs afin de pouvoir réaliser l'ouverture de mon compte professionnel, vous pouvez retrouver en PJ le dossier de demande d'accès signé.
+De plus, en tant que gérant de la société pour laquelle je vous fait parvenir cette demande, vous pouvez également retrouver ma pièce d'identité en PJ.
+Je vous remercie par avance.
+Bonne journée"
+
+Lorsque tu auras reçu le document d'Infogreffe, pourrais-tu me le transmettre, s'il te plaît ?
+
+Une fois en possession de tous les documents, tu n'auras plus qu'à attendre le mail de Tiime te demandant ces pièces pour leur transmettre en retour.
+
+Je te souhaite une bonne journée.
+{{responsable}}`,
     },
     tasks: [
       { id: 't3_1', label: 'Copier + remplir la Déclaration actionnariale dans le dossier Drive', links: ['declaration'] },
@@ -138,24 +189,39 @@ Evolve Investissement`,
     mailTemplate: {
       to: '{{email}}',
       cc: '',
-      subject: 'Inscription RCP IAS — action requise',
+      subject: '{{prenom}} {{nom}} Courtage / RESPONSABILITÉ CIVILE PROFESSIONNELLE',
       body: `Bonjour {{prenom}},
 
-Vous allez recevoir via YouSign le document d'adhésion RCP IAS à signer.
+J'espère que tu vas bien.
 
-Après signature, merci de transférer ce document signé, accompagné des pièces jointes suivantes, à Yann ARNOUD — yarnoud@verspieren.com :
+Tu viens de recevoir les demandes d'adhésions RC Pro à signer et parapher électroniquement.
+Tu peux retrouver en PJ un dossier compressé avec les documents obligatoires à transmettre.
 
-• CNI Amaury Guillemin
-• Votre CNI
-• Votre CV
-• CV Amaury Guillemin
-• KBIS Evolve Courtage
-• KBIS de votre société
-• Statuts signés de votre société
+Peux-tu rajouter à ce dossier s'il te plaît :
 
-En vous remerciant,
-{{responsable}}
-Evolve Investissement`,
+- La demande d'adhésion signée et paraphée
+- Ton RIB
+
+Après avoir intégré ces documents aux autres dans le dossier merci de le compresser et de l'envoyer par mail à :
+
+Yann ARNOUD : yarnoud@verspieren.com
+En mettant en copie :
+ntouadi@verspieren.com
+rjarlot@verspieren.com
+
+En indiquant :
+
+Objet : ADHÉSION {{prenom}} {{nom}} Courtage - SIREN {{siren}}
+
+"Bonjour,
+Vous pouvez retrouver mon dossier d'adhésion complet sous format compressé en pièce jointe.
+Je reste à votre disposition pour tout complément d'information
+Bonne journée à vous"
+
+Merci de me transmettre l'attestation lorsque tu auras reçu celle-ci
+
+Bonne journée !
+{{responsable}}`,
     },
     tasks: [
       { id: 't4_1', label: 'Remplir le document d\'adhésion RCP IAS', links: [] },
@@ -175,19 +241,29 @@ Evolve Investissement`,
     mailTemplate: {
       to: '{{email}}',
       cc: '',
-      subject: 'Vos identifiants CNPM — Evolve Investissement',
+      subject: '{{prenom}} {{nom}} Courtage / MEDIATEUR',
       body: `Bonjour {{prenom}},
 
-Suite à votre adhésion au CNPM (Centre National de la Médiation), voici vos identifiants de connexion à votre espace médiateur :
+Nous venons de demander ton adhésion au médiateur MEDCONSO.
 
-• Identifiant : {{email}}
-• Mot de passe : #{{nom}}{{annee}}
+En effet, depuis le 1er janvier 2016, et conformément aux articles L.611-1 et suivants et R.612 et suivants du Code de la Consommation, les professionnels ont l'obligation de proposer à tout consommateur le recours à la médiation de la consommation afin de résoudre leurs différends dans le cadre de l'exécution d'un contrat de vente ou d'une prestation de service.
 
-Je vous invite à conserver ces informations précieusement.
+Tu vas recevoir un mail de la CNPM, il te faudra ensuite aller sur : https://www.medconsodev.eu/  Puis, cliquer en haut à droite sur ACCÈS PROFESSIONNEL
 
-À votre disposition pour toute question,
-{{responsable}}
-Evolve Investissement`,
+Après t'être connecté, tu pourras visualiser le projet de convention et régler la cotisation d'adhésion.
+
+Voici tes identifiants pour te connecter :
+
+ID : {{email}}
+
+MDP : #{{prenom}}{{annee}}
+
+Ensuite, il te faudra télécharger l'attestation de convention sur ton espace et me la transmettre par mail.
+
+Je reste à ta disposition si besoin,
+
+Bonne journée !
+{{responsable}}`,
     },
     tasks: [
       { id: 't5_1', label: 'Remplir le formulaire CNPM (affiliation : ADHÉRENT CNCEF — PAIEMENT ANNUEL)', links: ['cnpm'] },
@@ -274,11 +350,11 @@ Evolve Investissement`,
 
 // ── Données de démo ────────────────────────────────────────────────────────────
 const MOCK_PROFILES = [
-  { id: 1, fn: 'Florent',  ln: 'Comte',   co: 'Crédit Agricole',   email: 'florent.comte@ca-centrest.fr',    owner: 'Baptiste',  step: 1, start: '2026-04-15', session: 'Mai 2026',     done: {} },
-  { id: 2, fn: 'Marie',    ln: 'Dupont',   co: 'BNP Paribas',       email: 'marie.dupont@bnpparibas.com',     owner: 'Aurélien',  step: 2, start: '2026-04-08', session: 'Juin 2026',    done: { t2_1: true, t2_2: true } },
-  { id: 3, fn: 'Thomas',   ln: 'Martin',   co: 'Société Générale',  email: 'thomas.martin@sg.com',            owner: 'Baptiste',  step: 4, start: '2026-03-25', session: 'Juillet 2026', done: { t4_1: true, t4_2: true } },
-  { id: 4, fn: 'Sophie',   ln: 'Bernard',  co: 'La Banque Postale', email: 'sophie.bernard@labanquepostale.fr', owner: 'Aurélien', step: 6, start: '2026-03-10', session: 'Mai 2026',     done: { t6_1: true, t6_2: true, t6_3: true } },
-  { id: 5, fn: 'Lucas',    ln: 'Petit',    co: 'Crédit Mutuel',     email: 'lucas.petit@creditmutuel.fr',     owner: 'Baptiste',  step: 8, start: '2026-02-20', session: 'Mai 2026',     done: { t8_1: true } },
+  { id: 1, fn: 'Florent',  ln: 'Comte',   co: 'Crédit Agricole',   email: 'florent.comte@ca-centrest.fr',      phone: '06 12 34 56 78', siren: '123 456 789', owner: 'Baptiste',  step: 1, start: '2026-04-15', session: 'Mai 2026',     done: {} },
+  { id: 2, fn: 'Marie',    ln: 'Dupont',   co: 'BNP Paribas',       email: 'marie.dupont@bnpparibas.com',       phone: '06 23 45 67 89', siren: '234 567 890', owner: 'Aurélien',  step: 2, start: '2026-04-08', session: 'Juin 2026',    done: { t2_1: true, t2_2: true } },
+  { id: 3, fn: 'Thomas',   ln: 'Martin',   co: 'Société Générale',  email: 'thomas.martin@sg.com',              phone: '06 34 56 78 90', siren: '345 678 901', owner: 'Baptiste',  step: 4, start: '2026-03-25', session: 'Juillet 2026', done: { t4_1: true, t4_2: true } },
+  { id: 4, fn: 'Sophie',   ln: 'Bernard',  co: 'La Banque Postale', email: 'sophie.bernard@labanquepostale.fr', phone: '06 45 67 89 01', siren: '456 789 012', owner: 'Aurélien',  step: 6, start: '2026-03-10', session: 'Mai 2026',     done: { t6_1: true, t6_2: true, t6_3: true } },
+  { id: 5, fn: 'Lucas',    ln: 'Petit',    co: 'Crédit Mutuel',     email: 'lucas.petit@creditmutuel.fr',       phone: '06 56 78 90 12', siren: '567 890 123', owner: 'Baptiste',  step: 8, start: '2026-02-20', session: 'Mai 2026',     done: { t8_1: true } },
 ]
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -499,16 +575,20 @@ function SidePanel({ profile, steps, stepNotes, taskNotes, onClose, onToggleTask
   const currentVisibleIdx = steps.findIndex((s) => s.id === profile.step)
   const filledMail = currentStepDef ? fillMail(currentStepDef.mailTemplate, profile) : null
 
-  const copyMail = () => {
+  const copyMailBody = () => {
     if (!filledMail) return
-    const text = `À : ${filledMail.to}\nObjet : ${filledMail.subject}\n\n${filledMail.body}`
-    navigator.clipboard.writeText(text).catch(() => {})
+    const html = bodyToHtml(filledMail.body)
+    copyAsHtml(html, filledMail.body)
   }
 
   const openGmail = () => {
     if (!filledMail) return
-    const params = new URLSearchParams({ to: filledMail.to, su: filledMail.subject, body: filledMail.body })
+    // Ouvre Gmail avec destinataire + objet pré-remplis — coller le corps avec Ctrl+V après
+    const params = new URLSearchParams({ to: filledMail.to, su: filledMail.subject })
+    if (filledMail.cc) params.set('cc', filledMail.cc)
     window.open(`https://mail.google.com/mail/?view=cm&fs=1&${params.toString()}`, '_blank')
+    // Copie simultanée du corps dans le presse-papier
+    copyMailBody()
   }
 
   // Replace task label placeholders
@@ -657,15 +737,21 @@ function SidePanel({ profile, steps, stepNotes, taskNotes, onClose, onToggleTask
                           ))}
                           <div style={{ marginBottom: 8 }}>
                             <div style={{ fontSize: 9, fontWeight: 700, color: '#aaa', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 2 }}>Corps</div>
-                            <div style={{ fontSize: 10, color: '#333', background: '#F5F5F5', borderRadius: 4, padding: '6px 8px', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{filledMail.body}</div>
+                            <div
+                              style={{ fontSize: 10, color: '#333', background: '#F5F5F5', borderRadius: 4, padding: '6px 8px', lineHeight: 1.6, maxHeight: 220, overflowY: 'auto', userSelect: 'text' }}
+                              dangerouslySetInnerHTML={{ __html: bodyToHtml(filledMail.body) }}
+                            />
                           </div>
                           <div style={{ display: 'flex', gap: 6 }}>
-                            <button type="button" onClick={copyMail} style={{ flex: 1, padding: '6px 0', borderRadius: 6, border: '0.5px solid #D5D0C8', background: 'white', fontSize: 10, fontWeight: 600, color: '#555', cursor: 'pointer' }}>
-                              Copier
+                            <button type="button" onClick={copyMailBody} style={{ flex: 1, padding: '6px 0', borderRadius: 6, border: '0.5px solid #D5D0C8', background: 'white', fontSize: 10, fontWeight: 600, color: '#555', cursor: 'pointer' }}>
+                              Copier le corps
                             </button>
                             <button type="button" onClick={openGmail} style={{ flex: 1, padding: '6px 0', borderRadius: 6, border: 'none', background: ACCENT, fontSize: 10, fontWeight: 600, color: 'white', cursor: 'pointer' }}>
-                              Ouvrir Gmail
+                              Gmail + copier ↗
                             </button>
+                          </div>
+                          <div style={{ fontSize: 9, color: '#aaa', marginTop: 4, textAlign: 'center' }}>
+                            Gmail s'ouvre avec À + Objet pré-remplis — colle le corps avec Ctrl+V
                           </div>
                         </div>
                       )}
