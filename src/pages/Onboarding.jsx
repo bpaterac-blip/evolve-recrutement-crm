@@ -13,7 +13,8 @@ const L = {
   statuts_sas:     { label: 'Statuts SAS', url: 'https://docs.google.com/document/d/1gA0FzqEB79lG4oI1uOJ4YzUnUwuS8Qmy/edit' },
   statuts_sarl:    { label: 'Statuts SARL', url: 'https://docs.google.com/document/d/1_jjDXaz4-X7mLx5LXJ4x7SWS4lWPVXwa8czM7Fd_d8c/edit' },
   mail_pacte:      { label: 'Mail pacte d\'associés', url: 'https://docs.google.com/document/d/1hDf0Gqivt0vR-944o7u9-OYCxjXCPJEF-mZst9gF15Y/edit' },
-  pacte:           { label: 'Pacte d\'associés', url: 'https://docs.google.com/document/d/1z-FUO7iBc5dER5-5CYek78WQUuekaF5z/edit' },
+  pacte_sas:       { label: 'Pacte SAS', url: 'https://docs.google.com/document/d/1lHBcx_GT4EVmTYM_lTo-kPPxFv3O3bdA/edit' },
+  pacte_sarl:      { label: 'Pacte SARL', url: 'https://docs.google.com/document/d/1z-FUO7iBc5dER5-5CYek78WQUuekaF5z/edit' },
   yousign_ids:     { label: 'IDs YouSign', url: 'https://docs.google.com/spreadsheets/d/1G98pOlYxTIlJgbZuSSYWMFepxxUEfDntWagNH3TnKPA/edit?gid=761556900#gid=761556900' },
   declaration:     { label: 'Déclaration actionnariale', url: 'https://docs.google.com/document/d/1jpHUEHrrPdppFwbGDJB1gBkfG3O_z_SE/edit' },
   rbe:             { label: 'Formulaire RBE', url: 'https://drive.google.com/file/d/1bXixeh7H20uDH1PqBYyL-uplktEvQIX5/view' },
@@ -97,7 +98,7 @@ const ONBOARDING_STEPS = [
     tasks: [
       { id: 't2_1', label: 'Recevoir le mail de validation d\'immatriculation de la société', links: [] },
       { id: 't2_2', label: 'Envoyer au gérant le mail concernant le pacte d\'associés', links: ['mail_pacte'] },
-      { id: 't2_3', label: 'Copier le pacte d\'associés et modifier les cases jaunes sur l\'ensemble du document', links: ['pacte'] },
+      { id: 't2_3', label: 'Copier le pacte d\'associés et modifier les cases jaunes sur l\'ensemble du document', links: ['pacte_sas', 'pacte_sarl'] },
       { id: 't2_3b', label: 'Enregistrer le pacte d\'associés dans le Drive NOS COURTIERS', links: ['dossier'] },
       { id: 't2_4', label: 'Se connecter à YouSign avec les IDs, préparer le document pour signature (paraphes à chaque page + "lu et approuvé" au-dessus des signatures)', links: ['yousign_ids'] },
       { id: 't2_5', label: 'Envoyer à Amaury et au gérant pour signature', links: [] },
