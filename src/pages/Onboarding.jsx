@@ -736,14 +736,17 @@ function MailBlock({ mail, label, onCopy, onGmail }) {
 // ── Modale centrée ────────────────────────────────────────────────────────────
 function ProfileModal({ profile, steps, stepNotes, taskNotes, onClose, onToggleTask, onAdvance, onTaskNote, onStepNote, onDelete }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [viewedStepId, setViewedStepId] = useState(profile.step)
   const days = daysSince(profile.start)
+  const isViewingCurrent = viewedStepId === profile.step
+  const viewedStepDef = ONBOARDING_STEPS.find((s) => s.id === viewedStepId)
   const currentStepDef = ONBOARDING_STEPS.find((s) => s.id === profile.step)
-  const totalTasks = currentStepDef?.tasks.length || 0
-  const doneTasks  = currentStepDef?.tasks.filter((t) => profile.done[t.id]).length || 0
-  const allDone    = doneTasks === totalTasks && totalTasks > 0
+  const totalTasks = viewedStepDef?.tasks.length || 0
+  const doneTasks  = viewedStepDef?.tasks.filter((t) => profile.done[t.id]).length || 0
+  const allDone    = doneTasks === totalTasks && totalTasks > 0 && isViewingCurrent
   const isLastStep = profile.step === 9
   const currentVisibleIdx = steps.findIndex((s) => s.id === profile.step)
-  const filledMails = currentStepDef ? (currentStepDef.mailTemplates || (currentStepDef.mailTemplate ? [currentStepDef.mailTemplate] : [])).map(t => fillMail(t, profile)) : []
+  const filledMails = viewedStepDef ? (viewedStepDef.mailTemplates || (viewedStepDef.mailTemplate ? [viewedStepDef.mailTemplate] : [])).map(t => fillMail(t, profile)) : []
 
   const initials = getInitials(profile.fn, profile.ln)
 
@@ -806,20 +809,27 @@ function ProfileModal({ profile, steps, stepNotes, taskNotes, onClose, onToggleT
             </div>
           </div>
 
-          {/* Stepper horizontal */}
+          {/* Stepper horizontal — cliquable */}
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 0, overflowX: 'auto', paddingBottom: 2 }}>
             {steps.map((step, idx) => {
               const status = step.id < profile.step ? 'done' : step.id === profile.step ? 'active' : 'todo'
+              const isViewed = step.id === viewedStepId
               return (
                 <div key={step.id} style={{ display: 'flex', alignItems: 'flex-start', flexShrink: 0 }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, width: 72 }}>
+                  <div
+                    onClick={() => setViewedStepId(step.id)}
+                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, width: 72, cursor: 'pointer', padding: '4px 2px', borderRadius: 6, background: isViewed && !isViewingCurrent ? 'rgba(255,255,255,0.08)' : 'transparent', transition: 'background 0.15s' }}
+                    title={step.name}
+                  >
                     <div style={{ width: 26, height: 26, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0,
                       background: status === 'done' ? GOLD : status === 'active' ? 'rgba(210,171,118,0.2)' : 'rgba(255,255,255,0.07)',
-                      border: status === 'active' ? `1.5px solid ${GOLD}` : 'none',
-                      color: status === 'done' ? ACCENT : status === 'active' ? GOLD : 'rgba(255,255,255,0.25)' }}>
+                      border: isViewed ? `2px solid white` : status === 'active' ? `1.5px solid ${GOLD}` : 'none',
+                      color: status === 'done' ? ACCENT : status === 'active' ? GOLD : 'rgba(255,255,255,0.25)',
+                      outline: isViewed && !isViewingCurrent ? '2px solid rgba(255,255,255,0.3)' : 'none',
+                      outlineOffset: 2 }}>
                       {status === 'done' ? '✓' : idx + 1}
                     </div>
-                    <span style={{ fontSize: 9, color: status === 'done' ? 'rgba(255,255,255,0.35)' : status === 'active' ? GOLD : 'rgba(255,255,255,0.22)', textAlign: 'center', lineHeight: 1.3, fontWeight: status === 'active' ? 600 : 400, whiteSpace: 'normal', maxWidth: 64 }}>
+                    <span style={{ fontSize: 9, color: isViewed ? 'white' : status === 'done' ? 'rgba(255,255,255,0.35)' : status === 'active' ? GOLD : 'rgba(255,255,255,0.22)', textAlign: 'center', lineHeight: 1.3, fontWeight: isViewed ? 700 : status === 'active' ? 600 : 400, whiteSpace: 'normal', maxWidth: 64 }}>
                       {step.short}
                     </span>
                   </div>
@@ -837,15 +847,22 @@ function ProfileModal({ profile, steps, stepNotes, taskNotes, onClose, onToggleT
 
           {/* Colonne gauche : tâches */}
           <div style={{ overflowY: 'auto', padding: '20px 20px 20px 24px', borderRight: '0.5px solid #E5E0D8' }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: ACCENT, marginBottom: 2 }}>{currentStepDef?.name}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: ACCENT }}>{viewedStepDef?.name}</div>
+              {!isViewingCurrent && (
+                <span style={{ fontSize: 9, background: '#FEF9C3', color: '#854D0E', padding: '2px 8px', borderRadius: 8, fontWeight: 600, flexShrink: 0 }}>
+                  consultation · étape en cours : {currentStepDef?.short}
+                </span>
+              )}
+            </div>
             <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
-              {(currentStepDef?.mailTemplate || currentStepDef?.mailTemplates?.length > 0) && <span style={{ fontSize: 9, background: '#EEF2FF', color: '#4338CA', padding: '2px 7px', borderRadius: 8, fontWeight: 600 }}>✉ Mail</span>}
-              {currentStepDef?.yousign && <span style={{ fontSize: 9, background: '#FEF3C7', color: '#D97706', padding: '2px 7px', borderRadius: 8, fontWeight: 600 }}>✍ YouSign</span>}
-              {currentStepDef?.waitAttestation && <span style={{ fontSize: 9, background: '#F0FDF4', color: '#16a34a', padding: '2px 7px', borderRadius: 8, fontWeight: 600 }}>⏳ Attestation</span>}
+              {(viewedStepDef?.mailTemplate || viewedStepDef?.mailTemplates?.length > 0) && <span style={{ fontSize: 9, background: '#EEF2FF', color: '#4338CA', padding: '2px 7px', borderRadius: 8, fontWeight: 600 }}>✉ Mail</span>}
+              {viewedStepDef?.yousign && <span style={{ fontSize: 9, background: '#FEF3C7', color: '#D97706', padding: '2px 7px', borderRadius: 8, fontWeight: 600 }}>✍ YouSign</span>}
+              {viewedStepDef?.waitAttestation && <span style={{ fontSize: 9, background: '#F0FDF4', color: '#16a34a', padding: '2px 7px', borderRadius: 8, fontWeight: 600 }}>⏳ Attestation</span>}
             </div>
 
             {/* Tâches */}
-            {currentStepDef?.tasks.map((task) => {
+            {viewedStepDef?.tasks.map((task) => {
               const done = !!profile.done[task.id]
               const noteKey = `${profile.id}-${task.id}`
               const noteVal = taskNotes[noteKey] || ''
@@ -897,8 +914,8 @@ function ProfileModal({ profile, steps, stepNotes, taskNotes, onClose, onToggleT
             <div style={{ marginTop: 12, border: `0.5px solid ${GOLD}`, borderLeft: `3px solid ${GOLD}`, borderRadius: '0 6px 6px 0', padding: '8px 10px', background: '#FFFDF7' }}>
               <div style={{ fontSize: 9, fontWeight: 700, color: '#9A7D4A', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>Note sur cette étape</div>
               <textarea
-                value={stepNotes[`${profile.id}-s${profile.step}`] || ''}
-                onChange={(e) => onStepNote(profile.id, profile.step, e.target.value)}
+                value={stepNotes[`${profile.id}-s${viewedStepId}`] || ''}
+                onChange={(e) => onStepNote(profile.id, viewedStepId, e.target.value)}
                 placeholder="Contexte, blocage, info particulière…"
                 rows={2}
                 style={{ width: '100%', fontSize: 11, border: 'none', resize: 'none', background: 'transparent', color: '#444', lineHeight: 1.5, outline: 'none', fontFamily: 'inherit' }}
@@ -916,7 +933,7 @@ function ProfileModal({ profile, steps, stepNotes, taskNotes, onClose, onToggleT
                   <MailBlock
                     key={mIdx}
                     mail={mail}
-                    label={mail.label || currentStepDef?.short}
+                    label={mail.label || viewedStepDef?.short}
                     onCopy={() => copyMailBody(mail)}
                     onGmail={() => openGmail(mail)}
                   />
@@ -929,23 +946,32 @@ function ProfileModal({ profile, steps, stepNotes, taskNotes, onClose, onToggleT
             {/* Progression + bouton valider */}
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                <span style={{ fontSize: 11, color: '#888' }}>Progression étape</span>
+                <span style={{ fontSize: 11, color: '#888' }}>Progression {isViewingCurrent ? 'étape en cours' : `étape ${viewedStepId}`}</span>
                 <span style={{ fontSize: 12, fontWeight: 700, color: ACCENT }}>{doneTasks} / {totalTasks}</span>
               </div>
               <div style={{ height: 5, background: '#F0EDE8', borderRadius: 3, overflow: 'hidden', marginBottom: 14 }}>
-                <div style={{ height: '100%', borderRadius: 3, transition: 'width 0.3s', width: `${totalTasks > 0 ? (doneTasks / totalTasks) * 100 : 0}%`, background: GOLD }} />
+                <div style={{ height: '100%', borderRadius: 3, transition: 'width 0.3s', width: `${totalTasks > 0 ? (doneTasks / totalTasks) * 100 : 0}%`, background: isViewingCurrent ? GOLD : '#C4B5FD' }} />
               </div>
 
-              <button type="button" onClick={() => { if (allDone) onAdvance(profile.id) }}
-                style={{ width: '100%', padding: '10px 0', borderRadius: 8, border: 'none', background: allDone ? ACCENT : '#F0EDE8', color: allDone ? 'white' : '#bbb', fontSize: 12, fontWeight: 600, cursor: allDone ? 'pointer' : 'not-allowed', transition: 'all 0.15s' }}>
-                {allDone
-                  ? isLastStep ? 'Marquer comme complété' : `Valider → ${steps[currentVisibleIdx + 1]?.short || 'étape suivante'}`
-                  : `${totalTasks - doneTasks} tâche${totalTasks - doneTasks > 1 ? 's' : ''} restante${totalTasks - doneTasks > 1 ? 's' : ''}`}
-              </button>
-              {!allDone && (
-                <div style={{ fontSize: 10, color: '#bbb', textAlign: 'center', marginTop: 5 }}>
-                  Cochez toutes les tâches pour valider l'étape
-                </div>
+              {isViewingCurrent ? (
+                <>
+                  <button type="button" onClick={() => { if (allDone) onAdvance(profile.id) }}
+                    style={{ width: '100%', padding: '10px 0', borderRadius: 8, border: 'none', background: allDone ? ACCENT : '#F0EDE8', color: allDone ? 'white' : '#bbb', fontSize: 12, fontWeight: 600, cursor: allDone ? 'pointer' : 'not-allowed', transition: 'all 0.15s' }}>
+                    {allDone
+                      ? isLastStep ? 'Marquer comme complété' : `Valider → ${steps[currentVisibleIdx + 1]?.short || 'étape suivante'}`
+                      : `${totalTasks - doneTasks} tâche${totalTasks - doneTasks > 1 ? 's' : ''} restante${totalTasks - doneTasks > 1 ? 's' : ''}`}
+                  </button>
+                  {!allDone && (
+                    <div style={{ fontSize: 10, color: '#bbb', textAlign: 'center', marginTop: 5 }}>
+                      Cochez toutes les tâches pour valider l'étape
+                    </div>
+                  )}
+                </>
+              ) : (
+                <button type="button" onClick={() => setViewedStepId(profile.step)}
+                  style={{ width: '100%', padding: '10px 0', borderRadius: 8, border: `1px solid ${ACCENT}`, background: 'white', color: ACCENT, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                  ← Retour à l'étape en cours
+                </button>
               )}
             </div>
           </div>
