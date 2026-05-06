@@ -300,6 +300,7 @@ function rowToProfile(row) {
     owner:   row.owner || '',
     step:    row.current_step,
     start:   row.start_date,
+    stepStart: row.step_started_at || row.start_date,
     session: row.session || '',
     done:    row.done || {},
     step_notes: row.step_notes || {},
@@ -330,20 +331,21 @@ export default function Onboarding() {
       // 1. Si un profil arrive depuis la Pipeline → upsert d'abord
       if (incoming) {
         const row = {
-          profile_id:   incoming.id,
-          fn:           incoming.fn,
-          ln:           incoming.ln,
-          co:           incoming.co || '',
-          email:        incoming.email || '',
-          phone:        incoming.phone || '',
-          siren:        incoming.siren || '',
-          owner:        incoming.owner || 'Baptiste',
-          current_step: 1,
-          start_date:   today,
-          session:      '',
-          done:         {},
-          step_notes:   {},
-          task_notes:   {},
+          profile_id:      incoming.id,
+          fn:              incoming.fn,
+          ln:              incoming.ln,
+          co:              incoming.co || '',
+          email:           incoming.email || '',
+          phone:           incoming.phone || '',
+          siren:           incoming.siren || '',
+          owner:           incoming.owner || 'Baptiste',
+          current_step:    1,
+          start_date:      today,
+          step_started_at: today,
+          session:         '',
+          done:            {},
+          step_notes:      {},
+          task_notes:      {},
         }
         const { error: upsertErr } = await supabase
           .from('onboarding_profiles')
@@ -468,12 +470,13 @@ export default function Onboarding() {
         setCompleted((c) => [...c, { ...p, step: 10 }])
         return prev.filter((x) => x.id !== profileId)
       }
-      // Avancer l'étape + reset done
+      // Avancer l'étape + reset done + timestamp étape
+      const stepDate = new Date().toISOString().slice(0, 10)
       supabase.from('onboarding_profiles')
-        .update({ current_step: next, done: {} })
+        .update({ current_step: next, done: {}, step_started_at: stepDate })
         .eq('profile_id', profileId)
         .then(({ error }) => { if (error) console.error('advanceStep error:', error) })
-      return prev.map((x) => x.id === profileId ? { ...x, step: next, done: {} } : x)
+      return prev.map((x) => x.id === profileId ? { ...x, step: next, done: {}, stepStart: stepDate } : x)
     })
     setSelectedId(null)
   }, [showOptional])
@@ -650,16 +653,26 @@ function CompletedCard({ profile, onDelete }) {
 
 // ── Carte profil ───────────────────────────────────────────────────────────────
 function ProfileCard({ profile, step, isSelected, onSelect }) {
-  const days = daysSince(profile.start)
+  const daysTotal = daysSince(profile.start)
+  const daysStep  = daysSince(profile.stepStart)
   const ownerStyle = OWNER_STYLE[profile.owner] || { bg: '#F3F4F6', color: '#666' }
   const totalTasks = step.tasks.length
   const doneTasks  = step.tasks.filter((t) => profile.done[t.id]).length
   const pct = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0
 
+  // Couleur badge étape selon ancienneté dans l'étape
+  const stepBadge = daysStep > 14
+    ? { bg: '#FCEBEB', color: '#A32D2D', border: '#F7C1C1' }
+    : daysStep > 7
+    ? { bg: '#FEF3C7', color: '#854F0B', border: '#FDE68A' }
+    : { bg: '#F1EFE8', color: '#5F5E5A', border: '#E5E0D8' }
+
   return (
-    <div onClick={() => onSelect(isSelected ? null : profile.id)} style={{ background: 'white', borderRadius: 8, padding: '10px 12px', cursor: 'pointer', border: `1px solid ${isSelected ? ACCENT : '#E5E0D8'}`, boxShadow: isSelected ? `0 0 0 2px ${ACCENT}18` : '0 1px 3px rgba(0,0,0,0.05)', transition: 'all 0.15s' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        <div style={{ width: 30, height: 30, borderRadius: '50%', background: ACCENT, color: GOLD, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
+    <div onClick={() => onSelect(isSelected ? null : profile.id)} style={{ background: 'white', borderRadius: 10, padding: '10px 12px', cursor: 'pointer', border: `0.5px solid ${isSelected ? ACCENT : '#E5E0D8'}`, borderTop: `2.5px solid ${isSelected ? GOLD : ACCENT}`, boxShadow: isSelected ? `0 0 0 2px ${ACCENT}12` : 'none', transition: 'all 0.15s' }}>
+
+      {/* Avatar + nom */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <div style={{ width: 32, height: 32, borderRadius: '50%', background: ACCENT, color: GOLD, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
           {getInitials(profile.fn, profile.ln)}
         </div>
         <div style={{ minWidth: 0 }}>
@@ -667,9 +680,25 @@ function ProfileCard({ profile, step, isSelected, onSelect }) {
           <div style={{ fontSize: 10, color: '#888', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile.co}</div>
         </div>
       </div>
-      <div style={{ background: BG, borderRadius: 6, padding: '4px 8px', fontSize: 10, color: ACCENT, fontWeight: 600, marginBottom: 8 }}>📅 {profile.session}</div>
-      <div style={{ marginBottom: 8 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+
+      {/* 3 badges : Process · Étape · Promo */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 10, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 9, background: '#F1EFE8', color: '#444', padding: '2px 7px', borderRadius: 20, border: '0.5px solid #E5E0D8' }}>
+          Process J+{daysTotal}
+        </span>
+        <span style={{ fontSize: 9, background: stepBadge.bg, color: stepBadge.color, padding: '2px 7px', borderRadius: 20, border: `0.5px solid ${stepBadge.border}`, fontWeight: daysStep > 7 ? 600 : 400 }}>
+          Étape J+{daysStep}
+        </span>
+        {profile.session ? (
+          <span style={{ fontSize: 9, background: '#E1F5EE', color: '#0F6E56', padding: '2px 7px', borderRadius: 20, border: '0.5px solid #9FE1CB' }}>
+            {profile.session}
+          </span>
+        ) : null}
+      </div>
+
+      {/* Barre tâches */}
+      <div style={{ marginBottom: 10 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
           <span style={{ fontSize: 9, color: '#aaa' }}>Tâches</span>
           <span style={{ fontSize: 9, color: '#555', fontWeight: 600 }}>{doneTasks}/{totalTasks}</span>
         </div>
@@ -677,11 +706,10 @@ function ProfileCard({ profile, step, isSelected, onSelect }) {
           <div style={{ height: '100%', borderRadius: 2, transition: 'width 0.3s', width: `${pct}%`, background: pct === 100 ? '#16a34a' : ACCENT }} />
         </div>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+
+      {/* Owner */}
+      <div style={{ display: 'flex', alignItems: 'center' }}>
         <span style={{ fontSize: 9, fontWeight: 600, padding: '2px 7px', borderRadius: 10, background: ownerStyle.bg, color: ownerStyle.color }}>{profile.owner}</span>
-        <span style={{ fontSize: 9, fontWeight: days > 30 ? 700 : 400, color: days > 30 ? '#ef4444' : days > 14 ? '#f59e0b' : '#aaa' }}>
-          {days > 30 ? '⚠ ' : ''}J+{days}
-        </span>
       </div>
     </div>
   )
