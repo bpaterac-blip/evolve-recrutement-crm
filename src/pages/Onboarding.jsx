@@ -330,6 +330,9 @@ export default function Onboarding() {
 
       // 1. Si un profil arrive depuis la Pipeline → upsert d'abord
       if (incoming) {
+        const sessionLabel = incoming.integration_periode && incoming.integration_annee
+          ? `${incoming.integration_periode} ${incoming.integration_annee}`
+          : ''
         const row = {
           profile_id:      incoming.id,
           fn:              incoming.fn,
@@ -342,7 +345,7 @@ export default function Onboarding() {
           current_step:    1,
           start_date:      today,
           step_started_at: today,
-          session:         '',
+          session:         sessionLabel,
           done:            {},
           step_notes:      {},
           task_notes:      {},

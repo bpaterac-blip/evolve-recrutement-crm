@@ -3108,6 +3108,8 @@ export default function Pipeline() {
                           phone: p.phone || '',
                           siren: '',
                           owner: p.owner_full_name || userProfile?.full_name || user?.email || 'Baptiste',
+                          integration_periode: p.integration_periode || '',
+                          integration_annee: p.integration_annee || '',
                         },
                       },
                     })
