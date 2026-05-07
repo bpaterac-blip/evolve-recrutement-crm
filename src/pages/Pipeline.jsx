@@ -828,9 +828,9 @@ export default function Pipeline() {
         .order('date_debut', { ascending: true })
       setFormationSessionsForRecrute(data || [])
     }
-    if (modalProfile?.stg === 'Recruté') load()
+    if (modalProfile) load()
     else setFormationSessionsForRecrute([])
-  }, [modalProfile?.id, modalProfile?.stg])
+  }, [modalProfile?.id])
 
   useEffect(() => {
     setNoteContent(NOTE_TEMPLATES[noteTemplate] ?? '')
@@ -1175,6 +1175,20 @@ export default function Pipeline() {
     changeSource(profileId, v)
     setShowSourceDropdown(false)
     await loadActivities()
+    if (useSupabase) await fetchProfiles()
+  }
+
+  const handleChangeSession = async (sessionId) => {
+    const profileId = modalProfile?.id
+    if (!profileId) return
+    const session = formationSessionsForRecrute.find((s) => s.id === sessionId) || null
+    const updates = {
+      session_formation_id:  sessionId || null,
+      integration_periode:   session?.periode ?? null,
+      integration_annee:     session?.annee ?? null,
+    }
+    await supabase.from('profiles').update(updates).eq('id', profileId)
+    updateProfile(profileId, updates)
     if (useSupabase) await fetchProfiles()
   }
 
@@ -1985,6 +1999,32 @@ export default function Pipeline() {
                     </div>
                   )
                 })()}
+
+                {/* Session potentielle */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: '#A0866A', textTransform: 'uppercase', letterSpacing: '0.05em', width: 60, flexShrink: 0 }}>Session</div>
+                  <div style={{ position: 'relative', flex: 1 }}>
+                    <select
+                      value={displayProfile.session_formation_id || ''}
+                      onChange={(e) => handleChangeSession(e.target.value)}
+                      style={{
+                        appearance: 'none', WebkitAppearance: 'none',
+                        width: '100%', padding: '5px 24px 5px 10px',
+                        fontSize: 12, fontWeight: 600, borderRadius: 20,
+                        border: '1.5px solid #15803d22',
+                        background: displayProfile.session_formation_id ? '#f0fdf4' : '#f8fafc',
+                        color: displayProfile.session_formation_id ? '#15803d' : '#94a3b8',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <option value="">— Aucune session</option>
+                      {formationSessionsForRecrute.map((s) => (
+                        <option key={s.id} value={s.id}>{formatSessionLabel(s)}</option>
+                      ))}
+                    </select>
+                    <div style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: 9, color: displayProfile.session_formation_id ? '#15803d' : '#94a3b8' }}>▾</div>
+                  </div>
+                </div>
               </div>
 
               {/* Badge En pause si applicable */}
