@@ -33,7 +33,8 @@ const L = {
   mail_cncef:      { label: 'Mail CNCEF (à envoyer au CGP)', url: 'https://docs.google.com/document/d/1tkhvdOAYIvwFAtKPlFQN_0Xl7vXyMBMzCbRqgIx4g-0/edit' },
   abeille_doc1:    { label: 'Document Abeille 1', url: 'https://drive.google.com/file/d/1jVwQEDymC5gpNBEr-JiSkNWWzNhx1BGv/view' },
   abeille_doc2:    { label: 'Document Abeille 2', url: 'https://docs.google.com/document/d/1eULoXNJlUyrFC-hQCqOJ_XkMql6UQCf5/edit' },
-  codes_assureurs: { label: 'Renseigner les codes assureurs', url: 'https://docs.google.com/spreadsheets/d/1Kxpt9Od9xfsYMQpzpwOFu8FT0TiNVnxcF57AaHOKjHk/edit?gid=881522851#gid=881522851' },
+  codes_assureurs:    { label: 'Renseigner les codes assureurs', url: 'https://docs.google.com/spreadsheets/d/1Kxpt9Od9xfsYMQpzpwOFu8FT0TiNVnxcF57AaHOKjHk/edit?gid=881522851#gid=881522851' },
+  book_preintegration:{ label: 'Book Pré-Intégration', url: 'https://drive.google.com/file/d/1PWB892KD6a4BuETnIwqGAb6z-kH4ONsp/view?usp=drive_link' },
 }
 
 // ── Remplace les placeholders {{…}} par les données du profil ─────────────────
@@ -78,16 +79,28 @@ const ONBOARDING_STEPS = [
     optional: false,
     yousign: false,
     waitAttestation: true,
-    mailTemplate: {
-      to: 'florian.nardoux@l-expert-comptable.com',
-      cc: '',
-      subject: 'CRÉATION SOCIÉTÉ / {{societe}}',
-      body: `<p>Hello Florian,</p><p>Comment tu vas ?</p><p>Peux-tu, s'il te plaît, prendre contact avec {{prenom}} {{nom}} pour fixer un RDV en visioconférence avec l'expert-comptable et lancer les démarches de création ?</p><p>Tu trouveras ses coordonnées ci-dessous :</p><ul><li>Numéro : {{telephone}}</li><li>Mail : {{email}}</li></ul><p>Enfin, je t'envoie en pièce jointe les statuts constitutifs avec les informations mises à jour.</p><p>Nous souhaitons une date d'immatriculation au 01 du M+1.</p><p>Je reste à ta disposition si besoin.</p><p>Bien à toi,</p><p><strong>METTRE EN PJ LES STATUTS MODIFIÉS </strong></p><p>{{responsable}}</p>`,
-    },
+    mailTemplates: [
+      {
+        label: 'Florian NARDOUX — création société',
+        to: 'florian.nardoux@l-expert-comptable.com',
+        cc: '',
+        subject: 'CRÉATION SOCIÉTÉ / {{societe}}',
+        body: `<p>Hello Florian,</p><p>Comment tu vas ?</p><p>Peux-tu, s'il te plaît, prendre contact avec {{prenom}} {{nom}} pour fixer un RDV en visioconférence avec l'expert-comptable et lancer les démarches de création ?</p><p>Tu trouveras ses coordonnées ci-dessous :</p><ul><li>Numéro : {{telephone}}</li><li>Mail : {{email}}</li></ul><p>Enfin, je t'envoie en pièce jointe les statuts constitutifs avec les informations mises à jour.</p><p>Nous souhaitons une date d'immatriculation au 01 du M+1.</p><p>Je reste à ta disposition si besoin.</p><p>Bien à toi,</p><p><strong>METTRE EN PJ LES STATUTS MODIFIÉS </strong></p><p>{{responsable}}</p>`,
+      },
+      {
+        label: 'Book Pré-Intégration — CGP',
+        to: '{{email}}',
+        cc: '',
+        subject: '{{societe}} / BOOK PRÉ-INTÉGRATION',
+        body: `<p>{{prenom}},</p><p>C'est parti, les démarches de création de ta société sont lancées.</p><p>Tu peux retrouver en pièce jointe ton <strong>book de pré-intégration</strong>.</p><p>Prends le temps de le lire tranquillement, il y a tout ce qu'il faut savoir avant la formation : comment fonctionne Evolve, les premiers mois d'activité et les témoignages de ceux qui sont passés par là avant toi.</p><p>La seule chose que tu as à faire d'ici la formation : préparer tes trois listes de contacts. Tu recevras un accès Google Drive dans les prochains jours avec un fichier tout prêt : c'est simple et ça change tout au démarrage.</p><p>Pour les démarches administratives, on s'occupe de tout. Tu n'as rien à gérer de ton côté, et tu recevras les informations au fil de l'eau.</p><p>On est dispo si tu as des questions.</p><p>Bonne journée à toi !</p><p>{{responsable}}</p>`,
+      },
+    ],
     tasks: [
       { id: 't1_1', label: 'Créer dossier {{prenom}} {{nom}} COURTAGE dans JURIDIQUE → NOS COURTIERS', links: ['dossier'] },
       { id: 't1_2', label: 'Copier + modifier les statuts (SAS ou SARL) avec les infos du gérant → exporter en PDF', links: ['statuts_sas', 'statuts_sarl'] },
       { id: 't1_3', label: 'Envoyer le mail à Florian NARDOUX (statuts en PJ, responsable réseau en CC)', links: [] },
+      { id: 't1_3b', label: 'Noter la date du RDV comptable fixé par Florian', links: [] },
+      { id: 't1_3c', label: 'Envoyer le Book Pré-Intégration au CGP (en PJ)', links: ['book_preintegration'] },
       { id: 't1_4', label: 'Suivi : dépôt de capital + signature des statuts', links: [] },
       { id: 't1_5', label: 'Attendre immatriculation avant de passer à l\'étape suivante', links: [] },
     ],
