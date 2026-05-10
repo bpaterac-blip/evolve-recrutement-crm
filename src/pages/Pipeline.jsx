@@ -47,6 +47,7 @@ import ScoreCorrectionModal from '../components/ScoreCorrectionModal'
 import ChuteModal from '../components/ChuteModal'
 import GrilleNotationTab from '../components/GrilleNotationTab'
 import AISummaryModal from '../components/AISummaryModal'
+import StructuredNoteModal from '../components/StructuredNoteModal'
 import {
   IconEnvelope,
   IconLink,
@@ -647,6 +648,8 @@ export default function Pipeline() {
   const [noteTemplate, setNoteTemplate] = useState('Note libre')
   const [noteContent, setNoteContent] = useState('')
   const [showAIModal, setShowAIModal] = useState(false)
+  const [showNoteTypePicker, setShowNoteTypePicker] = useState(false)
+  const [showStructuredNote, setShowStructuredNote] = useState(null) // 'R0' | 'R1' | 'etape'
   const [showEventForm, setShowEventForm] = useState(false)
   const [evType, setEvType] = useState('R0')
   const [evDate, setEvDate] = useState('')
@@ -927,6 +930,27 @@ export default function Pipeline() {
     })
     setNoteContent(NOTE_TEMPLATES[noteTemplate] ?? '')
     setShowNoteForm(false)
+    await loadNotes()
+    await loadActivities()
+  }
+
+  const handleSaveStructuredNote = async (content, template) => {
+    if (!modalProfile?.id) return
+    await supabase.from('notes').insert({
+      profile_id: modalProfile.id,
+      content,
+      template,
+      author: userProfile?.full_name?.trim() || user?.email || null,
+    })
+    await supabase.from('activities').insert({
+      profile_id: modalProfile.id,
+      type: 'note',
+      note: `Note ajoutée : ${template}`,
+      date: new Date().toISOString().split('T')[0],
+      icon: 'document',
+      source: 'manual',
+    })
+    setShowStructuredNote(null)
     await loadNotes()
     await loadActivities()
   }
@@ -2291,7 +2315,7 @@ export default function Pipeline() {
                     {!showNoteForm && (
                       <button
                         type="button"
-                        onClick={() => setShowNoteForm(true)}
+                        onClick={() => setShowNoteTypePicker(true)}
                         style={{ padding: '7px 14px', borderRadius: 8, background: '#173731', color: '#E7E0D0', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
                       >
                         + Nouvelle note
@@ -2648,6 +2672,75 @@ export default function Pipeline() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Note type picker */}
+      {showNoteTypePicker && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}
+          onClick={() => setShowNoteTypePicker(false)}
+        >
+          <div
+            style={{ background: '#fff', borderRadius: 14, border: '1px solid #E5E0D8', width: 480, maxWidth: '95vw', overflow: 'hidden' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid #E5E0D8' }}>
+              <span style={{ fontWeight: 600, fontSize: 14 }}>Nouvelle note — choisissez un type</span>
+              <button type="button" onClick={() => setShowNoteTypePicker(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 18, color: '#9A9A9A', lineHeight: 1 }}>✕</button>
+            </div>
+            <div style={{ padding: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              {[
+                { key: 'R0', badge: 'R0', badgeBg: '#E6F1FB', badgeColor: '#185FA5', label: 'Récapitulatif R0', desc: 'Premier contact — situation, clientèle, objectifs' },
+                { key: 'R1', badge: 'R1', badgeBg: '#EAF3DE', badgeColor: '#3B6D11', label: 'Récapitulatif R1', desc: 'Présentation Evolve — objections, suite donnée' },
+                { key: 'etape', badge: 'Étape', badgeBg: '#FAEEDA', badgeColor: '#854F0B', label: "Point d'étape", desc: 'Suivi intermédiaire — avancement et blocages' },
+              ].map(t => (
+                <div
+                  key={t.key}
+                  onClick={() => { setShowNoteTypePicker(false); setShowStructuredNote(t.key) }}
+                  style={{ border: '1px solid #E5E0D8', borderRadius: 8, padding: '12px 14px', cursor: 'pointer', transition: 'background 0.1s' }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#F8F5F1'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  <span style={{ fontSize: 11, fontWeight: 600, background: t.badgeBg, color: t.badgeColor, padding: '2px 8px', borderRadius: 20, display: 'inline-block', marginBottom: 6 }}>{t.badge}</span>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#1A1A1A', marginBottom: 2 }}>{t.label}</div>
+                  <div style={{ fontSize: 12, color: '#9A9A9A' }}>{t.desc}</div>
+                </div>
+              ))}
+              <div
+                onClick={() => { setShowNoteTypePicker(false); setShowAIModal(true) }}
+                style={{ border: '1px solid #D2AB76', borderRadius: 8, padding: '12px 14px', cursor: 'pointer', transition: 'background 0.1s' }}
+                onMouseEnter={e => e.currentTarget.style.background = '#FDF8F0'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              >
+                <span style={{ fontSize: 11, fontWeight: 600, background: '#FDF3D6', color: '#854F0B', padding: '2px 8px', borderRadius: 20, display: 'inline-block', marginBottom: 6 }}>✨ IA</span>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#1A1A1A', marginBottom: 2 }}>Récap IA</div>
+                <div style={{ fontSize: 12, color: '#9A9A9A' }}>Collez une note brute, l'IA génère un récap structuré</div>
+              </div>
+              <div
+                onClick={() => { setShowNoteTypePicker(false); setShowNoteForm(true) }}
+                style={{ gridColumn: '1 / -1', border: '1px solid #E5E0D8', borderRadius: 8, padding: '10px 14px', cursor: 'pointer', background: '#F8F5F1', display: 'flex', alignItems: 'center', gap: 10 }}
+                onMouseEnter={e => e.currentTarget.style.background = '#F0ECE6'}
+                onMouseLeave={e => e.currentTarget.style.background = '#F8F5F1'}
+              >
+                <span style={{ fontSize: 13, color: '#6B6B6B' }}>✏️</span>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#1A1A1A' }}>Note libre</div>
+                  <div style={{ fontSize: 12, color: '#9A9A9A' }}>Zone de texte libre, sans structure imposée</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modale note structurée */}
+      {showStructuredNote && modalProfile && (
+        <StructuredNoteModal
+          type={showStructuredNote}
+          profile={modalProfile}
+          onClose={() => setShowStructuredNote(null)}
+          onSave={handleSaveStructuredNote}
+        />
       )}
 
       {/* Modal Récap IA */}
