@@ -27,10 +27,46 @@ export const REGIONS = [
 ]
 
 export const NOTE_TEMPLATES = {
-  'Récapitulatif R0': `Date : 
-Échange : 
-Intérêt exprimé : 
-Prochaine étape : `,
+  'Récapitulatif R0': `━━━ TRAM R0 ━━━
+
+📅 Date :
+⏱ Durée :
+
+──── 1. SITUATION ACTUELLE ────
+Statut : [ ] Salarié cadre  [ ] Salarié non cadre  [ ] Déjà indépendant  [ ] En préavis  [ ] En cours de départ
+Employeur actuel :
+Ancienneté :
+Contexte / départ envisagé :
+
+──── 2. CLIENTÈLE ────
+Profil clients visés :
+Taille portefeuille estimée :
+Encours moyen / client :
+Produits maîtrisés :
+
+──── 3. OBJECTIFS ────
+Revenus visés an 1 :
+Revenus visés an 3 :
+Nouveaux clients visés / an :
+Ambitions long terme :
+
+──── 4. BESOINS & ATTENTES ────
+Ce dont il a besoin pour se lancer sereinement :
+Attentes spécifiques vis-à-vis d'Evolve :
+
+──── 5. CRAINTES & FREINS ────
+Principaux freins exprimés :
+Ce qui le bloque vraiment (dans ses mots) :
+
+──── 6. MATURITÉ DU PROJET ────
+Où en est-il : [ ] Découverte  [ ] En réflexion  [ ] Décidé  [ ] Prêt à signer
+Horizon de départ envisagé :
+Note de maturité (1-5) :
+
+──── SYNTHÈSE & NEXT STEP ────
+Résumé de l'appel :
+Point de blocage principal :
+Action à mener avant le R1 :`,
   'Récapitulatif R1': `Date : 
 Présentation Evolve : 
 Questions posées : 
