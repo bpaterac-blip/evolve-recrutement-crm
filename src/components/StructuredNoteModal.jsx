@@ -544,35 +544,33 @@ export default function StructuredNoteModal({ type, profile, onClose, onSave }) 
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center"
-      style={{ background: PAGE_STYLE.bg }}
+      style={{ position: 'fixed', inset: 0, background: PAGE_STYLE.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}
       onClick={onClose}
     >
       <div
-        className="w-full max-w-[700px] max-h-[90vh] rounded-[12px] border shadow-xl flex flex-col"
-        style={{ background: PAGE_STYLE.cardBg, borderColor: PAGE_STYLE.border }}
+        style={{ background: PAGE_STYLE.cardBg, border: `1px solid ${PAGE_STYLE.border}`, borderRadius: 12, width: '100%', maxWidth: 700, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: PAGE_STYLE.border }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: `1px solid ${PAGE_STYLE.border}`, flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 11, fontWeight: 600, background: config.badgeBg, color: config.badgeColor, padding: '2px 9px', borderRadius: 20 }}>
               {config.badge}
             </span>
             <div>
-              <div className="font-semibold text-[15px]">{config.label}</div>
-              <div className="text-[12px]" style={{ color: PAGE_STYLE.textSecondary }}>
+              <div style={{ fontWeight: 600, fontSize: 15, color: '#1A1A1A' }}>{config.label}</div>
+              <div style={{ fontSize: 12, color: PAGE_STYLE.textSecondary }}>
                 {profile.fn} {profile.ln} · {profile.co}
               </div>
             </div>
           </div>
-          <button type="button" className="text-[var(--t3)] hover:text-[var(--text)] text-lg" onClick={onClose}>
-            <IconClose />
+          <button type="button" style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 18, color: PAGE_STYLE.textTertiary, lineHeight: 1 }} onClick={onClose}>
+            ✕
           </button>
         </div>
 
         {/* Body */}
-        <div className="px-5 py-4 flex-1 overflow-y-auto">
+        <div style={{ padding: '16px 20px', flex: 1, overflowY: 'auto' }}>
           {type === 'R0' && <R0Form onSave={onSave} onCancel={onClose} />}
           {type === 'R1' && <R1Form onSave={onSave} onCancel={onClose} />}
           {type === 'etape' && <EtapeForm onSave={onSave} onCancel={onClose} />}
