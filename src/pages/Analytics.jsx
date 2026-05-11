@@ -171,12 +171,13 @@ function FunnelBar({ stage, reached, maxReached, prevReached, isLast }) {
 /* ─────────────────────────────────────────────────
    SOURCE BREAKDOWN BAR — stacked bar per stage
    ───────────────────────────────────────────────── */
-function SourceBreakdownRow({ stage, sourceCounts, totalReached, maxReached }) {
+function SourceBreakdownRow({ stage, sourceCounts, totalReached, maxReached, expanded }) {
   if (totalReached === 0) return null
   const widthPct = maxReached > 0 ? (totalReached / maxReached) * 100 : 0
+  const activeSrc = sourceCounts.filter(({ count }) => count > 0)
 
   return (
-    <div style={{ marginBottom: 10 }}>
+    <div style={{ marginBottom: expanded ? 14 : 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <span style={{ fontSize: 12, color: '#555', width: 160, flexShrink: 0 }}>{stage}</span>
         <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -201,6 +202,18 @@ function SourceBreakdownRow({ stage, sourceCounts, totalReached, maxReached }) {
           <span style={{ fontSize: 12, fontWeight: 600, color: ACCENT, minWidth: 28 }}>{totalReached}</span>
         </div>
       </div>
+      {expanded && (
+        <div style={{ marginLeft: 172, marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: '4px 10px' }}>
+          {activeSrc.map(({ source, count }) => (
+            <span key={source} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#444' }}>
+              <span style={{ width: 8, height: 8, borderRadius: 2, background: SOURCE_COLORS[source] || '#94a3b8', flexShrink: 0, display: 'inline-block' }} />
+              <span style={{ color: '#777' }}>{source}</span>
+              <strong style={{ color: ACCENT }}>{count}</strong>
+              <span style={{ color: '#bbb' }}>({Math.round((count / totalReached) * 100)}%)</span>
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -503,6 +516,7 @@ export default function Analytics() {
   const [loading, setLoading] = useState(true)
   const [chuteModal, setChuteModal] = useState(null)
   const [raisonsAbandonStats, setRaisonsAbandonStats] = useState({ raisonsAbandon: [], totalChuteRaisons: 0 })
+  const [sourceDetailExpanded, setSourceDetailExpanded] = useState(false)
 
   const isGlobalView = role === 'admin' && viewMode === 'global'
   const sessionGoal = isGlobalView ? 6 : 3
@@ -975,7 +989,16 @@ export default function Analytics() {
 
           {/* Source breakdown at each stage */}
           <div style={cardStyle}>
-            <div style={cardLabelStyle}>Répartition des sources par étape</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <div style={cardLabelStyle}>Répartition des sources par étape</div>
+              <button
+                type="button"
+                onClick={() => setSourceDetailExpanded(v => !v)}
+                style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: `1px solid ${sourceDetailExpanded ? ACCENT : '#D2AB76'}`, background: sourceDetailExpanded ? ACCENT : 'transparent', color: sourceDetailExpanded ? '#E7E0D0' : ACCENT, cursor: 'pointer', fontWeight: 500 }}
+              >
+                {sourceDetailExpanded ? '▲ Masquer le détail' : '▼ Voir le détail'}
+              </button>
+            </div>
             <SourceLegend sources={activeSources} />
             {stats.sourceByStage.map((s) => (
               <SourceBreakdownRow
@@ -984,6 +1007,7 @@ export default function Analytics() {
                 sourceCounts={s.sourceCounts}
                 totalReached={s.totalReached}
                 maxReached={Math.max(1, stats.sourceByStage[0]?.totalReached || 1)}
+                expanded={sourceDetailExpanded}
               />
             ))}
           </div>
