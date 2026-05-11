@@ -582,11 +582,15 @@ export function CRMProvider({ children }) {
   const filteredProfiles = profiles.filter((p) => {
     const q = searchTrimmed.toLowerCase()
     if (!q) return true
+    const fn = (p.fn || '').toLowerCase()
+    const ln = (p.ln || '').toLowerCase()
+    const co = (p.co || '').toLowerCase()
     return (
-      p.fn?.toLowerCase().startsWith(q) ||
-      p.ln?.toLowerCase().startsWith(q) ||
-      (p.fn + ' ' + p.ln).toLowerCase().includes(q) ||
-      (p.ln + ' ' + p.fn).toLowerCase().includes(q)
+      fn.includes(q) ||
+      ln.includes(q) ||
+      (fn + ' ' + ln).includes(q) ||
+      (ln + ' ' + fn).includes(q) ||
+      co.includes(q)
     )
   })
 

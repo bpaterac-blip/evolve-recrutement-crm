@@ -198,7 +198,7 @@ export default function Profiles({ contactedOnly = false }) {
   const navigate = useNavigate()
   const { role, user } = useAuth()
   const { viewMode } = useViewMode()
-  const { profiles, filteredProfiles, changeStage, changeMaturity, changeSource, loading, fetchProfiles, showNotif, useSupabase } = useCRM()
+  const { profiles, filteredProfiles, changeStage, changeMaturity, changeSource, loading, fetchProfiles, showNotif, useSupabase, searchQuery } = useCRM()
   const isGlobalView = role === 'admin' && viewMode === 'global'
   const currentSender = SENDERS_CONFIG_PROFILES[user?.email] ?? DEFAULT_SENDER_PROFILES
   const [srcFilter, setSrcFilter] = useState('')
@@ -239,6 +239,19 @@ export default function Profiles({ contactedOnly = false }) {
     if (stgFilter && p.stg !== stgFilter) return false
     if (matFilter === 'Sans archivés' && p.mat === 'Archivé') return false
     if (matFilter && matFilter !== 'Sans archivés' && p.mat !== matFilter) return false
+    // Filtre de recherche local (filet de sécurité si le contexte est en retard)
+    if (searchQuery && searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase()
+      const fullName = ((p.fn || '') + ' ' + (p.ln || '')).toLowerCase()
+      const fullNameRev = ((p.ln || '') + ' ' + (p.fn || '')).toLowerCase()
+      const matches =
+        (p.fn || '').toLowerCase().includes(q) ||
+        (p.ln || '').toLowerCase().includes(q) ||
+        fullName.includes(q) ||
+        fullNameRev.includes(q) ||
+        (p.co || '').toLowerCase().includes(q)
+      if (!matches) return false
+    }
     return true
   })
 
