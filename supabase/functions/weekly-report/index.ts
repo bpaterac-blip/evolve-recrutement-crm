@@ -177,9 +177,13 @@ Deno.serve(async (req) => {
       .select('profile_id, old_value, new_value, note, created_at')
       .eq('activity_type', 'stage_change').order('created_at', { ascending: true })
 
-    // Entrées cette semaine (nouveaux profils créés)
+    // Entrées cette semaine = profils qui ont REJOINT le pipeline (stage != null)
+    // et dont le stage a été assigné cette semaine (created_at comme proxy)
+    // On exclut les simples ajouts CRM sans stage (= prospects pas encore en pipeline)
     const { data: entreesRaw } = await supabase.from('profiles')
       .select('first_name, last_name, source, owner_full_name')
+      .not('stage', 'is', null)
+      .neq('stage', '')
       .gte('created_at', fmt(monday) + 'T00:00:00Z')
       .lte('created_at', fmt(friday) + 'T23:59:59Z')
       .order('created_at', { ascending: false })
@@ -234,16 +238,18 @@ Deno.serve(async (req) => {
       return pIdx >= targetIdx
     }
 
-    // Funnel cumulatif : inclure TOUS les profils (même archivés), null stage = R0
-    const forFunnel = profilesFunnel
+    // Funnel cumulatif sur TOUS les profils (y compris archivés) qui ont RÉELLEMENT
+    // été dans le pipeline = ceux qui ont eu un stage assigné (R0 ou au-delà)
+    const forFunnel = profilesFunnel.filter((p: any) => p.stage && p.stage !== '')
+    const totalEverRecruited = profilesFunnel.filter((p: any) => p.stage === 'Recruté').length
     const funnelCounts = ANALYTICS_STAGES.map((stage) => {
       if (stage === 'Recruté') {
-        // Compter TOUS les recrutés (actifs + archivés)
-        return { stage, reached: profilesFunnel.filter((p: any) => p.stage === 'Recruté').length }
+        // Tous les recrutés (actifs + archivés)
+        return { stage, reached: totalEverRecruited }
       }
       const targetIdx = stageIndex(stage)
       if (targetIdx === 0) {
-        // R0 = tous les profils jamais entrés dans le pipeline (null stage compte aussi)
+        // R0 = tous les profils qui ont un stage = tous les vrais entrants pipeline
         return { stage, reached: forFunnel.length }
       }
       return { stage, reached: forFunnel.filter((p: any) => reachedStage(p, targetIdx)).length }
@@ -259,7 +265,7 @@ Deno.serve(async (req) => {
       label: 'R0 → Recruté (global)',
       from: funnelCounts[0].reached,
       to: funnelCounts[funnelCounts.length - 1].reached,
-      rate: funnelCounts[0].reached > 0 ? Math.round((totalRecrutes / funnelCounts[0].reached) * 100) : 0,
+      rate: funnelCounts[0].reached > 0 ? Math.round((totalEverRecruited / funnelCounts[0].reached) * 100) : 0,
     })
 
     // Recrutés par source
@@ -269,17 +275,19 @@ Deno.serve(async (req) => {
       recrutesBySource[src] = (recrutesBySource[src] || 0) + 1
     })
 
-    // Pipeline actif par source + stade (= vue Kanban : hors Chute / Pas intéressé / Archivé / En pause)
+    // Pipeline actif par source + stade
+    // Un profil est "dans le pipeline" seulement s'il a un stage (= R0 accepté ou plus)
+    // Les profils sans stage = prospects CRM pas encore en pipeline
     const activePipeline = profiles.filter((p: any) =>
-      !['Chute', 'Pas intéressé', 'Archivé', 'En pause'].includes(p.maturity)
+      !['Chute', 'Pas intéressé', 'Archivé', 'En pause'].includes(p.maturity) &&
+      p.stage && p.stage !== ''
     )
     const pipelineBySource: Record<string, { total: number; stages: Record<string, number> }> = {}
     activePipeline.forEach((p: any) => {
       const src = mapSourceToDisplay(p.source)
       if (!pipelineBySource[src]) pipelineBySource[src] = { total: 0, stages: {} }
       pipelineBySource[src].total++
-      // null stage = profil en R0 sans stage encore assigné
-      const stg = normalizeStage(p.stage) || 'R0'
+      const stg = normalizeStage(p.stage)
       pipelineBySource[src].stages[stg] = (pipelineBySource[src].stages[stg] || 0) + 1
     })
     const totalActivePipeline = activePipeline.length
