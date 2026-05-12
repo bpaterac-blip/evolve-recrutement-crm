@@ -715,7 +715,7 @@ Deno.serve(async (req) => {
       JSON.stringify({
         success: true,
         html: emailHtml,
-        subject: '🎯 Rapport Hebdo — Semaine du ' + fmtFR(fmt(monday))
+        subject: '🎯 [v3] Rapport Hebdo — Semaine du ' + fmtFR(fmt(monday))
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
