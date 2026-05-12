@@ -59,10 +59,17 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     )
 
+    // Semaine courante (pour les RDV à venir)
     const monday = new Date(today)
     monday.setDate(today.getDate() - ((today.getDay() + 6) % 7))
     const friday = new Date(monday)
     friday.setDate(monday.getDate() + 4)
+
+    // Semaine PRÉCÉDENTE (pour les mouvements — rapport envoyé le lundi)
+    const lastMonday = new Date(monday)
+    lastMonday.setDate(monday.getDate() - 7)
+    const lastFriday = new Date(lastMonday)
+    lastFriday.setDate(lastMonday.getDate() + 4)
 
     const fmt = (d: Date) => d.toISOString().split('T')[0]
     const fmtFR = (d: string) => {
@@ -185,24 +192,40 @@ Deno.serve(async (req) => {
       .select('profile_id, old_value, new_value, note, created_at')
       .eq('activity_type', 'stage_change').order('created_at', { ascending: true })
 
-    // Entrées cette semaine = profils qui ont REJOINT le pipeline (stage != null)
-    // et dont le stage a été assigné cette semaine (created_at comme proxy)
-    // On exclut les simples ajouts CRM sans stage (= prospects pas encore en pipeline)
+    // Entrées semaine précédente = profils entrés en pipeline (stage != null) la semaine passée
     const { data: entreesRaw } = await supabase.from('profiles')
       .select('first_name, last_name, source, owner_full_name')
       .not('stage', 'is', null)
       .neq('stage', '')
-      .gte('created_at', fmt(monday) + 'T00:00:00Z')
-      .lte('created_at', fmt(friday) + 'T23:59:59Z')
+      .gte('created_at', fmt(lastMonday) + 'T00:00:00Z')
+      .lte('created_at', fmt(lastFriday) + 'T23:59:59Z')
       .order('created_at', { ascending: false })
 
-    // Sorties cette semaine (passés en Chute ou Pas intéressé)
+    // Sorties semaine précédente (passés en Chute ou Pas intéressé)
     const { data: sortiesRaw } = await supabase.from('profiles')
       .select('first_name, last_name, source, stage, maturity, chute_type, pas_interesse_type, owner_full_name, chute_stade')
       .in('maturity', ['Chute', 'Pas intéressé'])
-      .gte('updated_at', fmt(monday) + 'T00:00:00Z')
-      .lte('updated_at', fmt(friday) + 'T23:59:59Z')
+      .gte('updated_at', fmt(lastMonday) + 'T00:00:00Z')
+      .lte('updated_at', fmt(lastFriday) + 'T23:59:59Z')
       .order('updated_at', { ascending: false })
+
+    // Progressions semaine précédente (avancées dans le pipeline)
+    const { data: progressionsRaw } = await supabase.from('activities')
+      .select('profile_id, old_value, new_value, created_at')
+      .eq('activity_type', 'stage_change')
+      .gte('created_at', fmt(lastMonday) + 'T00:00:00Z')
+      .lte('created_at', fmt(lastFriday) + 'T23:59:59Z')
+      .order('created_at', { ascending: false })
+
+    // Profils concernés par les progressions
+    const progProfileIds = [...new Set((progressionsRaw || []).map((a: any) => a.profile_id))]
+    let progProfilesMap: Record<string, any> = {}
+    if (progProfileIds.length > 0) {
+      const { data: pp } = await supabase.from('profiles')
+        .select('id, first_name, last_name, source, owner_full_name')
+        .in('id', progProfileIds)
+      ;(pp || []).forEach((p: any) => { progProfilesMap[p.id] = p })
+    }
 
     // Profils en pause
     const { data: enPauseRaw } = await supabase.from('profiles')
@@ -288,7 +311,7 @@ Deno.serve(async (req) => {
     // Les profils sans stage = prospects CRM pas encore en pipeline
     const activePipeline = profiles.filter((p: any) =>
       !['Chute', 'Pas intéressé', 'Archivé', 'En pause'].includes(p.maturity) &&
-      p.stage && p.stage !== ''
+      p.stage && p.stage !== '' && p.stage !== 'Recruté'
     )
     const pipelineBySource: Record<string, { total: number; stages: Record<string, number> }> = {}
     activePipeline.forEach((p: any) => {
@@ -315,6 +338,41 @@ Deno.serve(async (req) => {
     })
     const totalEntrees = entreesRaw?.length || 0
     const sorties = sortiesRaw || []
+
+    // Progressions groupées par transition (forward moves only)
+    const STAGE_ORDER = ALL_PIPELINE_STAGES
+    const progressionsByTransition: Array<{ key: string; from: string; to: string; profiles: any[] }> = []
+    const transMap: Record<string, { from: string; to: string; profiles: any[] }> = {}
+    ;(progressionsRaw || []).forEach((a: any) => {
+      const from = normalizeStage(a.old_value || '')
+      const to = normalizeStage(a.new_value || '')
+      if (!from || !to || from === to) return
+      const fromIdx = STAGE_ORDER.indexOf(from)
+      const toIdx = STAGE_ORDER.indexOf(to)
+      if (fromIdx < 0 || toIdx < 0 || toIdx <= fromIdx) return // skip backwards or unknown
+      const key = `${from} → ${to}`
+      if (!transMap[key]) transMap[key] = { from, to, profiles: [] }
+      const profile = progProfilesMap[a.profile_id]
+      if (profile && !transMap[key].profiles.find((p: any) => p.id === a.profile_id)) {
+        transMap[key].profiles.push({ ...profile, id: a.profile_id })
+      }
+    })
+    // Sort by pipeline order
+    Object.entries(transMap)
+      .sort(([, a], [, b]) => STAGE_ORDER.indexOf(a.from) - STAGE_ORDER.indexOf(b.from))
+      .forEach(([key, val]) => progressionsByTransition.push({ key, ...val }))
+    const totalProgressions = progressionsByTransition.reduce((s, g) => s + g.profiles.length, 0)
+
+    // Sorties groupées par stade
+    const sortiesByStade: Record<string, any[]> = {}
+    sorties.forEach((p: any) => {
+      const stade = normalizeStage(p.chute_stade || p.stage) || '—'
+      if (!sortiesByStade[stade]) sortiesByStade[stade] = []
+      sortiesByStade[stade].push(p)
+    })
+    const sortiesStadeEntries = STAGE_ORDER
+      .filter(s => sortiesByStade[s] && sortiesByStade[s].length > 0)
+      .map(s => ({ stade: s, profiles: sortiesByStade[s] }))
 
     // ═══════════════════════════════════════════════
     // HTML BUILDERS
@@ -606,6 +664,60 @@ Deno.serve(async (req) => {
       </tr>`
     }).join('')
 
+    // ── Progressions HTML ──
+    // Couleurs par transition (bleu → vert selon avancement dans le pipeline)
+    const transitionColors: Record<string, string> = {
+      'R0 → R1': '#185FA5',
+      "R1 → Point d'étape": '#2D4DB5',
+      "R1 → Point Business Plan": '#2D4DB5',
+      "Point d'étape → R2 Amaury": '#0F6E56',
+      "Point Business Plan → Point d'étape": '#1D9E75',
+      "Point Business Plan → R2 Amaury": '#0F6E56',
+      'R2 Amaury → Point juridique': '#0F6E56',
+      'Point juridique → Recruté': '#3B6D11',
+    }
+    const transColor = (key: string) => transitionColors[key] || '#185FA5'
+
+    const progressionsHtml = progressionsByTransition.length > 0
+      ? progressionsByTransition.map((g, i) => {
+          const color = transColor(g.key)
+          const isLast = i === progressionsByTransition.length - 1
+          const names = g.profiles.map((p: any) => `${p.first_name} ${p.last_name}`).join(' · ')
+          return `<tr>
+            <td style="padding:7px 12px;border-bottom:${isLast ? 'none' : '1px solid #F0EDE7'};width:200px;vertical-align:middle">
+              <span style="display:inline-block;font-size:10px;font-weight:600;padding:3px 8px;border-radius:20px;background:${color}18;color:${color};white-space:nowrap">${g.key}</span>
+            </td>
+            <td style="padding:7px 12px;border-bottom:${isLast ? 'none' : '1px solid #F0EDE7'};font-size:11px;color:#555;vertical-align:middle">${names}</td>
+            <td style="padding:7px 12px;border-bottom:${isLast ? 'none' : '1px solid #F0EDE7'};text-align:right;font-size:12px;font-weight:600;color:${color};vertical-align:middle;white-space:nowrap">×${g.profiles.length}</td>
+          </tr>`
+        }).join('')
+      : `<tr><td colspan="3" style="padding:10px 12px;font-size:12px;color:#bbb">Aucune progression cette semaine</td></tr>`
+
+    const sortiesParStadeHtml = sortiesStadeEntries.length > 0
+      ? sortiesStadeEntries.map((entry, i) => {
+          const isLastGroup = i === sortiesStadeEntries.length - 1
+          const rows = entry.profiles.map((p: any, j: number) => {
+            const motif = p.maturity === 'Chute' ? (p.chute_type || 'Chute') : (p.pas_interesse_type || 'Pas intéressé')
+            const motifBg = p.maturity === 'Chute' ? '#FCEBEB' : '#FAEEDA'
+            const motifColor = p.maturity === 'Chute' ? '#A32D2D' : '#854F0B'
+            const isLast = j === entry.profiles.length - 1 && isLastGroup
+            return `<tr>
+              <td style="padding:6px 12px;border-bottom:${isLast ? 'none' : '1px solid #F0EDE7'};font-size:12px;color:#333">${p.first_name} ${p.last_name}</td>
+              <td style="padding:6px 12px;border-bottom:${isLast ? 'none' : '1px solid #F0EDE7'}">${sourceBadge(p.source || '')}</td>
+              <td style="padding:6px 12px;border-bottom:${isLast ? 'none' : '1px solid #F0EDE7'}">
+                <span style="display:inline-block;font-size:10px;font-weight:600;padding:2px 7px;border-radius:8px;background:${motifBg};color:${motifColor}">${motif}</span>
+              </td>
+              <td style="padding:6px 12px;border-bottom:${isLast ? 'none' : '1px solid #F0EDE7'};font-size:11px;color:#555">${p.owner_full_name || '—'}</td>
+            </tr>`
+          }).join('')
+          return `<tr style="background:#FDF5F5">
+            <td colspan="4" style="padding:5px 12px;font-size:11px;font-weight:600;color:#A32D2D;border-bottom:1px solid #F0EDE7;border-top:${i === 0 ? 'none' : '1px solid #F09595'}">
+              Sorti depuis : ${entry.stade} — ${entry.profiles.length} profil${entry.profiles.length > 1 ? 's' : ''}
+            </td>
+          </tr>${rows}`
+        }).join('')
+      : `<tr><td colspan="4" style="padding:10px 12px;font-size:12px;color:#bbb">Aucune sortie cette semaine</td></tr>`
+
     // ── En pause ──
     const enPauseRows = (enPauseRaw || []).map((p: any) => {
       const dur = weeksAgo(p.updated_at)
@@ -688,23 +800,39 @@ Deno.serve(async (req) => {
 
         <!-- MOUVEMENTS -->
         <div style="margin-bottom:24px">
-          <div style="font-size:14px;font-weight:600;color:#173731;border-bottom:2px solid #D2AB76;padding-bottom:5px;margin-bottom:12px">Mouvements de la semaine</div>
-          <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:14px">
+          <div style="font-size:14px;font-weight:600;color:#173731;border-bottom:2px solid #D2AB76;padding-bottom:5px;margin-bottom:12px">Mouvements de la semaine du ${fmtFR(fmt(lastMonday))} au ${fmtFR(fmt(lastFriday))}</div>
+
+          <!-- KPIs 3 colonnes -->
+          <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:16px">
             <tr valign="top">
-              <td width="49%" style="padding-right:8px">
+              <td width="32%" style="padding-right:6px">
                 <div style="background:#EAF3DE;border:1px solid #97C459;border-radius:6px;padding:12px 14px">
-                  <div style="font-size:10px;font-weight:700;color:#3B6D11;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">Entrées</div>
+                  <div style="font-size:10px;font-weight:700;color:#3B6D11;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Entrées pipeline</div>
                   <div style="font-size:26px;font-weight:700;color:#3B6D11;line-height:1">${totalEntrees}</div>
-                  <div style="font-size:10px;color:#888;margin-bottom:10px;margin-top:2px">nouveaux profils en R0</div>
+                  <div style="font-size:10px;color:#888;margin-top:2px;margin-bottom:8px">nouveaux profils en R0</div>
                   <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">${entreesSourceRows}</table>
                 </div>
               </td>
               <td width="2%"></td>
-              <td width="49%">
+              <td width="32%" style="padding-right:6px">
+                <div style="background:#E6F1FB;border:1px solid #85B7EB;border-radius:6px;padding:12px 14px">
+                  <div style="font-size:10px;font-weight:700;color:#185FA5;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Progressions</div>
+                  <div style="font-size:26px;font-weight:700;color:#185FA5;line-height:1">${totalProgressions}</div>
+                  <div style="font-size:10px;color:#888;margin-top:2px;margin-bottom:8px">avancées dans le pipeline</div>
+                  <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
+                    ${progressionsByTransition.map(g => `<tr>
+                      <td style="padding:2px 0;font-size:10px;color:#185FA5">${g.key}</td>
+                      <td style="padding:2px 0;font-size:10px;font-weight:700;color:#185FA5;text-align:right">×${g.profiles.length}</td>
+                    </tr>`).join('')}
+                  </table>
+                </div>
+              </td>
+              <td width="2%"></td>
+              <td width="32%">
                 <div style="background:#FCEBEB;border:1px solid #F09595;border-radius:6px;padding:12px 14px">
-                  <div style="font-size:10px;font-weight:700;color:#A32D2D;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">Sorties</div>
+                  <div style="font-size:10px;font-weight:700;color:#A32D2D;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Sorties pipeline</div>
                   <div style="font-size:26px;font-weight:700;color:#A32D2D;line-height:1">${sorties.length}</div>
-                  <div style="font-size:10px;color:#888;margin-bottom:10px;margin-top:2px">profils sortis du pipeline</div>
+                  <div style="font-size:10px;color:#888;margin-top:2px;margin-bottom:8px">profils sortis</div>
                   <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
                     <tr><td style="padding:2px 0;font-size:10px;color:#A32D2D">Chutes</td><td style="padding:2px 0;font-size:10px;font-weight:700;color:#A32D2D;text-align:right">${sorties.filter((s: any) => s.maturity === 'Chute').length}</td></tr>
                     <tr><td style="padding:2px 0;font-size:10px;color:#A32D2D">Pas intéressés</td><td style="padding:2px 0;font-size:10px;font-weight:700;color:#A32D2D;text-align:right">${sorties.filter((s: any) => s.maturity === 'Pas intéressé').length}</td></tr>
@@ -713,16 +841,29 @@ Deno.serve(async (req) => {
               </td>
             </tr>
           </table>
-          ${sorties.length > 0 ? `
-          <div style="font-size:12px;font-weight:600;color:#555;margin-bottom:6px">Détail des sorties</div>
-          <table style="width:100%;border-collapse:collapse;font-size:12px">
+
+          <!-- Détail progressions -->
+          <div style="font-size:12px;font-weight:600;color:#555;margin-bottom:6px">Détail des progressions</div>
+          <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:14px;border:1px solid #E8E4DD;border-radius:6px">
             <thead><tr style="background:#173731;color:#D2AB76">
-              <th style="padding:6px 10px;text-align:left;font-weight:400">Nom</th>
-              <th style="padding:6px 10px;text-align:left;font-weight:400">Source</th>
-              <th style="padding:6px 10px;text-align:left;font-weight:400">Stade au départ</th>
-              <th style="padding:6px 10px;text-align:left;font-weight:400">Motif</th>
-              <th style="padding:6px 10px;text-align:left;font-weight:400">Référent</th>
-            </tr></thead><tbody>${sortiesRows}</tbody>
+              <th style="padding:6px 12px;text-align:left;font-weight:400">Transition</th>
+              <th style="padding:6px 12px;text-align:left;font-weight:400">Profils</th>
+              <th style="padding:6px 12px;text-align:right;font-weight:400">Nb</th>
+            </tr></thead>
+            <tbody>${progressionsHtml}</tbody>
+          </table>
+
+          <!-- Détail sorties par étape -->
+          ${sorties.length > 0 ? `
+          <div style="font-size:12px;font-weight:600;color:#555;margin-bottom:6px">Détail des sorties par étape</div>
+          <table style="width:100%;border-collapse:collapse;font-size:12px;border:1px solid #E8E4DD;border-radius:6px">
+            <thead><tr style="background:#173731;color:#D2AB76">
+              <th style="padding:6px 12px;text-align:left;font-weight:400">Nom</th>
+              <th style="padding:6px 12px;text-align:left;font-weight:400">Source</th>
+              <th style="padding:6px 12px;text-align:left;font-weight:400">Motif</th>
+              <th style="padding:6px 12px;text-align:left;font-weight:400">Référent</th>
+            </tr></thead>
+            <tbody>${sortiesParStadeHtml}</tbody>
           </table>` : ''}
         </div>
 
@@ -779,7 +920,7 @@ Deno.serve(async (req) => {
       JSON.stringify({
         success: true,
         html: emailHtml,
-        subject: '🎯 Rapport Hebdo — Semaine du ' + fmtFR(fmt(monday))
+        subject: '🎯 Rapport Hebdo — Semaine du ' + fmtFR(fmt(lastMonday)) + ' au ' + fmtFR(fmt(lastFriday))
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
