@@ -163,10 +163,14 @@ Deno.serve(async (req) => {
       r.owner_full_name?.includes('PATERAC') || r.owner_full_name?.includes('Baptiste')
     ).length || 0
 
-    // Tous les profils actifs pour funnel + analytics
+    // Tous les profils non-archivés pour analytics pipeline
     const { data: allProfiles } = await supabase.from('profiles')
       .select('id, stage, source, maturity, region, chute_stade, created_at, updated_at, skip_business_plan, skip_demission')
       .neq('maturity', 'Archivé')
+
+    // TOUS les profils (y compris archivés) pour le funnel cumulatif
+    const { data: allProfilesFunnel } = await supabase.from('profiles')
+      .select('id, stage, source, maturity, chute_stade')
 
     // Activités stage_change pour funnel cumulatif
     const { data: stageActivities } = await supabase.from('activities')
@@ -199,6 +203,7 @@ Deno.serve(async (req) => {
     // ═══════════════════════════════════════════════
 
     const profiles = allProfiles || []
+    const profilesFunnel = allProfilesFunnel || []
     const acts = stageActivities || []
 
     const stagesReachedByProfile: Record<string, Set<string>> = {}
@@ -229,10 +234,18 @@ Deno.serve(async (req) => {
       return pIdx >= targetIdx
     }
 
-    const forFunnel = profiles.filter((p: any) => p.stage && p.stage !== '')
+    // Funnel cumulatif : inclure TOUS les profils (même archivés), null stage = R0
+    const forFunnel = profilesFunnel
     const funnelCounts = ANALYTICS_STAGES.map((stage) => {
-      if (stage === 'Recruté') return { stage, reached: totalRecrutes }
+      if (stage === 'Recruté') {
+        // Compter TOUS les recrutés (actifs + archivés)
+        return { stage, reached: profilesFunnel.filter((p: any) => p.stage === 'Recruté').length }
+      }
       const targetIdx = stageIndex(stage)
+      if (targetIdx === 0) {
+        // R0 = tous les profils jamais entrés dans le pipeline (null stage compte aussi)
+        return { stage, reached: forFunnel.length }
+      }
       return { stage, reached: forFunnel.filter((p: any) => reachedStage(p, targetIdx)).length }
     })
 
@@ -256,16 +269,17 @@ Deno.serve(async (req) => {
       recrutesBySource[src] = (recrutesBySource[src] || 0) + 1
     })
 
-    // Pipeline actif par source + stade
+    // Pipeline actif par source + stade (= vue Kanban : hors Chute / Pas intéressé / Archivé / En pause)
     const activePipeline = profiles.filter((p: any) =>
-      !['Chute', 'Pas intéressé', 'Archivé'].includes(p.maturity) && p.stage && p.stage !== ''
+      !['Chute', 'Pas intéressé', 'Archivé', 'En pause'].includes(p.maturity)
     )
     const pipelineBySource: Record<string, { total: number; stages: Record<string, number> }> = {}
     activePipeline.forEach((p: any) => {
       const src = mapSourceToDisplay(p.source)
       if (!pipelineBySource[src]) pipelineBySource[src] = { total: 0, stages: {} }
       pipelineBySource[src].total++
-      const stg = normalizeStage(p.stage)
+      // null stage = profil en R0 sans stage encore assigné
+      const stg = normalizeStage(p.stage) || 'R0'
       pipelineBySource[src].stages[stg] = (pipelineBySource[src].stages[stg] || 0) + 1
     })
     const totalActivePipeline = activePipeline.length
@@ -357,7 +371,7 @@ Deno.serve(async (req) => {
 
       const potentielRows = potentiels.length > 0
         ? `<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:5px">
-            <thead><tr style="background:#F5F3EF;color:#173731">
+            <thead><tr style="background:#173731;color:#D2AB76">
               <th style="padding:6px 10px;text-align:left;font-weight:400">Nom</th>
               <th style="padding:6px 10px;text-align:left;font-weight:400">Ville</th>
               <th style="padding:6px 10px;text-align:left;font-weight:400">Source</th>
