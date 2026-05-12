@@ -163,10 +163,14 @@ Deno.serve(async (req) => {
       r.owner_full_name?.includes('PATERAC') || r.owner_full_name?.includes('Baptiste')
     ).length || 0
 
-    // Tous les profils non-archivés pour analytics pipeline
+    // Profils non-archivés avec un stage (= dans le pipeline) pour analytics
+    // Filtre stage != null côté serveur pour éviter la pagination 1000 lignes
+    // (la table a 900+ prospects CRM sans stage qui pollueraient le compte)
     const { data: allProfiles } = await supabase.from('profiles')
       .select('id, stage, source, maturity, region, chute_stade, created_at, updated_at, skip_business_plan, skip_demission')
       .neq('maturity', 'Archivé')
+      .not('stage', 'is', null)
+      .neq('stage', '')
 
     // Profils ayant eu un stage (y compris archivés) pour le funnel cumulatif
     // On filtre côté serveur sur stage != null pour éviter la pagination à 1000 lignes
