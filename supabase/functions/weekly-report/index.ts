@@ -168,9 +168,13 @@ Deno.serve(async (req) => {
       .select('id, stage, source, maturity, region, chute_stade, created_at, updated_at, skip_business_plan, skip_demission')
       .neq('maturity', 'Archivé')
 
-    // TOUS les profils (y compris archivés) pour le funnel cumulatif
+    // Profils ayant eu un stage (y compris archivés) pour le funnel cumulatif
+    // On filtre côté serveur sur stage != null pour éviter la pagination à 1000 lignes
+    // (la table CRM a 900+ prospects sans stage qui ne sont pas dans le pipeline)
     const { data: allProfilesFunnel } = await supabase.from('profiles')
       .select('id, stage, source, maturity, chute_stade')
+      .not('stage', 'is', null)
+      .neq('stage', '')
 
     // Activités stage_change pour funnel cumulatif
     const { data: stageActivities } = await supabase.from('activities')
