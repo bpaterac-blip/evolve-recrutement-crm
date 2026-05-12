@@ -128,11 +128,20 @@ Deno.serve(async (req) => {
     const { data: allBP } = await supabase.from('profiles').select('id')
       .eq('next_event_label', 'Point Business Plan').gte('next_event_date', fmt(today))
 
-    // Sessions à venir (les 2 prochaines — incluant celles sans date)
-    const { data: sessions } = await supabase.from('sessions_formation').select('*')
-      .or(`date_debut.gte.${fmt(today)},date_debut.is.null`)
-      .order('date_debut', { ascending: true, nullsFirst: false })
+    // Sessions à venir avec date confirmée
+    const { data: sessionsWithDate } = await supabase.from('sessions_formation').select('*')
+      .gte('date_debut', fmt(today))
+      .order('date_debut', { ascending: true })
       .limit(2)
+
+    // Sessions sans date (à confirmer) — exclure les passées
+    const { data: sessionsNoDate } = await supabase.from('sessions_formation').select('*')
+      .is('date_debut', null)
+      .not('statut', 'ilike', 'pass%')
+      .limit(2)
+
+    // Fusionner : prochaines sessions avec date d'abord, puis sans date
+    const sessions = [...(sessionsWithDate || []), ...(sessionsNoDate || [])].slice(0, 2)
 
     // Profils liés à une session (on filtre En pause et Archivé côté code)
     const { data: profilsSession } = await supabase.from('profiles')
@@ -167,16 +176,16 @@ Deno.serve(async (req) => {
     // Entrées cette semaine (nouveaux profils créés)
     const { data: entreesRaw } = await supabase.from('profiles')
       .select('first_name, last_name, source, owner_full_name')
-      .gte('created_at', fmt(monday) + 'T00:00:00')
-      .lte('created_at', fmt(friday) + 'T23:59:59')
+      .gte('created_at', fmt(monday) + 'T00:00:00Z')
+      .lte('created_at', fmt(friday) + 'T23:59:59Z')
       .order('created_at', { ascending: false })
 
     // Sorties cette semaine (passés en Chute ou Pas intéressé)
     const { data: sortiesRaw } = await supabase.from('profiles')
       .select('first_name, last_name, source, stage, maturity, chute_type, pas_interesse_type, owner_full_name, chute_stade')
       .in('maturity', ['Chute', 'Pas intéressé'])
-      .gte('updated_at', fmt(monday) + 'T00:00:00')
-      .lte('updated_at', fmt(friday) + 'T23:59:59')
+      .gte('updated_at', fmt(monday) + 'T00:00:00Z')
+      .lte('updated_at', fmt(friday) + 'T23:59:59Z')
       .order('updated_at', { ascending: false })
 
     // Profils en pause
@@ -413,10 +422,12 @@ Deno.serve(async (req) => {
       : '<p style="color:#bbb;font-size:12px">Aucun recrutement confirmé</p>'
 
     // ── Taux de conversion ──
+    const hasOverflow = conversions.some(c => c.rate > 100)
     const conversionsHtml = conversions.map(c => {
       const barColor = c.rate >= 50 ? '#16a34a' : c.rate >= 25 ? '#D2AB76' : '#ef4444'
       const bp = Math.max(6, Math.min(100, c.rate))
       const isGlobal = c.label.includes('global')
+      const rateLabel = c.rate > 100 ? `${c.rate}% *` : `${c.rate}%`
       const topBorder = isGlobal ? `<tr><td colspan="3" style="padding-top:10px;border-top:2px solid #D2AB76"></td></tr>` : ''
       return `${topBorder}
       <tr style="${isGlobal ? 'background:#EAE6DF' : ''}">
@@ -424,7 +435,7 @@ Deno.serve(async (req) => {
           <span style="font-size:${isGlobal ? '13px' : '12px'};font-weight:${isGlobal ? '700' : '500'};color:#173731">${c.label}</span>
         </td>
         <td style="padding:8px 8px 3px 0;width:72px;text-align:right;white-space:nowrap;vertical-align:middle">
-          <span style="font-size:${isGlobal ? '20px' : '15px'};font-weight:700;color:${barColor}">${c.rate}%</span>
+          <span style="font-size:${isGlobal ? '20px' : '15px'};font-weight:700;color:${barColor}">${rateLabel}</span>
         </td>
         <td style="padding:8px 10px 3px 0;text-align:right;white-space:nowrap;vertical-align:middle">
           <span style="font-size:10px;color:#bbb">${c.from} → ${c.to}</span>
@@ -439,6 +450,9 @@ Deno.serve(async (req) => {
         </td>
       </tr>`
     }).join('')
+    const conversionFootnote = hasOverflow
+      ? `<tr><td colspan="3" style="padding:10px 10px 0"><span style="font-size:10px;color:#aaa;font-style:italic">* Un taux &gt; 100% indique que certains profils atteignent cette étape via un chemin non linéaire (ex : skip d'une étape précédente).</span></td></tr>`
+      : ''
 
     // ── Pipeline par source ──
     const pipelineSrcEntries = SOURCES
@@ -486,11 +500,19 @@ Deno.serve(async (req) => {
               <td style="padding:3px 10px;font-size:10px;font-weight:600;color:${color};text-align:right;border-bottom:1px solid #F0EDE7">${data.stages[stg]}</td>
             </tr>`).join('')
           const card = `<div style="border:1px solid #E8E4DD;border-radius:6px;overflow:hidden;margin-bottom:8px">
-            <div style="padding:7px 10px;background:#F5F3EF;display:flex;align-items:center;gap:6px">
-              <div style="width:9px;height:9px;border-radius:2px;background:${color}"></div>
-              <span style="font-size:11px;font-weight:600;color:#173731">${src}</span>
-              <span style="font-size:10px;color:#aaa;margin-left:auto">${data.total} profils</span>
-            </div>
+            <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;background:#F5F3EF">
+              <tr>
+                <td style="padding:7px 10px;vertical-align:middle">
+                  <table cellpadding="0" cellspacing="0" style="border-collapse:collapse">
+                    <tr>
+                      <td style="width:9px;height:9px;background:${color};border-radius:2px;vertical-align:middle;font-size:0;line-height:0">&nbsp;</td>
+                      <td style="padding-left:6px;font-size:11px;font-weight:600;color:#173731;vertical-align:middle">${src}</td>
+                    </tr>
+                  </table>
+                </td>
+                <td style="padding:7px 10px;text-align:right;font-size:10px;color:#aaa;vertical-align:middle;white-space:nowrap">${data.total} profils</td>
+              </tr>
+            </table>
             <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">${stageRows}</table>
           </div>`
           // 2 columns
@@ -617,9 +639,21 @@ Deno.serve(async (req) => {
               </td>
             </tr>
           </table>
-          <div style="background:#E8E4DD;border-radius:6px;height:18px">
-            <div style="background:#D2AB76;border-radius:6px;height:18px;width:${pct}%;display:flex;align-items:center;justify-content:center;color:white;font-size:10px;font-weight:600">${pct}%</div>
-          </div>
+          <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
+            <tr>
+              <td style="vertical-align:middle">
+                <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
+                  <tr>
+                    <td width="${pct}%" style="height:18px;background:#D2AB76;border-radius:4px 0 0 4px"></td>
+                    <td width="${100 - pct}%" style="height:18px;background:#E8E4DD;border-radius:0 4px 4px 0"></td>
+                  </tr>
+                </table>
+              </td>
+              <td style="padding-left:10px;width:40px;text-align:right;vertical-align:middle;white-space:nowrap">
+                <span style="font-size:13px;font-weight:700;color:#D2AB76">${pct}%</span>
+              </td>
+            </tr>
+          </table>
         </div>
 
         <!-- MOUVEMENTS -->
@@ -689,7 +723,7 @@ Deno.serve(async (req) => {
         <div style="margin-bottom:24px;background:#F5F3EF;border-radius:10px;padding:20px 22px;border:1px solid #E8E4DD">
           <div style="font-size:15px;font-weight:700;color:#173731;margin-bottom:3px">Taux de conversion par étape</div>
           <div style="font-size:11px;color:#aaa;margin-bottom:14px">% de profils passant d'une étape à la suivante</div>
-          <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">${conversionsHtml}</table>
+          <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">${conversionsHtml}${conversionFootnote}</table>
         </div>
 
         <!-- PIPELINE PAR SOURCE -->
@@ -715,7 +749,7 @@ Deno.serve(async (req) => {
       JSON.stringify({
         success: true,
         html: emailHtml,
-        subject: '🎯 [v3] Rapport Hebdo — Semaine du ' + fmtFR(fmt(monday))
+        subject: '🎯 Rapport Hebdo — Semaine du ' + fmtFR(fmt(monday))
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
