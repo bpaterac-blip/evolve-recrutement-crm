@@ -34,7 +34,7 @@ const L = {
   abeille_doc1:    { label: 'Document Abeille 1', url: 'https://drive.google.com/file/d/1jVwQEDymC5gpNBEr-JiSkNWWzNhx1BGv/view' },
   abeille_doc2:    { label: 'Document Abeille 2', url: 'https://docs.google.com/document/d/1eULoXNJlUyrFC-hQCqOJ_XkMql6UQCf5/edit' },
   codes_assureurs:    { label: 'Renseigner les codes assureurs', url: 'https://docs.google.com/spreadsheets/d/1Kxpt9Od9xfsYMQpzpwOFu8FT0TiNVnxcF57AaHOKjHk/edit?gid=881522851#gid=881522851' },
-  book_preintegration:{ label: 'Book Pré-Intégration', url: 'https://drive.google.com/file/d/1PWB892KD6a4BuETnIwqGAb6z-kH4ONsp/view?usp=drive_link' },
+  book_preintegration:{ label: 'Book Pré-Intégration', url: 'https://drive.google.com/file/d/1UeN-i9eqSWBCXaBeJvzScREBW6pKV3S8/view?usp=sharing' },
 }
 
 // ── Remplace les placeholders {{…}} par les données du profil ─────────────────
