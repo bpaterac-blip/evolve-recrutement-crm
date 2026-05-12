@@ -201,17 +201,43 @@ Deno.serve(async (req) => {
       .lte('created_at', fmt(lastFriday) + 'T23:59:59Z')
       .order('created_at', { ascending: false })
 
-    // Sorties semaine précédente (passés en Chute ou Pas intéressé)
-    const { data: sortiesRaw } = await supabase.from('profiles')
-      .select('first_name, last_name, source, stage, maturity, chute_type, pas_interesse_type, owner_full_name, chute_stade')
+    // Sorties semaine précédente — approche 1 : updated_at
+    const { data: sortiesUpdated } = await supabase.from('profiles')
+      .select('id, first_name, last_name, source, stage, maturity, chute_type, pas_interesse_type, owner_full_name, chute_stade')
       .in('maturity', ['Chute', 'Pas intéressé'])
       .gte('updated_at', fmt(lastMonday) + 'T00:00:00Z')
       .lte('updated_at', fmt(lastFriday) + 'T23:59:59Z')
       .order('updated_at', { ascending: false })
 
+    // Sorties semaine précédente — approche 2 : activités où new_value = Chute/Pas intéressé
+    // (capte les cas où updated_at a été modifié ultérieurement)
+    const { data: sortiesActivities } = await supabase.from('activities')
+      .select('profile_id, new_value, created_at')
+      .in('new_value', ['Chute', 'Pas intéressé'])
+      .gte('created_at', fmt(lastMonday) + 'T00:00:00Z')
+      .lte('created_at', fmt(lastFriday) + 'T23:59:59Z')
+
+    // Récupérer les profils des sorties via activités
+    const sortiesActIds = [...new Set((sortiesActivities || []).map((a: any) => a.profile_id))]
+    let sortiesActProfiles: any[] = []
+    if (sortiesActIds.length > 0) {
+      const { data: sp } = await supabase.from('profiles')
+        .select('id, first_name, last_name, source, stage, maturity, chute_type, pas_interesse_type, owner_full_name, chute_stade')
+        .in('id', sortiesActIds)
+      sortiesActProfiles = sp || []
+    }
+
+    // Fusionner les deux approches (dédupliqué par id)
+    const sortiesMap: Record<string, any> = {}
+    ;(sortiesUpdated || []).forEach((p: any) => { sortiesMap[p.id] = p })
+    sortiesActProfiles.forEach((p: any) => { sortiesMap[p.id] = p })
+    const sortiesRaw = Object.values(sortiesMap)
+
     // Progressions semaine précédente (avancées dans le pipeline)
+    // On récupère aussi `note` car certaines activités stockent "R0 → R1" dans note
+    // plutôt que dans old_value/new_value
     const { data: progressionsRaw } = await supabase.from('activities')
-      .select('profile_id, old_value, new_value, created_at')
+      .select('profile_id, old_value, new_value, note, created_at')
       .eq('activity_type', 'stage_change')
       .gte('created_at', fmt(lastMonday) + 'T00:00:00Z')
       .lte('created_at', fmt(lastFriday) + 'T23:59:59Z')
@@ -344,8 +370,14 @@ Deno.serve(async (req) => {
     const progressionsByTransition: Array<{ key: string; from: string; to: string; profiles: any[] }> = []
     const transMap: Record<string, { from: string; to: string; profiles: any[] }> = {}
     ;(progressionsRaw || []).forEach((a: any) => {
-      const from = normalizeStage(a.old_value || '')
-      const to = normalizeStage(a.new_value || '')
+      // Extraire from/to depuis old_value/new_value OU depuis note ("R0 → R1 (Baptiste)")
+      let from = normalizeStage(a.old_value || '')
+      let to = normalizeStage(a.new_value || '')
+      if ((!from || !to) && a.note && a.note.includes(' → ')) {
+        const parts = a.note.split(' → ')
+        from = from || normalizeStage(parts[0]?.trim() || '')
+        to = to || normalizeStage((parts[1] || '').replace(/\s*\(.*?\)/, '').trim())
+      }
       if (!from || !to || from === to) return
       const fromIdx = STAGE_ORDER.indexOf(from)
       const toIdx = STAGE_ORDER.indexOf(to)
