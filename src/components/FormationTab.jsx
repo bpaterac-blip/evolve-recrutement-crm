@@ -77,17 +77,27 @@ function openGmailCompose(to, subject) {
 }
 
 function copyHtml(htmlStr) {
-  const plainStr = htmlStr.replace(/<[^>]+>/g, '').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&nbsp;/g,' ')
+  // Méthode execCommand : copie le HTML rendu, préserve le formatage dans Gmail
   try {
-    navigator.clipboard.write([
-      new ClipboardItem({
-        'text/html':  new Blob([htmlStr],  { type: 'text/html' }),
-        'text/plain': new Blob([plainStr], { type: 'text/plain' }),
-      })
-    ])
-  } catch (_) {
-    navigator.clipboard.writeText(plainStr).catch(() => {})
-  }
+    const div = document.createElement('div')
+    div.contentEditable = 'true'
+    div.innerHTML = htmlStr
+    div.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;pointer-events:none'
+    document.body.appendChild(div)
+    div.focus()
+    const range = document.createRange()
+    range.selectNodeContents(div)
+    const sel = window.getSelection()
+    sel.removeAllRanges()
+    sel.addRange(range)
+    document.execCommand('copy')
+    sel.removeAllRanges()
+    document.body.removeChild(div)
+    return
+  } catch (_) {}
+  // Fallback : texte brut
+  const plainStr = htmlStr.replace(/<[^>]+>/g, '').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&nbsp;/g,' ')
+  navigator.clipboard.writeText(plainStr).catch(() => {})
 }
 
 function htmlM2(profile) {
@@ -101,7 +111,8 @@ function htmlM2(profile) {
 <p>Pour les démarches administratives, on s'occupe de tout. Tu n'as rien à gérer de ton côté, et tu recevras les informations au fil de l'eau.</p>
 <p>Je reste disponible si tu as des questions.</p>
 <p>Bonne journée à toi !</p>
-<p>Baptiste</p>`
+<p>Baptiste</p>
+<p>--<br><em>[Ajouter ta signature]</em></p>`
 }
 
 function subjectM2(profile) {
@@ -118,7 +129,8 @@ function htmlJ15(profile) {
 <p>Prends le temps de le lire avant la formation, tu verras que ça aide vraiment sur la façon d'aborder les premières semaines.</p>
 <p>Et si quelque chose te questionne à la lecture, note-le. On en parlera ensemble.</p>
 <p>À dans 15 jours !</p>
-<p>Baptiste</p>`
+<p>Baptiste</p>
+<p>--<br><em>[Ajouter ta signature]</em></p>`
 }
 
 function subjectJ15(profile) {
@@ -175,7 +187,8 @@ ${PROGRAMME_TABLE}
 ${participantList}
 <p>On est vraiment impatients de vous voir démarrer cette semaine ! C'est le début d'une superbe aventure, alors profitez-en à fond.</p>
 <p><strong>À lundi !</strong></p>
-<p>Baptiste</p>`
+<p>Baptiste</p>
+<p>--<br><em>[Ajouter ta signature]</em></p>`
 }
 
 function subjectJ7(sessionLabel) {
