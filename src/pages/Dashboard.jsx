@@ -394,11 +394,14 @@ export default function Dashboard() {
         const dueTodayOrLate = Object.entries(jDates).filter(([, d]) => d <= ymd(today))
         if (dueTodayOrLate.length === 0) continue
 
-        // Profils de la session
+        // Profils de la session (uniquement CGPs confirmés, non archivés)
         const { data: profiles } = await supabase
           .from('profiles')
           .select('id, first_name, last_name')
           .eq('session_formation_id', session.id)
+          .eq('stage', 'Recruté')
+          .eq('integration_confirmed', true)
+          .neq('maturity', 'Archivé')
         if (!profiles || profiles.length === 0) continue
 
         // Jalons déjà envoyés
