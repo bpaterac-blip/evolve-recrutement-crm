@@ -67,90 +67,125 @@ const JALON_DEFS = [
   },
 ]
 
-// ── Templates mail ────────────────────────────────────────────────────────────
-function buildGmailUrl(to, subject, body) {
-  return `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(to)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+// ── Templates mail (HTML exact depuis les .docx) ─────────────────────────────
+
+function openGmailCompose(to, subject) {
+  window.open(
+    `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(to)}&su=${encodeURIComponent(subject)}`,
+    '_blank'
+  )
 }
 
-function mailM2(profile) {
-  const fn = profile.first_name || ''; const ln = profile.last_name || ''
-  const subject = `${fn} ${ln} / Book pré-intégration`
-  const body = `${fn},
-
-Nous sommes à 2 mois du début de la formation !
-
-Les dates précises te seront communiquées très prochainement.
-
-En attendant, tu peux retrouver en pièce jointe ton book de pré-intégration.
-
-Prends le temps de le lire tranquillement, il y a tout ce qu'il faut savoir avant la formation : comment fonctionne Evolve, les premiers mois d'activité et les témoignages de ceux qui sont passés par là avant toi.
-
-La seule chose que tu as à faire d'ici la formation : préparer tes trois listes de contacts. Tu peux également retrouver en PJ un tableau Excel avec un fichier tout prêt : c'est simple et ça change tout au démarrage.
-
-Pour les démarches administratives, on s'occupe de tout. Tu n'as rien à gérer de ton côté, et tu recevras les informations au fil de l'eau.
-
-Je reste disponible si tu as des questions.
-
-Bonne journée à toi !
-
-Baptiste`
-  return buildGmailUrl(profile.email || '', subject, body)
+function copyHtml(htmlStr) {
+  const plainStr = htmlStr.replace(/<[^>]+>/g, '').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&nbsp;/g,' ')
+  try {
+    navigator.clipboard.write([
+      new ClipboardItem({
+        'text/html':  new Blob([htmlStr],  { type: 'text/html' }),
+        'text/plain': new Blob([plainStr], { type: 'text/plain' }),
+      })
+    ])
+  } catch (_) {
+    navigator.clipboard.writeText(plainStr).catch(() => {})
+  }
 }
 
-function mailJ15(profile) {
-  const fn = profile.first_name || ''; const ln = profile.last_name || ''
-  const subject = `${fn} ${ln} / Book modèle économique`
-  const body = `Bonjour ${fn},
-
-J-15 ! Dans deux semaines, ton aventure commence.
-
-On est vraiment contents de t'accueillir dans l'équipe Evolve, et on a hâte de te voir construire quelque chose de grand. Les conseillers qui réussissent ici ne sont pas forcément ceux qui en savent le plus au départ. Ce sont ceux qui comprennent vite les règles du jeu.
-
-C'est exactement pour ça qu'on t'envoie ce document en avance : « Comprendre ta rémunération ». Pas pour t'assommer de chiffres, mais pour que tu arrives en formation avec une vision claire de ce que tu peux construire, et surtout de comment.
-
-Un bon mois chez Evolve, ça ressemble à quoi concrètement ? Qu'est-ce qui génère vraiment de la rémunération ? Quels sont les leviers sur lesquels jouer dès le départ ? Ce document répond à tout ça.
-
-Prends le temps de le lire avant la formation, tu verras que ça aide vraiment sur la façon d'aborder les premières semaines.
-
-Et si quelque chose te questionne à la lecture, note-le. On en parlera ensemble.
-
-À dans 15 jours !
-
-Baptiste`
-  return buildGmailUrl(profile.email || '', subject, body)
+function htmlM2(profile) {
+  const fn = profile.first_name || ''
+  return `<p>${fn},</p>
+<p>Nous sommes à 2 mois du début de la formation !</p>
+<p>Les dates précises te seront communiquées très prochainement.</p>
+<p>En attendant, tu peux retrouver en pièce jointe ton <strong>book de pré-intégration</strong>.</p>
+<p>Prends le temps de le lire tranquillement, il y a tout ce qu'il faut savoir avant la formation : comment fonctionne Evolve, les premiers mois d'activité et les témoignages de ceux qui sont passés par là avant toi.</p>
+<p>La seule chose que tu as à faire d'ici la formation : <strong>préparer tes trois listes de contacts</strong>. Tu peux également retrouver en PJ un tableau Excel avec un fichier tout prêt : <strong>c'est simple et ça change tout au démarrage</strong>.</p>
+<p>Pour les démarches administratives, on s'occupe de tout. Tu n'as rien à gérer de ton côté, et tu recevras les informations au fil de l'eau.</p>
+<p>Je reste disponible si tu as des questions.</p>
+<p>Bonne journée à toi !</p>
+<p>Baptiste</p>`
 }
 
-function mailJ7(sessionCgps, sessionLabel) {
-  const tos = sessionCgps.map(c => c.email).filter(Boolean).join(', ')
-  const subject = `Promotion ${sessionLabel} · On se retrouve dans 7 jours !`
+function subjectM2(profile) {
+  return `${profile.first_name || ''} ${profile.last_name || ''} / Book pré-intégration`
+}
+
+function htmlJ15(profile) {
+  const fn = profile.first_name || ''
+  return `<p>Bonjour ${fn},</p>
+<p><strong>J-15 ! Dans deux semaines, ton aventure commence.</strong></p>
+<p>On est vraiment contents de t'accueillir dans l'équipe Evolve, et on a hâte de te voir construire quelque chose de grand. Les conseillers qui réussissent ici ne sont pas forcément ceux qui en savent le plus au départ. Ce sont ceux qui comprennent vite <strong>les règles du jeu</strong>.</p>
+<p>C'est exactement pour ça qu'on t'envoie ce document en avance : <strong>« Comprendre ta rémunération »</strong>. Pas pour t'assommer de chiffres, mais pour que tu arrives en formation avec une vision claire de ce que tu peux construire, et surtout de comment.</p>
+<p>Un bon mois chez Evolve, ça ressemble à quoi concrètement ? Qu'est-ce qui génère vraiment de la rémunération ? Quels sont les leviers sur lesquels jouer dès le départ ? Ce document répond à tout ça.</p>
+<p>Prends le temps de le lire avant la formation, tu verras que ça aide vraiment sur la façon d'aborder les premières semaines.</p>
+<p>Et si quelque chose te questionne à la lecture, note-le. On en parlera ensemble.</p>
+<p>À dans 15 jours !</p>
+<p>Baptiste</p>`
+}
+
+function subjectJ15(profile) {
+  return `${profile.first_name || ''} ${profile.last_name || ''} / Book modèle économique`
+}
+
+const PROGRAMME_TABLE = `<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;font-family:sans-serif;font-size:14px">
+  <tr style="background:#f5f5f5">
+    <th style="border:1px solid #ddd;padding:8px;text-align:left">Jour</th>
+    <th style="border:1px solid #ddd;padding:8px;text-align:left">Horaires</th>
+    <th style="border:1px solid #ddd;padding:8px;text-align:left">Au programme</th>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ddd;padding:8px">Lundi</td>
+    <td style="border:1px solid #ddd;padding:8px">9h00 · 18h00</td>
+    <td style="border:1px solid #ddd;padding:8px">Accueil &amp; petit déjeuner · Présentation Evolve · L'environnement de la gestion de patrimoine · Le marché de l'épargne</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ddd;padding:8px">Mardi</td>
+    <td style="border:1px solid #ddd;padding:8px">9h30 · 18h00</td>
+    <td style="border:1px solid #ddd;padding:8px">Approche fiscale et juridique du patrimoine</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ddd;padding:8px">Mercredi</td>
+    <td style="border:1px solid #ddd;padding:8px">9h30 · 18h00</td>
+    <td style="border:1px solid #ddd;padding:8px">Méthodologie de vente · Mécanisme de rémunération · Gamme produits</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ddd;padding:8px">Jeudi</td>
+    <td style="border:1px solid #ddd;padding:8px">9h30 · 18h00</td>
+    <td style="border:1px solid #ddd;padding:8px">Découverte des supports d'épargne · Classes d'actifs · Présentation des sociétés de gestion · Afterwork</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ddd;padding:8px">Vendredi</td>
+    <td style="border:1px solid #ddd;padding:8px">10h00 · 16h00</td>
+    <td style="border:1px solid #ddd;padding:8px">Evolve Office · Parcours réglementaire · Atelier RDV</td>
+  </tr>
+</table>`
+
+function htmlJ7(sessionCgps, sessionLabel) {
   const participantList = sessionCgps.map(c =>
-    `${c.first_name} ${c.last_name}  ·  ${c.city || '—'}\n[Une à deux phrases sur son parcours, d'où il vient]`
-  ).join('\n\n')
-  const body = `Bonjour à tous !
-
-Plus que 7 jours ! La promotion ${sessionLabel} est sur le point de démarrer et franchement, on a vraiment hâte de vous retrouver tous ensemble la semaine prochaine.
-
-On commence la semaine comme il se doit : autour d'un petit déjeuner d'accueil lundi matin à 9h15 ! C'est le moment pour se retrouver, faire connaissance et démarrer dans la bonne ambiance avant de rentrer dans le vif du sujet.
-
-Adresse : 13 Bd Malesherbes – 75008 Paris
-
-Si ce n'est pas encore fait, prenez quelques minutes cette semaine pour finaliser le remplissage de vos contacts sur votre tableau. On va travailler dessus directement pendant la formation, et plus votre liste est complète, plus les exercices seront concrets et utiles pour vous.
-
-Votre promotion !
-Vous serez ${sessionCgps.length} conseillers à démarrer ensemble cette semaine !
-
+    `<p><strong>${c.first_name} ${c.last_name}</strong>  ·  ${c.city || '—'}<br><em>[Une à deux phrases sur son parcours, d'où il vient]</em></p>`
+  ).join('\n')
+  return `<p>Bonjour à tous !</p>
+<p>Plus que 7 jours ! La promotion <strong>${sessionLabel}</strong> est sur le point de démarrer et franchement, on a vraiment hâte de vous retrouver tous ensemble la semaine prochaine.</p>
+<p>On commence la semaine comme il se doit : autour d'un <strong>petit déjeuner d'accueil lundi matin à 9h15 !</strong> C'est le moment pour se retrouver, faire connaissance et démarrer dans la bonne ambiance avant de rentrer dans le vif du sujet.</p>
+<p><em>Adresse : 13 Bd Malesherbes – 75008 Paris</em></p>
+<p>Si ce n'est pas encore fait, prenez quelques minutes cette semaine pour <strong>finaliser le remplissage de vos contacts</strong> sur votre tableau. On va travailler dessus directement pendant la formation, et plus votre liste est complète, plus les exercices seront concrets et utiles pour vous.</p>
+<p><strong>Rappel du programme de la semaine</strong></p>
+${PROGRAMME_TABLE}
+<br>
+<p><strong>Votre promotion !</strong></p>
+<p>Vous serez <strong>${sessionCgps.length} conseillers</strong> à démarrer ensemble cette semaine ! Pour que vous puissiez vous retrouver lundi en vous connaissant déjà un peu, voici un rapide tour de table :</p>
 ${participantList}
+<p>On est vraiment impatients de vous voir démarrer cette semaine ! C'est le début d'une superbe aventure, alors profitez-en à fond.</p>
+<p><strong>À lundi !</strong></p>
+<p>Baptiste</p>`
+}
 
-On est vraiment impatients de vous voir démarrer cette semaine ! C'est le début d'une superbe aventure, alors profitez-en à fond.
-
-À lundi !
-
-Baptiste`
-  return buildGmailUrl(tos, subject, body)
+function subjectJ7(sessionLabel) {
+  return `Promotion ${sessionLabel} · On se retrouve dans 7 jours !`
 }
 
 // ── Composant JalonRow ────────────────────────────────────────────────────────
-function JalonRow({ def, dueDate, sent, onMarkSent, onOpenMail }) {
+function JalonRow({ def, dueDate, sent, onMarkSent, htmlBody, gmailTo, gmailSubject }) {
+  const [showPreview, setShowPreview] = useState(false)
+  const [copied, setCopied] = useState(false)
   const today = ymd(new Date())
   const diff = daysFromNow(dueDate)
   const isOverdue = !sent && dueDate < today
@@ -159,50 +194,78 @@ function JalonRow({ def, dueDate, sent, onMarkSent, onOpenMail }) {
 
   let rowBg = '#FAFAF8'; let borderLeft = '3px solid transparent'
   let tagColor = '#999'; let tagLabel = `Dans ${diff} jour${Math.abs(diff) > 1 ? 's' : ''}`
-  if (sent)       { rowBg = '#F0FDF4'; borderLeft = '3px solid #BBF7D0'; tagColor = '#059669'; tagLabel = 'Envoyé ✓' }
+  if (sent)        { rowBg = '#F0FDF4'; borderLeft = '3px solid #BBF7D0'; tagColor = '#059669'; tagLabel = 'Envoyé ✓' }
   else if (isOverdue){ rowBg = '#FEF2F2'; borderLeft = '3px solid #FECACA'; tagColor = '#DC2626'; tagLabel = `En retard (${Math.abs(diff)}j)` }
   else if (isToday)  { rowBg = '#FFFBEB'; borderLeft = '3px solid #FDE68A'; tagColor = '#D97706'; tagLabel = "Aujourd'hui !" }
   else if (isSoon)   { rowBg = '#FFFBEB'; borderLeft = '3px solid #FDE68A'; tagColor = '#D97706'; tagLabel = `Dans ${diff} jour${diff > 1 ? 's' : ''}` }
 
+  const handleCopy = () => {
+    if (htmlBody) {
+      copyHtml(htmlBody)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '72px 1fr auto', alignItems: 'center', gap: 12, padding: '8px 14px', background: rowBg, borderLeft, borderRadius: 6, border: '0.5px solid #E5E0D8', borderLeftWidth: 3 }}>
-      {/* Tag date */}
-      <div>
-        <div style={{ fontSize: 11, fontWeight: 600, color: tagColor }}>{tagLabel}</div>
-        <div style={{ fontSize: 10, color: '#aaa', marginTop: 1 }}>{formatDateFr(dueDate)}</div>
+    <div style={{ borderRadius: 6, border: '0.5px solid #E5E0D8', borderLeft, background: rowBg, overflow: 'hidden' }}>
+      {/* Ligne principale */}
+      <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr auto', alignItems: 'center', gap: 12, padding: '8px 14px' }}>
+        {/* Tag date */}
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: tagColor }}>{tagLabel}</div>
+          <div style={{ fontSize: 10, color: '#aaa', marginTop: 1 }}>{formatDateFr(dueDate)}</div>
+        </div>
+
+        {/* Content */}
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: ACCENT }}>{def.title}</div>
+          <div style={{ fontSize: 11, color: '#888', marginTop: 1 }}>{def.desc}</div>
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+          {sent ? (
+            <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 5, background: '#DCFCE7', color: '#059669', border: '0.5px solid #BBF7D0' }}>✓ Envoyé</span>
+          ) : def.brevo ? (
+            <button onClick={onMarkSent} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 5, border: `0.5px solid ${ACCENT}`, background: 'white', color: ACCENT, cursor: 'pointer', fontFamily: 'inherit' }}>
+              Marquer envoyé (Brevo)
+            </button>
+          ) : (
+            <>
+              {/* Bouton prévisualiser */}
+              <button onClick={() => setShowPreview(p => !p)} style={{ fontSize: 11, padding: '4px 8px', borderRadius: 5, border: '0.5px solid #D5CFC5', background: 'white', color: '#666', cursor: 'pointer', fontFamily: 'inherit' }}>
+                {showPreview ? '▲ Masquer' : '▼ Voir le mail'}
+              </button>
+              {/* Copier */}
+              <button onClick={handleCopy} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 5, border: `0.5px solid ${ACCENT}`, background: copied ? '#DCFCE7' : 'white', color: copied ? '#059669' : ACCENT, cursor: 'pointer', fontFamily: 'inherit', transition: 'all .2s' }}>
+                {copied ? '✓ Copié !' : 'Copier le corps'}
+              </button>
+              {/* Ouvrir Gmail */}
+              <button onClick={() => openGmailCompose(gmailTo, gmailSubject)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 5, border: 'none', background: ACCENT, color: 'white', cursor: 'pointer', fontFamily: 'inherit' }}>
+                {def.group ? 'Gmail promo' : 'Ouvrir Gmail'}
+              </button>
+              {/* Marquer envoyé */}
+              <button onClick={onMarkSent} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 5, border: '0.5px solid #aaa', background: 'white', color: '#666', cursor: 'pointer', fontFamily: 'inherit' }}>
+                ✓ Envoyé
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
-      {/* Content */}
-      <div>
-        <div style={{ fontSize: 12, fontWeight: 600, color: ACCENT }}>{def.title}</div>
-        <div style={{ fontSize: 11, color: '#888', marginTop: 1 }}>{def.desc}</div>
-      </div>
-
-      {/* Action */}
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
-        {sent ? (
-          <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 5, background: '#DCFCE7', color: '#059669', border: '0.5px solid #BBF7D0' }}>✓ Envoyé</span>
-        ) : def.brevo ? (
-          <button
-            onClick={onMarkSent}
-            style={{ fontSize: 11, padding: '4px 10px', borderRadius: 5, border: `0.5px solid ${ACCENT}`, background: 'white', color: ACCENT, cursor: 'pointer' }}>
-            Marquer envoyé (Brevo)
-          </button>
-        ) : (
-          <>
-            <button
-              onClick={onOpenMail}
-              style={{ fontSize: 11, padding: '4px 10px', borderRadius: 5, border: 'none', background: ACCENT, color: 'white', cursor: 'pointer' }}>
-              {def.group ? 'Ouvrir Gmail promo' : 'Ouvrir Gmail'}
-            </button>
-            <button
-              onClick={onMarkSent}
-              style={{ fontSize: 11, padding: '4px 10px', borderRadius: 5, border: `0.5px solid #aaa`, background: 'white', color: '#666', cursor: 'pointer' }}>
-              Marquer envoyé
-            </button>
-          </>
-        )}
-      </div>
+      {/* Prévisualisation du mail */}
+      {showPreview && htmlBody && (
+        <div style={{ borderTop: '0.5px solid #E5E0D8', padding: '12px 16px', background: 'white' }}>
+          <div style={{ fontSize: 10, color: '#aaa', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>
+            Aperçu · {def.group ? 'Tous les CGPs de la session' : 'Mail individuel'} · <em style={{ fontWeight: 400 }}>Copier le corps puis coller dans Gmail</em>
+          </div>
+          <div
+            style={{ fontSize: 13, lineHeight: 1.7, color: '#333', maxHeight: 400, overflowY: 'auto', padding: '4px 0' }}
+            dangerouslySetInnerHTML={{ __html: htmlBody }}
+          />
+        </div>
+      )}
     </div>
   )
 }
@@ -234,12 +297,11 @@ function CgpCard({ profile, session, sessionCgps, jalonsMap, onMarkSent }) {
   else if (hasOverdue){ borderLeft = '3px solid #DC2626'; pillBg = '#FEE2E2'; pillColor = '#DC2626'; pillLabel = 'En retard' }
   else if (hasToday)  { borderLeft = '3px solid #D97706'; pillBg = '#FEF3C7'; pillColor = '#D97706'; pillLabel = "À envoyer auj." }
 
-  const openMail = (def) => {
-    let url = null
-    if (def.type === 'M2')  url = mailM2(profile)
-    if (def.type === 'J15') url = mailJ15(profile)
-    if (def.type === 'J7')  url = mailJ7(sessionCgps, sessionLabel)
-    if (url) window.open(url, '_blank')
+  const getMailProps = (def) => {
+    if (def.type === 'M2')  return { htmlBody: htmlM2(profile),  gmailTo: profile.email || '', gmailSubject: subjectM2(profile) }
+    if (def.type === 'J15') return { htmlBody: htmlJ15(profile), gmailTo: profile.email || '', gmailSubject: subjectJ15(profile) }
+    if (def.type === 'J7')  return { htmlBody: htmlJ7(sessionCgps, sessionLabel), gmailTo: sessionCgps.map(c => c.email).filter(Boolean).join(', '), gmailSubject: subjectJ7(sessionLabel) }
+    return {}
   }
 
   return (
@@ -274,7 +336,7 @@ function CgpCard({ profile, session, sessionCgps, jalonsMap, onMarkSent }) {
               dueDate={def.dueDate}
               sent={def.sent}
               onMarkSent={() => onMarkSent(profile.id, session.id, def.type)}
-              onOpenMail={() => openMail(def)}
+              {...getMailProps(def)}
             />
           ))}
         </div>
