@@ -100,17 +100,26 @@ function copyHtml(htmlStr) {
   navigator.clipboard.writeText(plainStr).catch(() => {})
 }
 
-const LINK_BOOK_PREINTEGRATION = 'https://drive.google.com/file/d/1UeN-i9eqSWBCXaBeJvzScREBW6pKV3S8/view?usp=drive_link'
-const LINK_EXCEL_CONTACTS      = 'https://docs.google.com/spreadsheets/d/1pSeUYzgIkcQNxEW4B_ADHN23xz6paNv94LMLjPnfD4k/edit?usp=drive_link'
+// Pièces jointes M-2 — à télécharger et glisser dans Gmail
+const PJ_M2 = [
+  {
+    label: '📎 Book pré-intégration',
+    downloadUrl: 'https://drive.google.com/uc?export=download&id=1UeN-i9eqSWBCXaBeJvzScREBW6pKV3S8',
+  },
+  {
+    label: '📎 Excel contacts (3 listes)',
+    downloadUrl: 'https://docs.google.com/spreadsheets/d/1pSeUYzgIkcQNxEW4B_ADHN23xz6paNv94LMLjPnfD4k/export?format=xlsx',
+  },
+]
 
 function htmlM2(profile) {
   const fn = profile.first_name || ''
   return `<p>${fn},</p>
 <p>Nous sommes à 2 mois du début de la formation !</p>
 <p>Les dates précises te seront communiquées très prochainement.</p>
-<p>En attendant, tu peux retrouver ici ton <strong><a href="${LINK_BOOK_PREINTEGRATION}">book de pré-intégration</a></strong>.</p>
+<p>En attendant, tu peux retrouver en pièce jointe ton <strong>book de pré-intégration</strong>.</p>
 <p>Prends le temps de le lire tranquillement, il y a tout ce qu'il faut savoir avant la formation : comment fonctionne Evolve, les premiers mois d'activité et les témoignages de ceux qui sont passés par là avant toi.</p>
-<p>La seule chose que tu as à faire d'ici la formation : <strong>préparer tes trois listes de contacts</strong>. Tu peux également retrouver ici un <strong><a href="${LINK_EXCEL_CONTACTS}">tableau Excel tout prêt</a></strong> : <strong>c'est simple et ça change tout au démarrage</strong>.</p>
+<p>La seule chose que tu as à faire d'ici la formation : <strong>préparer tes trois listes de contacts</strong>. Tu peux également retrouver en PJ un tableau Excel avec un fichier tout prêt : <strong>c'est simple et ça change tout au démarrage</strong>.</p>
 <p>Pour les démarches administratives, on s'occupe de tout. Tu n'as rien à gérer de ton côté, et tu recevras les informations au fil de l'eau.</p>
 <p>Je reste disponible si tu as des questions.</p>
 <p>Bonne journée à toi !</p>`
@@ -193,7 +202,7 @@ function subjectJ7(sessionLabel) {
 }
 
 // ── Composant JalonRow ────────────────────────────────────────────────────────
-function JalonRow({ def, dueDate, sent, onMarkSent, htmlBody, gmailTo, gmailSubject }) {
+function JalonRow({ def, dueDate, sent, onMarkSent, htmlBody, gmailTo, gmailSubject, pjList }) {
   const [showPreview, setShowPreview] = useState(false)
   const [copied, setCopied] = useState(false)
   const today = ymd(new Date())
@@ -234,7 +243,20 @@ function JalonRow({ def, dueDate, sent, onMarkSent, htmlBody, gmailTo, gmailSubj
         </div>
 
         {/* Actions */}
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {/* Boutons téléchargement PJ (M-2) */}
+          {!sent && pjList && pjList.map(pj => (
+            <a
+              key={pj.label}
+              href={pj.downloadUrl}
+              download
+              target="_blank"
+              rel="noreferrer"
+              style={{ fontSize: 11, padding: '4px 10px', borderRadius: 5, border: '0.5px solid #D2AB76', background: '#FEFBF5', color: '#92713A', cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none', whiteSpace: 'nowrap' }}
+            >
+              {pj.label}
+            </a>
+          ))}
           {sent ? (
             <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 5, background: '#DCFCE7', color: '#059669', border: '0.5px solid #BBF7D0' }}>✓ Envoyé</span>
           ) : def.brevo ? (
@@ -308,7 +330,7 @@ function CgpCard({ profile, session, sessionCgps, jalonsMap, onMarkSent }) {
   else if (hasToday)  { borderLeft = '3px solid #D97706'; pillBg = '#FEF3C7'; pillColor = '#D97706'; pillLabel = "À envoyer auj." }
 
   const getMailProps = (def) => {
-    if (def.type === 'M2')  return { htmlBody: htmlM2(profile),  gmailTo: profile.email || '', gmailSubject: subjectM2(profile) }
+    if (def.type === 'M2')  return { htmlBody: htmlM2(profile),  gmailTo: profile.email || '', gmailSubject: subjectM2(profile), pjList: PJ_M2 }
     if (def.type === 'J15') return { htmlBody: htmlJ15(profile), gmailTo: profile.email || '', gmailSubject: subjectJ15(profile) }
     if (def.type === 'J7')  return { htmlBody: htmlJ7(sessionCgps, sessionLabel), gmailTo: sessionCgps.map(c => c.email).filter(Boolean).join(', '), gmailSubject: subjectJ7(sessionLabel) }
     return {}
