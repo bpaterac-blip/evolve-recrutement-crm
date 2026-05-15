@@ -82,7 +82,7 @@ function copyHtml(htmlStr) {
     const div = document.createElement('div')
     div.contentEditable = 'true'
     div.innerHTML = htmlStr
-    div.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;pointer-events:none'
+    div.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;pointer-events:none;background:white;color:#000'
     document.body.appendChild(div)
     div.focus()
     const range = document.createRange()
@@ -110,9 +110,7 @@ function htmlM2(profile) {
 <p>La seule chose que tu as à faire d'ici la formation : <strong>préparer tes trois listes de contacts</strong>. Tu peux également retrouver en PJ un tableau Excel avec un fichier tout prêt : <strong>c'est simple et ça change tout au démarrage</strong>.</p>
 <p>Pour les démarches administratives, on s'occupe de tout. Tu n'as rien à gérer de ton côté, et tu recevras les informations au fil de l'eau.</p>
 <p>Je reste disponible si tu as des questions.</p>
-<p>Bonne journée à toi !</p>
-<p>Baptiste</p>
-<p>--<br><em>[Ajouter ta signature]</em></p>`
+<p>Bonne journée à toi !</p>`
 }
 
 function subjectM2(profile) {
@@ -128,9 +126,7 @@ function htmlJ15(profile) {
 <p>Un bon mois chez Evolve, ça ressemble à quoi concrètement ? Qu'est-ce qui génère vraiment de la rémunération ? Quels sont les leviers sur lesquels jouer dès le départ ? Ce document répond à tout ça.</p>
 <p>Prends le temps de le lire avant la formation, tu verras que ça aide vraiment sur la façon d'aborder les premières semaines.</p>
 <p>Et si quelque chose te questionne à la lecture, note-le. On en parlera ensemble.</p>
-<p>À dans 15 jours !</p>
-<p>Baptiste</p>
-<p>--<br><em>[Ajouter ta signature]</em></p>`
+<p>À dans 15 jours !</p>`
 }
 
 function subjectJ15(profile) {
@@ -186,9 +182,7 @@ ${PROGRAMME_TABLE}
 <p>Vous serez <strong>${sessionCgps.length} conseillers</strong> à démarrer ensemble cette semaine ! Pour que vous puissiez vous retrouver lundi en vous connaissant déjà un peu, voici un rapide tour de table :</p>
 ${participantList}
 <p>On est vraiment impatients de vous voir démarrer cette semaine ! C'est le début d'une superbe aventure, alors profitez-en à fond.</p>
-<p><strong>À lundi !</strong></p>
-<p>Baptiste</p>
-<p>--<br><em>[Ajouter ta signature]</em></p>`
+<p><strong>À lundi !</strong></p>`
 }
 
 function subjectJ7(sessionLabel) {
