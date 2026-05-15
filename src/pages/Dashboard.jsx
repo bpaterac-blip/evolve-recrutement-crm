@@ -106,6 +106,7 @@ export default function Dashboard() {
   const [r1Loading, setR1Loading] = useState(true)
   const [pointsEtapeCetteSemaine, setPointsEtapeCetteSemaine] = useState([])
   const [pointsEtapeLoading, setPointsEtapeLoading] = useState(true)
+  const [formationAlerts, setFormationAlerts] = useState([])  // { label, type, cgpName, sessionLabel }
 
   const allProfiles = [...filteredProfiles].filter((p) => p.mat !== 'Archivé' && p.mat !== 'En pause')
   const P = ownerFilter === 'all' ? allProfiles : allProfiles.filter((p) => (p.owner_email || '') === ownerFilter)
@@ -354,6 +355,83 @@ export default function Dashboard() {
     role,
   ])
 
+  // ── Alertes jalons formation ──────────────────────────────────────────────
+  useEffect(() => {
+    const loadFormationAlerts = async () => {
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const ymd = (d) => d.toISOString().split('T')[0]
+
+      // Récupérer les sessions à venir (dans les 2 mois)
+      const in2months = new Date(today); in2months.setMonth(in2months.getMonth() + 2)
+      const { data: sessions } = await supabase
+        .from('sessions_formation')
+        .select('id, date_session, periode, annee')
+        .gte('date_session', ymd(today))
+        .lte('date_session', ymd(in2months))
+
+      if (!sessions || sessions.length === 0) { setFormationAlerts([]); return }
+
+      const alerts = []
+      for (const session of sessions) {
+        const ds = session.date_session
+        const sessionLabel = session.periode
+          ? `${session.periode} ${session.annee || ''}`.trim()
+          : new Date(ds).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
+
+        // Calcul des dates jalon
+        const addMon = (d, n) => { const x = new Date(d); x.setMonth(x.getMonth() + n); return x }
+        const subD   = (d, n) => { const x = new Date(d); x.setDate(x.getDate() - n);   return x }
+        const jDates = {
+          M2:  ymd(addMon(ds, -2)),
+          M1:  ymd(addMon(ds, -1)),
+          J15: ymd(subD(ds, 15)),
+          J7:  ymd(subD(ds, 7)),
+        }
+        const jLabels = { M2: 'M-2 · Book pré-intégration', M1: 'M-1 · Planning formation (Brevo)', J15: 'J-15 · Book modèle éco.', J7: 'J-7 · Récap agenda promo' }
+
+        // Vérifier les types dus aujourd'hui ou en retard
+        const dueTodayOrLate = Object.entries(jDates).filter(([, d]) => d <= ymd(today))
+        if (dueTodayOrLate.length === 0) continue
+
+        // Profils de la session
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name')
+          .eq('session_formation_id', session.id)
+        if (!profiles || profiles.length === 0) continue
+
+        // Jalons déjà envoyés
+        const { data: sent } = await supabase
+          .from('formation_jalons')
+          .select('profile_id, type')
+          .eq('session_id', session.id)
+          .not('sent_at', 'is', null)
+
+        const sentSet = new Set((sent || []).map(j => `${j.profile_id}:${j.type}`))
+
+        for (const [type, dueDate] of dueTodayOrLate) {
+          const isToday = dueDate === ymd(today)
+          for (const p of profiles) {
+            if (!sentSet.has(`${p.id}:${type}`)) {
+              alerts.push({
+                type,
+                dueDate,
+                isToday,
+                cgpName: `${p.first_name} ${p.last_name}`,
+                sessionLabel,
+                label: jLabels[type],
+              })
+            }
+          }
+        }
+      }
+
+      setFormationAlerts(alerts)
+    }
+    loadFormationAlerts()
+  }, [])
+
   // Compute all stats from in-memory profiles (no extra Supabase queries)
   const computedStats = useMemo(() => {
     const now = new Date()
@@ -464,6 +542,51 @@ export default function Dashboard() {
   return (
     <div className="page h-full overflow-y-auto p-[22px]" style={{ background: '#F5F0E8' }}>
       <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 26, color: ACCENT, marginBottom: 4 }}>Bonjour {userProfile?.first_name || (user?.email || '').split('@')[0] || 'Utilisateur'} 👋</div>
+      {/* ── Alertes jalons formation ── */}
+      {formationAlerts.length > 0 && (
+        <div
+          style={{
+            background: formationAlerts.some(a => !a.isToday) ? '#FEF2F2' : '#FFFBEB',
+            border: `1px solid ${formationAlerts.some(a => !a.isToday) ? '#FECACA' : '#FDE68A'}`,
+            borderRadius: 10, padding: '10px 16px', marginBottom: 16,
+            display: 'flex', alignItems: 'flex-start', gap: 10,
+          }}
+        >
+          <span style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }}>
+            {formationAlerts.some(a => !a.isToday) ? '⚠' : '📬'}
+          </span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: formationAlerts.some(a => !a.isToday) ? '#991B1B' : '#92400E', marginBottom: 4 }}>
+              {formationAlerts.some(a => !a.isToday)
+                ? `${formationAlerts.filter(a => !a.isToday).length} jalon${formationAlerts.filter(a => !a.isToday).length > 1 ? 's' : ''} de formation en retard`
+                : `${formationAlerts.length} envoi${formationAlerts.length > 1 ? 's' : ''} formation à faire aujourd'hui`
+              }
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px' }}>
+              {formationAlerts.slice(0, 5).map((a, i) => (
+                <span key={i} style={{ fontSize: 12, color: '#666' }}>
+                  <span style={{ fontWeight: 500, color: ACCENT }}>{a.cgpName}</span>
+                  <span style={{ color: '#aaa', margin: '0 4px' }}>·</span>
+                  {a.label}
+                  <span style={{ color: '#aaa', margin: '0 4px' }}>·</span>
+                  <span style={{ color: '#888' }}>{a.sessionLabel}</span>
+                  {!a.isToday && <span style={{ color: '#DC2626', marginLeft: 4 }}>(en retard)</span>}
+                </span>
+              ))}
+              {formationAlerts.length > 5 && (
+                <span style={{ fontSize: 12, color: '#aaa' }}>+{formationAlerts.length - 5} autres</span>
+              )}
+            </div>
+          </div>
+          <button
+            onClick={() => navigate('/onboarding')}
+            style={{ fontSize: 11, padding: '4px 12px', borderRadius: 6, border: `1px solid ${ACCENT}`, background: 'white', color: ACCENT, cursor: 'pointer', flexShrink: 0, fontFamily: 'inherit' }}
+          >
+            Voir Formation →
+          </button>
+        </div>
+      )}
+
       <div className="flex items-center gap-3 mb-5 flex-wrap">
         <span className="text-[13px]" style={{ color: '#999' }}>Pipeline au {pipelineDate}</span>
         {isGlobalView && ownerEmails.length > 0 && (

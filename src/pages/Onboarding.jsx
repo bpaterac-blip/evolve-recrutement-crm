@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import FormationTab from '../components/FormationTab'
 
 // ── Couleurs ──────────────────────────────────────────────────────────────────
 const ACCENT = '#173731'
@@ -324,6 +325,7 @@ function rowToProfile(row) {
 // ── Composant principal ────────────────────────────────────────────────────────
 export default function Onboarding() {
   const location = useLocation()
+  const [activeTab, setActiveTab]         = useState('admin')  // 'admin' | 'formation'
   const [showOptional, setShowOptional]   = useState(false)
   const [selectedId,   setSelectedId]     = useState(null)
   const [profiles,     setProfiles]       = useState([])
@@ -535,21 +537,53 @@ export default function Onboarding() {
                 {completed.length > 0 && ` · ${completed.length} complété${completed.length > 1 ? 's' : ''}`}
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setShowOptional(!showOptional)}
-              style={{
-                padding: '7px 14px', borderRadius: 8, fontSize: 12, fontWeight: 500,
-                cursor: 'pointer', transition: 'all 0.15s', border: `1px solid ${showOptional ? ACCENT : '#E5E0D8'}`,
-                background: showOptional ? ACCENT : 'white', color: showOptional ? 'white' : '#666',
-              }}
-            >
-              {showOptional ? '✓ Étape Compte Pro visible' : '+ Afficher étape Compte Pro'}
-            </button>
+            {activeTab === 'admin' && (
+              <button
+                type="button"
+                onClick={() => setShowOptional(!showOptional)}
+                style={{
+                  padding: '7px 14px', borderRadius: 8, fontSize: 12, fontWeight: 500,
+                  cursor: 'pointer', transition: 'all 0.15s', border: `1px solid ${showOptional ? ACCENT : '#E5E0D8'}`,
+                  background: showOptional ? ACCENT : 'white', color: showOptional ? 'white' : '#666',
+                }}
+              >
+                {showOptional ? '✓ Étape Compte Pro visible' : '+ Afficher étape Compte Pro'}
+              </button>
+            )}
+          </div>
+
+          {/* ── Onglets ── */}
+          <div style={{ display: 'flex', gap: 0, borderBottom: '1.5px solid #E5E0D8', marginTop: 14, marginBottom: -1 }}>
+            {[
+              { key: 'admin', label: 'Étapes administratives' },
+              { key: 'formation', label: 'Formation' },
+            ].map(tab => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveTab(tab.key)}
+                style={{
+                  padding: '7px 16px', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit',
+                  background: 'none', border: 'none', borderBottom: `2px solid ${activeTab === tab.key ? ACCENT : 'transparent'}`,
+                  color: activeTab === tab.key ? ACCENT : '#888', fontWeight: activeTab === tab.key ? 600 : 400,
+                  marginBottom: -1.5, transition: 'all 0.15s',
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
         </div>
 
+        {/* ── Onglet Formation ── */}
+        {activeTab === 'formation' && (
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            <FormationTab />
+          </div>
+        )}
+
         {/* Kanban board */}
+        {activeTab === 'admin' && (
         <div style={{ flex: 1, overflowX: 'auto', overflowY: 'hidden', padding: '0 24px 24px' }}>
           <div style={{ display: 'flex', gap: 10, height: '100%', minWidth: 'max-content', paddingTop: 4, alignItems: 'flex-start' }}>
             {visibleSteps.map((step, idx) => {
@@ -583,6 +617,7 @@ export default function Onboarding() {
             </div>
           </div>
         </div>
+        )}
       </div>
 
       {/* ── Banner nouveau profil ajouté ── */}
