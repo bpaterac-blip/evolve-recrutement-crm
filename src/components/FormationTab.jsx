@@ -315,11 +315,15 @@ export default function FormationTab() {
   const loadSession = useCallback(async (sessionId) => {
     if (!sessionId) return
     setCgpsLoading(true)
-    // Charger les profils de la session
+    // Charger uniquement les profils confirmés en onboarding pour cette session
+    // (stage = 'Recruté' + integration_confirmed = true, exclure archivés)
     const { data: profilesData } = await supabase
       .from('profiles')
-      .select('id, first_name, last_name, email, city, region')
+      .select('id, first_name, last_name, email, city, region, stage, maturity, integration_confirmed')
       .eq('session_formation_id', sessionId)
+      .eq('stage', 'Recruté')
+      .eq('integration_confirmed', true)
+      .neq('maturity', 'Archivé')
 
     const profiles = profilesData || []
     setCgps(profiles)
