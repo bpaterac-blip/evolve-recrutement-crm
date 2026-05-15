@@ -100,15 +100,15 @@ function copyHtml(htmlStr) {
   navigator.clipboard.writeText(plainStr).catch(() => {})
 }
 
-// Pièces jointes M-2 — à télécharger et glisser dans Gmail
+// Pièces jointes M-2 — s'ouvrent dans Drive/Sheets, télécharger depuis là
 const PJ_M2 = [
   {
     label: '📎 Book pré-intégration',
-    downloadUrl: 'https://drive.google.com/uc?export=download&id=1UeN-i9eqSWBCXaBeJvzScREBW6pKV3S8',
+    downloadUrl: 'https://drive.google.com/file/d/1UeN-i9eqSWBCXaBeJvzScREBW6pKV3S8/view?usp=drive_link',
   },
   {
     label: '📎 Excel contacts (3 listes)',
-    downloadUrl: 'https://docs.google.com/spreadsheets/d/1pSeUYzgIkcQNxEW4B_ADHN23xz6paNv94LMLjPnfD4k/export?format=xlsx',
+    downloadUrl: 'https://docs.google.com/spreadsheets/d/1pSeUYzgIkcQNxEW4B_ADHN23xz6paNv94LMLjPnfD4k/edit?usp=drive_link',
   },
 ]
 
@@ -249,7 +249,6 @@ function JalonRow({ def, dueDate, sent, onMarkSent, htmlBody, gmailTo, gmailSubj
             <a
               key={pj.label}
               href={pj.downloadUrl}
-              download
               target="_blank"
               rel="noreferrer"
               style={{ fontSize: 11, padding: '4px 10px', borderRadius: 5, border: '0.5px solid #D2AB76', background: '#FEFBF5', color: '#92713A', cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none', whiteSpace: 'nowrap' }}
