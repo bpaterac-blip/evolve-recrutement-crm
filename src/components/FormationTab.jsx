@@ -100,14 +100,17 @@ function copyHtml(htmlStr) {
   navigator.clipboard.writeText(plainStr).catch(() => {})
 }
 
+const LINK_BOOK_PREINTEGRATION = 'https://drive.google.com/file/d/1UeN-i9eqSWBCXaBeJvzScREBW6pKV3S8/view?usp=drive_link'
+const LINK_EXCEL_CONTACTS      = 'https://docs.google.com/spreadsheets/d/1pSeUYzgIkcQNxEW4B_ADHN23xz6paNv94LMLjPnfD4k/edit?usp=drive_link'
+
 function htmlM2(profile) {
   const fn = profile.first_name || ''
   return `<p>${fn},</p>
 <p>Nous sommes à 2 mois du début de la formation !</p>
 <p>Les dates précises te seront communiquées très prochainement.</p>
-<p>En attendant, tu peux retrouver en pièce jointe ton <strong>book de pré-intégration</strong>.</p>
+<p>En attendant, tu peux retrouver ici ton <strong><a href="${LINK_BOOK_PREINTEGRATION}">book de pré-intégration</a></strong>.</p>
 <p>Prends le temps de le lire tranquillement, il y a tout ce qu'il faut savoir avant la formation : comment fonctionne Evolve, les premiers mois d'activité et les témoignages de ceux qui sont passés par là avant toi.</p>
-<p>La seule chose que tu as à faire d'ici la formation : <strong>préparer tes trois listes de contacts</strong>. Tu peux également retrouver en PJ un tableau Excel avec un fichier tout prêt : <strong>c'est simple et ça change tout au démarrage</strong>.</p>
+<p>La seule chose que tu as à faire d'ici la formation : <strong>préparer tes trois listes de contacts</strong>. Tu peux également retrouver ici un <strong><a href="${LINK_EXCEL_CONTACTS}">tableau Excel tout prêt</a></strong> : <strong>c'est simple et ça change tout au démarrage</strong>.</p>
 <p>Pour les démarches administratives, on s'occupe de tout. Tu n'as rien à gérer de ton côté, et tu recevras les informations au fil de l'eau.</p>
 <p>Je reste disponible si tu as des questions.</p>
 <p>Bonne journée à toi !</p>`
