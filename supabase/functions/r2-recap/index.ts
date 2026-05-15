@@ -148,9 +148,14 @@ function buildProfileBlock(p: any, notes: any[], activities: any[]): string {
   const notesHtml = notes.length > 0
     ? notes.map(n => {
         const date = n.created_at ? new Date(n.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : ''
+        // Certaines notes sont stockées en HTML (nouvelles typologies CRM),
+        // d'autres en texte brut. On détecte et on rend en conséquence.
+        const raw = n.content || ''
+        const isHtml = /<[a-zA-Z][\s\S]*?>/.test(raw)
+        const rendered = isHtml ? raw : raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')
         return `<div style="padding:10px 14px;border-left:3px solid ${GOLD};background:#FAFAF8;border-radius:0 6px 6px 0;margin-bottom:8px">
           <div style="font-size:10px;color:#888;margin-bottom:4px">${date}</div>
-          <div style="font-size:13px;color:#333;white-space:pre-line;line-height:1.5">${(n.content || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+          <div style="font-size:13px;color:#333;line-height:1.5">${rendered}</div>
         </div>`
       }).join('')
     : '<p style="color:#999;font-size:13px">Aucune note</p>'
