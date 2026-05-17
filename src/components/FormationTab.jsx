@@ -100,6 +100,14 @@ function copyHtml(htmlStr) {
   navigator.clipboard.writeText(plainStr).catch(() => {})
 }
 
+// Pièces jointes J-15
+const PJ_J15 = [
+  {
+    label: '📎 Comprendre ta rémunération',
+    downloadUrl: 'https://drive.google.com/file/d/1APR3TNoeFj67mHQ2yZQefgWudpxhjp5E/view?usp=drive_link',
+  },
+]
+
 // Pièces jointes M-2 — s'ouvrent dans Drive/Sheets, télécharger depuis là
 const PJ_M2 = [
   {
@@ -330,7 +338,7 @@ function CgpCard({ profile, session, sessionCgps, jalonsMap, onMarkSent }) {
 
   const getMailProps = (def) => {
     if (def.type === 'M2')  return { htmlBody: htmlM2(profile),  gmailTo: profile.email || '', gmailSubject: subjectM2(profile), pjList: PJ_M2 }
-    if (def.type === 'J15') return { htmlBody: htmlJ15(profile), gmailTo: profile.email || '', gmailSubject: subjectJ15(profile) }
+    if (def.type === 'J15') return { htmlBody: htmlJ15(profile), gmailTo: profile.email || '', gmailSubject: subjectJ15(profile), pjList: PJ_J15 }
     if (def.type === 'J7')  return { htmlBody: htmlJ7(sessionCgps, sessionLabel), gmailTo: sessionCgps.map(c => c.email).filter(Boolean).join(', '), gmailSubject: subjectJ7(sessionLabel) }
     return {}
   }
