@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from './AuthContext'
 import { useViewMode } from './ViewModeContext'
@@ -578,21 +578,22 @@ export function CRMProvider({ children }) {
     return 0
   }, [useSupabase, user?.id, user?.email, userProfile?.full_name])
 
-  const searchTrimmed = (searchQuery || '').trim()
-  const filteredProfiles = profiles.filter((p) => {
-    const q = searchTrimmed.toLowerCase()
-    if (!q) return true
-    const fn = (p.fn || '').toLowerCase()
-    const ln = (p.ln || '').toLowerCase()
-    const co = (p.co || '').toLowerCase()
-    return (
-      fn.includes(q) ||
-      ln.includes(q) ||
-      (fn + ' ' + ln).includes(q) ||
-      (ln + ' ' + fn).includes(q) ||
-      co.includes(q)
-    )
-  })
+  const filteredProfiles = useMemo(() => {
+    const q = (searchQuery || '').trim().toLowerCase()
+    if (!q) return profiles
+    return profiles.filter((p) => {
+      const fn = (p.fn || '').toLowerCase()
+      const ln = (p.ln || '').toLowerCase()
+      const co = (p.co || '').toLowerCase()
+      return (
+        fn.includes(q) ||
+        ln.includes(q) ||
+        (fn + ' ' + ln).includes(q) ||
+        (ln + ' ' + fn).includes(q) ||
+        co.includes(q)
+      )
+    })
+  }, [profiles, searchQuery])
 
   return (
     <CRMContext.Provider

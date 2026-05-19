@@ -37,6 +37,14 @@ const ACCENT = '#173731'
 
 export default function Layout() {
   const { searchQuery, setSearchQuery } = useCRM()
+  // État local pour l'affichage immédiat, mis à jour dans le context après 250ms
+  const [localSearch, setLocalSearch] = useState(searchQuery)
+  useEffect(() => {
+    const t = setTimeout(() => setSearchQuery(localSearch), 250)
+    return () => clearTimeout(t)
+  }, [localSearch, setSearchQuery])
+  // Sync si le context est reset depuis l'extérieur (ex: navigation)
+  useEffect(() => { setLocalSearch(searchQuery) }, [searchQuery])
   const { user, userProfile, role, signOut } = useAuth()
   const { viewMode, setViewMode } = useViewMode()
   const location = useLocation()
@@ -196,7 +204,7 @@ export default function Layout() {
           )}
           <div className="srch flex items-center gap-1.5 bg-[var(--s2)] border border-[var(--border)] rounded-lg py-1.5 px-2.5 w-[250px] transition-all">
             <span className="text-[var(--t3)] text-sm">⌕</span>
-            <input type="text" placeholder="Rechercher un profil…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="border-none bg-transparent font-[inherit] text-[13px] text-[var(--text)] outline-none w-full placeholder:text-[var(--t3)]" />
+            <input type="text" placeholder="Rechercher un profil…" value={localSearch} onChange={(e) => setLocalSearch(e.target.value)} className="border-none bg-transparent font-[inherit] text-[13px] text-[var(--text)] outline-none w-full placeholder:text-[var(--t3)]" />
           </div>
           <div className="tbar-r ml-auto flex items-center gap-2">
             <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('open-new-profile'))} className="btn bo inline-flex items-center gap-1.5 py-1.5 px-3.5 rounded-lg font-[inherit] text-[13px] font-medium cursor-pointer border border-[var(--b2)] bg-transparent text-[var(--t2)] hover:bg-[var(--s2)] hover:text-[var(--text)] transition-all">+ Profil</button>
