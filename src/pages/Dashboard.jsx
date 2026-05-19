@@ -361,16 +361,31 @@ export default function Dashboard() {
       const today = new Date()
       today.setHours(0, 0, 0, 0)
       const ymd = (d) => d.toISOString().split('T')[0]
+      const todayStr = ymd(today)
+      const addMon = (d, n) => { const x = new Date(d); x.setMonth(x.getMonth() + n); return x }
+      const subD   = (d, n) => { const x = new Date(d); x.setDate(x.getDate() - n);   return x }
+      const jLabels = { M2: 'M-2 · Book pré-intégration', M1: 'M-1 · Planning formation (Brevo)', J15: 'J-15 · Book modèle éco.', J7: 'J-7 · Récap agenda promo' }
 
-      // Récupérer les sessions à venir (dans les 2 mois)
+      // Récupérer sessions à venir (2 mois) + profils confirmés + jalons envoyés en 3 requêtes parallèles
       const in2months = new Date(today); in2months.setMonth(in2months.getMonth() + 2)
-      const { data: sessions } = await supabase
-        .from('sessions_formation')
-        .select('id, date_session, periode, annee')
-        .gte('date_session', ymd(today))
-        .lte('date_session', ymd(in2months))
+      const [{ data: sessions }, { data: allProfiles }, { data: allSent }] = await Promise.all([
+        supabase.from('sessions_formation').select('id, date_session, periode, annee')
+          .gte('date_session', todayStr).lte('date_session', ymd(in2months)),
+        supabase.from('profiles').select('id, first_name, last_name, session_formation_id')
+          .eq('stage', 'Recruté').eq('integration_confirmed', true).neq('maturity', 'Archivé'),
+        supabase.from('formation_jalons').select('profile_id, type, session_id')
+          .not('sent_at', 'is', null),
+      ])
 
       if (!sessions || sessions.length === 0) { setFormationAlerts([]); return }
+
+      const sentSet = new Set((allSent || []).map(j => `${j.profile_id}:${j.type}`))
+      const profilesBySession = {}
+      ;(allProfiles || []).forEach(p => {
+        if (!p.session_formation_id) return
+        if (!profilesBySession[p.session_formation_id]) profilesBySession[p.session_formation_id] = []
+        profilesBySession[p.session_formation_id].push(p)
+      })
 
       const alerts = []
       for (const session of sessions) {
@@ -378,62 +393,29 @@ export default function Dashboard() {
         const sessionLabel = session.periode
           ? `${session.periode} ${session.annee || ''}`.trim()
           : new Date(ds).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
-
-        // Calcul des dates jalon
-        const addMon = (d, n) => { const x = new Date(d); x.setMonth(x.getMonth() + n); return x }
-        const subD   = (d, n) => { const x = new Date(d); x.setDate(x.getDate() - n);   return x }
         const jDates = {
           M2:  ymd(addMon(ds, -2)),
           M1:  ymd(addMon(ds, -1)),
           J15: ymd(subD(ds, 15)),
           J7:  ymd(subD(ds, 7)),
         }
-        const jLabels = { M2: 'M-2 · Book pré-intégration', M1: 'M-1 · Planning formation (Brevo)', J15: 'J-15 · Book modèle éco.', J7: 'J-7 · Récap agenda promo' }
-
-        // Vérifier les types dus aujourd'hui ou en retard
-        const dueTodayOrLate = Object.entries(jDates).filter(([, d]) => d <= ymd(today))
+        const dueTodayOrLate = Object.entries(jDates).filter(([, d]) => d <= todayStr)
         if (dueTodayOrLate.length === 0) continue
-
-        // Profils de la session (uniquement CGPs confirmés, non archivés)
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('id, first_name, last_name')
-          .eq('session_formation_id', session.id)
-          .eq('stage', 'Recruté')
-          .eq('integration_confirmed', true)
-          .neq('maturity', 'Archivé')
-        if (!profiles || profiles.length === 0) continue
-
-        // Jalons déjà envoyés
-        const { data: sent } = await supabase
-          .from('formation_jalons')
-          .select('profile_id, type')
-          .eq('session_id', session.id)
-          .not('sent_at', 'is', null)
-
-        const sentSet = new Set((sent || []).map(j => `${j.profile_id}:${j.type}`))
-
+        const profiles = profilesBySession[session.id] || []
+        if (profiles.length === 0) continue
         for (const [type, dueDate] of dueTodayOrLate) {
-          const isToday = dueDate === ymd(today)
+          const isToday = dueDate === todayStr
           for (const p of profiles) {
             if (!sentSet.has(`${p.id}:${type}`)) {
-              alerts.push({
-                type,
-                dueDate,
-                isToday,
-                cgpName: `${p.first_name} ${p.last_name}`,
-                sessionLabel,
-                label: jLabels[type],
-              })
+              alerts.push({ type, dueDate, isToday, cgpName: `${p.first_name} ${p.last_name}`, sessionLabel, label: jLabels[type] })
             }
           }
         }
       }
-
       setFormationAlerts(alerts)
     }
     loadFormationAlerts()
-  }, [])
+  }, [user?.id])
 
   // Compute all stats from in-memory profiles (no extra Supabase queries)
   const computedStats = useMemo(() => {

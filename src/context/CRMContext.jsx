@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from './AuthContext'
 import { useViewMode } from './ViewModeContext'
@@ -102,7 +102,7 @@ function mapProfileToRow(profile) {
 }
 
 export function CRMProvider({ children }) {
-  const { user, userProfile, role } = useAuth()
+  const { user, userProfile, role, loading: authLoading } = useAuth()
   const { viewMode } = useViewMode()
   const [profiles, setProfiles] = useState([])
   const [profileNotes, setProfileNotes] = useState({})
@@ -111,6 +111,7 @@ export function CRMProvider({ children }) {
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(true)
   const [useSupabase] = useState(isSupabaseConfigured())
+  const fetchingRef = useRef(false)  // empêche les fetches concurrents
 
   const today = useCallback(() => {
     const d = new Date()
@@ -123,11 +124,13 @@ export function CRMProvider({ children }) {
   }, [])
 
   const fetchProfiles = useCallback(async () => {
+    if (fetchingRef.current) return  // fetch déjà en cours, on ignore
     if (!useSupabase) {
       setProfiles(INITIAL_PROFILES)
       setLoading(false)
       return
     }
+    fetchingRef.current = true
     try {
       // Paginate to fetch ALL profiles (Supabase default limit is 1000)
       const PAGE_SIZE = 1000
@@ -151,6 +154,7 @@ export function CRMProvider({ children }) {
       setProfiles(INITIAL_PROFILES)
     } finally {
       setLoading(false)
+      fetchingRef.current = false
     }
   }, [useSupabase, role, viewMode, user?.id])
 
@@ -271,10 +275,12 @@ export function CRMProvider({ children }) {
     showNotif('Événement supprimé')
   }, [useSupabase, fetchActivities, fetchEvents, insertActivity, showNotif])
 
+  // N'attendre que l'auth soit stable avant de charger les profils
   useEffect(() => {
+    if (authLoading) return  // auth pas encore prête, on attend
     if (isSupabaseConfigured()) loadScoringConfig()
     fetchProfiles()
-  }, [fetchProfiles])
+  }, [fetchProfiles, authLoading])
 
   useEffect(() => {
     if (!useSupabase) return
